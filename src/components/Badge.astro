@@ -1,0 +1,113 @@
+---
+export type BadgeVariant =
+  | 'cpu'
+  | 'gpu'
+  | 'npu'
+  | 'accelerator'
+  | 'product'
+  | 'validated'
+  | 'experimental'
+  | 'preview'
+  | 'prerelease'
+  | 'release'
+  | 'unknown';
+
+interface Props {
+  variant: BadgeVariant;
+  /** Screen-reader-only prefix explaining what the badge value means. */
+  label?: string;
+  title?: string;
+}
+
+const { variant, label, title } = Astro.props;
+---
+
+<span class:list={['badge', `badge--${variant}`]} title={title}>
+  {label && <span class="sr-only">{label}: </span>}
+  <slot />
+</span>
+
+<style>
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.125rem 0.5rem;
+    border: 1px solid var(--badge-neutral-border);
+    border-radius: 999px;
+    background: var(--badge-neutral-bg);
+    color: var(--badge-neutral-text);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.5;
+    white-space: nowrap;
+  }
+
+  .badge--cpu,
+  .badge--gpu,
+  .badge--npu,
+  .badge--accelerator {
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .badge--cpu {
+    background: var(--badge-cpu-bg);
+    border-color: var(--badge-cpu-border);
+    color: var(--badge-cpu-text);
+  }
+
+  .badge--gpu {
+    background: var(--badge-gpu-bg);
+    border-color: var(--badge-gpu-border);
+    color: var(--badge-gpu-text);
+  }
+
+  .badge--npu {
+    background: var(--badge-npu-bg);
+    border-color: var(--badge-npu-border);
+    color: var(--badge-npu-text);
+  }
+
+  .badge--accelerator {
+    background: var(--badge-accel-bg);
+    border-color: var(--badge-accel-border);
+    color: var(--badge-accel-text);
+  }
+
+  .badge--validated {
+    background: var(--badge-validated-bg);
+    border-color: var(--badge-validated-border);
+    color: var(--badge-validated-text);
+  }
+
+  .badge--experimental {
+    background: var(--badge-experimental-bg);
+    border-color: var(--badge-experimental-border);
+    color: var(--badge-experimental-text);
+  }
+
+  .badge--preview {
+    background: var(--badge-preview-bg);
+    border-color: var(--badge-preview-border);
+    color: var(--badge-preview-text);
+  }
+
+  .badge--prerelease {
+    background: var(--badge-prerelease-bg);
+    border-color: var(--badge-prerelease-border);
+    color: var(--badge-prerelease-text);
+  }
+
+  .badge--release {
+    background: var(--badge-release-bg);
+    border-color: var(--badge-release-border);
+    color: var(--badge-release-text);
+  }
+
+  .badge--unknown {
+    background: var(--badge-unknown-bg);
+    border-color: var(--badge-unknown-border);
+    color: var(--badge-unknown-text);
+  }
+</style>

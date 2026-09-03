@@ -1,0 +1,55 @@
+---
+import '../styles/global.css';
+import Aurora from '../components/Aurora.astro';
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+const fontBase = `${import.meta.env.BASE_URL}fonts/`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content={description} />
+    <!--
+      Preloaded so the Intel One faces are in hand before first paint; paired
+      with `font-display: block` in global.css, that is what stops the page
+      swapping fonts mid-load. `crossorigin` is required even same-origin,
+      because fonts are always fetched in CORS mode — without it the preload is
+      discarded and fetched a second time.
+    -->
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      href={`${fontBase}intelone-text-regular.woff2`}
+      crossorigin
+    />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      href={`${fontBase}intelone-text-medium.woff2`}
+      crossorigin
+    />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      href={`${fontBase}intelone-display-medium.woff2`}
+      crossorigin
+    />
+    <title>{title}</title>
+  </head>
+  <body>
+    <Aurora />
+    <slot />
+  </body>
+</html>

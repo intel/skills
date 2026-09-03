@@ -1,0 +1,100 @@
+---
+interface Props {
+  command: string;
+}
+
+const { command } = Astro.props;
+
+// The button describes itself with the command, so a screen reader announces
+// what is being copied rather than a bare "Copy".
+const commandId = `cmd-${command.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`;
+---
+
+<div class="install">
+  <code class="install__command" id={commandId}>{command}</code>
+  <button type="button" class="install__copy" data-copy={command} aria-describedby={commandId}>
+    <span class="install__copy-stack">
+      <span aria-hidden="true">Copied</span>
+      <span class="install__copy-label" aria-live="polite">Copy</span>
+    </span>
+  </button>
+</div>
+
+<style>
+  .install {
+    display: inline-flex;
+    align-items: stretch;
+    width: fit-content;
+    max-width: 100%;
+    gap: 0.5rem;
+    padding: 0.375rem 0.375rem 0.375rem 0.875rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--page);
+  }
+
+  .install__command {
+    flex: 0 1 auto;
+    align-self: center;
+    overflow-x: auto;
+    color: var(--text);
+    font-size: 0.8125rem;
+    white-space: nowrap;
+    scrollbar-width: none;
+  }
+
+  .install__command::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Intel's calls to action are fully rounded pills at weight 500. */
+  .install__copy {
+    flex: none;
+    padding: 0.25rem 0.625rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    color: var(--accent-contrast);
+    font: inherit;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  /* Stack the widest label under the visible one so the pill never jumps width. */
+  .install__copy-stack {
+    display: grid;
+    text-align: center;
+  }
+
+  .install__copy-stack > span {
+    grid-area: 1 / 1;
+  }
+
+  .install__copy-stack > span:first-child {
+    visibility: hidden;
+  }
+
+  .install__copy:hover {
+    filter: brightness(1.08);
+  }
+
+  .install__copy[data-state='copied'] {
+    background: var(--badge-validated-bg);
+    border-color: var(--badge-validated-border);
+    color: var(--badge-validated-text);
+    animation: copied-pop 0.32s cubic-bezier(0.22, 0.7, 0.28, 1);
+  }
+
+  @keyframes copied-pop {
+    40% {
+      transform: scale(1.07);
+    }
+  }
+
+  .install__copy[data-state='failed'] {
+    background: var(--badge-accel-bg);
+    border-color: var(--badge-accel-border);
+    color: var(--badge-accel-text);
+  }
+</style>

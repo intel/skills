@@ -1,0 +1,508 @@
+---
+import Layout from '../layouts/Layout.astro';
+import SkillCard from '../components/SkillCard.astro';
+import SkillDialog from '../components/SkillDialog.astro';
+import SkillFilters from '../components/SkillFilters.astro';
+import GithubIcon from '../components/GithubIcon.astro';
+import InstallCommand from '../components/InstallCommand.astro';
+import {
+  skills,
+  statusFacets,
+  hwClassFacets,
+  productFacets,
+  validatedOnFacets,
+} from '../lib/skills';
+import { showSkillStatus } from '../lib/features';
+
+const CATALOG_REPO_URL = 'https://github.com/intel/skills';
+/** Without --skill, the same command opens the catalog and lets you pick. */
+const CATALOG_INSTALL_COMMAND = 'npx skills add intel/skills';
+
+// Resolved when the site is built, so a rebuild rolls the copyright year over.
+const year = new Date().getFullYear();
+
+// Keys here must match the `data-facet-<key>` attributes on the grid items and
+// the group list in the filtering script below.
+const facetGroups = [
+  ...(showSkillStatus
+    ? [{ key: 'status', legend: 'Status', facets: statusFacets }]
+    : []),
+  { key: 'hw', legend: 'Hardware', facets: hwClassFacets, colorByValue: true },
+  { key: 'product', legend: 'Products', facets: productFacets },
+  { key: 'validated', legend: 'Validated on', facets: validatedOnFacets },
+];
+---
+
+<Layout
+  title="Intel Agent Skills"
+  description="Browse the Intel agent skills catalog and copy the command to install any skill."
+>
+  <div class="page">
+    <header class="header">
+      <div class="header__top">
+        <h1 class="header__title">Intel Agent Skills</h1>
+        <a
+          class="repo-link"
+          href={CATALOG_REPO_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <GithubIcon class="repo-link__icon" />
+          <span>intel/skills</span>
+        </a>
+      </div>
+
+      <div class="header__intro">
+        <p class="header__lede">
+          <span class="header__hook">
+            Skills for running, porting, profiling, and tuning code on Intel CPUs, GPUs,
+            and the libraries and runtimes behind them.
+          </span>{' '}
+          Find one below and install it with a single command.
+        </p>
+        <InstallCommand command={CATALOG_INSTALL_COMMAND} />
+      </div>
+    </header>
+
+    <main>
+      <SkillFilters groups={facetGroups} />
+
+      <ul class="grid" data-skill-grid>
+        {
+          skills.map((skill, index) => (
+            <li
+              class="grid__item"
+              style={`--i:${index}`}
+              data-skill-item
+              data-search={skill.searchText}
+              {...(showSkillStatus ? { 'data-facet-status': skill.statusLabel } : {})}
+              data-facet-hw={skill.hwClass}
+              data-facet-product={skill.products.join('|')}
+              data-facet-validated={skill.validatedOn.join('|')}
+            >
+              <SkillCard skill={skill} />
+            </li>
+          ))
+        }
+      </ul>
+
+      <p class="empty" data-empty-state hidden>
+        No skills match. Try fewer filters or a different search term.
+      </p>
+    </main>
+
+    <footer class="footer">
+      <p class="footer__copyright">Copyright &copy; {year}, Intel Corporation</p>
+    </footer>
+
+    {skills.map((skill) => <SkillDialog skill={skill} />)}
+  </div>
+</Layout>
+
+<script>
+  const COPY_FEEDBACK_MS = 1800;
+
+  /** Copies text without the async clipboard API, for non-secure origins. */
+  function copyWithFallback(text: string): boolean {
+    const scratch = document.createElement('textarea');
+    scratch.value = text;
+    scratch.setAttribute('readonly', '');
+    scratch.style.position = 'fixed';
+    scratch.style.opacity = '0';
+    document.body.append(scratch);
+    scratch.select();
+
+    let copied = false;
+    try {
+      copied = document.execCommand('copy');
+    } catch {
+      copied = false;
+    }
+    scratch.remove();
+    return copied;
+  }
+
+  function showCopyResult(button: HTMLButtonElement, succeeded: boolean) {
+    const label = button.querySelector('.install__copy-label');
+    if (!label) return;
+
+    const original = button.dataset.originalLabel ?? label.textContent ?? 'Copy';
+    button.dataset.originalLabel = original;
+    button.dataset.state = succeeded ? 'copied' : 'failed';
+    label.textContent = succeeded ? 'Copied' : 'Press Ctrl+C';
+
+    window.clearTimeout(Number(button.dataset.resetTimer));
+    button.dataset.resetTimer = String(
+      window.setTimeout(() => {
+        label.textContent = original;
+        delete button.dataset.state;
+      }, COPY_FEEDBACK_MS),
+    );
+  }
+
+  async function copyCommand(button: HTMLButtonElement) {
+    const command = button.dataset.copy;
+    if (!command) return;
+
+    // The async clipboard API needs a secure context, which a file:// or plain
+    // http:// preview is not, so fall back to a selection-based copy.
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(command);
+        showCopyResult(button, true);
+        return;
+      } catch {
+        /* fall through */
+      }
+    }
+    showCopyResult(button, copyWithFallback(command));
+  }
+
+  document.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+
+    const copyButton = target.closest<HTMLButtonElement>('[data-copy]');
+    if (copyButton) {
+      void copyCommand(copyButton);
+      return;
+    }
+
+    const card = target.closest<HTMLElement>('[data-skill-card]');
+    if (card) {
+      const dialog = document.querySelector<HTMLDialogElement>(
+        `[data-skill-dialog="${CSS.escape(card.dataset.skillCard!)}"]`,
+      );
+      dialog?.showModal();
+      return;
+    }
+
+    // A click that lands on the dialog element itself is on its backdrop:
+    // the content sits in child elements, which `closest` would have matched.
+    if (target instanceof HTMLDialogElement && target.hasAttribute('data-skill-dialog')) {
+      target.close();
+    }
+  });
+
+  // Return focus to the card that opened the dialog, so keyboard users do not
+  // get dropped back at the top of the document.
+  for (const dialog of document.querySelectorAll<HTMLDialogElement>('[data-skill-dialog]')) {
+    dialog.addEventListener('close', () => {
+      document
+        .querySelector<HTMLElement>(
+          `[data-skill-card="${CSS.escape(dialog.dataset.skillDialog!)}"]`,
+        )
+        ?.focus();
+    });
+  }
+
+  /* ----------------------------- grid entrance ---------------------------- */
+
+  const grid = document.querySelector<HTMLElement>('[data-skill-grid]');
+
+  // Retires the entrance animation once the last card has landed, so filtering
+  // shows and hides instantly instead of replaying it. Driven by the animations
+  // themselves rather than a guessed timeout.
+  if (grid) {
+    const settle = () => grid.classList.add('grid--settled');
+    const entrances = grid
+      .getAnimations({ subtree: true })
+      .filter((a) => (a as CSSAnimation).animationName === 'rise-in');
+
+    if (entrances.length) {
+      Promise.allSettled(entrances.map((a) => a.finished)).then(settle);
+    } else {
+      settle();
+    }
+  }
+
+  /* ------------------------------- filtering ------------------------------ */
+
+  const filters = document.querySelector<HTMLElement>('[data-filters]');
+  const search = document.querySelector<HTMLInputElement>('#skill-search');
+  const items = [...document.querySelectorAll<HTMLElement>('[data-skill-item]')];
+  const emptyState = document.querySelector<HTMLElement>('[data-empty-state]');
+  const resultCount = document.querySelector<HTMLElement>('[data-result-count]');
+  const status = document.querySelector<HTMLElement>('[data-filters-status]');
+  const clearButton = document.querySelector<HTMLButtonElement>('[data-clear-filters]');
+
+  /** Badge dimensions a skill can be filtered on, keyed as in `facetGroups`. */
+  const GROUPS = (filters?.dataset.facetGroups ?? '').split(',').filter(Boolean);
+  type Group = string;
+
+  if (filters && search && items.length) {
+    /** The values an item carries for one badge dimension. */
+    const valuesOf = (item: HTMLElement, group: Group): string[] =>
+      (item.dataset[`facet${group[0]!.toUpperCase()}${group.slice(1)}`] ?? '')
+        .split('|')
+        .filter(Boolean);
+
+    /** Selection within a group is OR; a group with nothing selected is inert. */
+    const matchesGroup = (item: HTMLElement, group: Group, selected: Set<string>) =>
+      selected.size === 0 || valuesOf(item, group).some((value) => selected.has(value));
+
+    const selectionOf = (group: Group): Set<string> =>
+      new Set(
+        [
+          ...filters.querySelectorAll<HTMLInputElement>(
+            `[data-facet-group="${group}"] .chip__input:checked`,
+          ),
+        ].map((input) => input.value),
+      );
+
+    const chipsOf = (group: Group) =>
+      filters.querySelectorAll<HTMLElement>(
+        `[data-facet-group="${group}"] .chip[data-facet-value]`,
+      );
+
+    /** Every whitespace-separated term must appear somewhere in the skill. */
+    const matchesSearch = (item: HTMLElement, terms: string[]) =>
+      terms.every((term) => item.dataset.search!.includes(term));
+
+    /**
+     * Recounts each chip against the other filters but not its own group, which
+     * is the usual faceted-search behaviour: within a group the options stay
+     * additive, so selecting one never blanks out its siblings.
+     */
+    function updateChipCounts(terms: string[], selections: Map<Group, Set<string>>) {
+      for (const group of GROUPS) {
+        const candidates = items.filter(
+          (item) =>
+            matchesSearch(item, terms) &&
+            GROUPS.every(
+              (other) =>
+                other === group || matchesGroup(item, other, selections.get(other)!),
+            ),
+        );
+
+        for (const chip of chipsOf(group)) {
+          const value = chip.dataset.facetValue!;
+          const count = candidates.filter((item) =>
+            valuesOf(item, group).includes(value),
+          ).length;
+          const input = chip.querySelector<HTMLInputElement>('.chip__input')!;
+
+          chip.querySelector('[data-facet-count]')!.textContent = String(count);
+          // Never disable a chip the user has ticked; they need it to untick.
+          input.disabled = count === 0 && !input.checked;
+        }
+      }
+    }
+
+    function apply() {
+      const terms = search!.value.toLowerCase().split(/\s+/).filter(Boolean);
+      const selections = new Map(GROUPS.map((group) => [group, selectionOf(group)]));
+      const isFiltered =
+        terms.length > 0 || GROUPS.some((group) => selections.get(group)!.size > 0);
+
+      let visible = 0;
+      for (const item of items) {
+        const matches =
+          matchesSearch(item, terms) &&
+          GROUPS.every((group) => matchesGroup(item, group, selections.get(group)!));
+        item.hidden = !matches;
+        if (matches) visible++;
+      }
+
+      updateChipCounts(terms, selections);
+
+      if (emptyState) emptyState.hidden = visible > 0;
+      if (clearButton) clearButton.hidden = !isFiltered;
+
+      // The status row is revealed before its text is written, so the live
+      // region is already in the accessibility tree when the count lands and
+      // screen readers announce it. It stays empty until something is
+      // filtered, so the page does not open by announcing the catalog size.
+      status?.classList.toggle('filters__status--active', isFiltered);
+      if (resultCount) {
+        resultCount.textContent = !isFiltered
+          ? ''
+          : visible === 0
+            ? 'No matching skills'
+            : `${visible} matching ${visible === 1 ? 'skill' : 'skills'}`;
+      }
+    }
+
+    filters.addEventListener('change', apply);
+    search.addEventListener('input', apply);
+    clearButton?.addEventListener('click', () => {
+      search!.value = '';
+      for (const input of filters.querySelectorAll<HTMLInputElement>('.chip__input')) {
+        input.checked = false;
+      }
+      apply();
+      search!.focus();
+    });
+
+    apply();
+  }
+</script>
+
+<style>
+  /* Above the fixed aurora backdrop. */
+  .page {
+    position: relative;
+    z-index: 1;
+    max-width: 76rem;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 4rem;
+  }
+
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+  }
+
+  /* `backwards` holds the start frame through the delay, so nothing appears
+     before its turn. */
+  .header,
+  .grid__item,
+  .footer {
+    animation: rise-in 0.55s cubic-bezier(0.22, 0.7, 0.28, 1) backwards;
+  }
+
+  .header {
+    animation-delay: 60ms;
+  }
+
+  /* Capped: a 33rd card at 33 × 45ms would keep the reader waiting 1.5s. Past
+     the twelfth the stagger stops growing. */
+  .grid__item {
+    animation-delay: calc(200ms + min(var(--i, 0), 12) * 45ms);
+  }
+
+  /* Filtering toggles `hidden`, and leaving display:none restarts an element's
+     animations — so without this every filter change replays the entrance,
+     staggered delays and all, which drags badly while typing a search. The
+     grid is marked settled once the load animation has run. */
+  .grid--settled .grid__item {
+    animation: none;
+  }
+
+  .footer {
+    animation-delay: 300ms;
+  }
+
+  .header {
+    margin-bottom: 1.25rem;
+  }
+
+  .header__intro {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.625rem 1.25rem;
+  }
+
+  /* Top-aligned rather than baseline-aligned: the two are too different in size
+     for a shared baseline to read as alignment — it just parks the pill low. */
+  .header__top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem 1.5rem;
+    /* Spacing below the title lives here, not on the h1: flex centres the
+       margin box, so a margin on the h1 would offset it from the pill by half
+       the margin. */
+    margin-bottom: 0.5rem;
+  }
+
+  .repo-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4375rem 1rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-pill);
+    color: var(--text);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+    transition:
+      border-color 0.15s ease,
+      color 0.15s ease;
+  }
+
+  .repo-link:hover {
+    border-color: var(--link-external);
+    color: var(--link-external);
+  }
+
+  .repo-link :global(.repo-link__icon) {
+    width: 1.125rem;
+    height: 1.125rem;
+    flex: none;
+  }
+
+  .header__intro :global(.install) {
+    flex: 0 0 auto;
+    padding: 0.25rem 0.25rem 0.25rem 0.75rem;
+  }
+
+  /* Intel sets display headings in IntelOne Display at weight 500 with -0.01em
+     tracking; the reference page's hero is 56px. */
+  .header__title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: clamp(1.75rem, 1.1rem + 2vw, 2.75rem);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+  }
+
+  .header__lede {
+    flex: 1 1 26rem;
+    max-width: 52rem;
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 1rem;
+    line-height: 1.45;
+  }
+
+  /* Full-contrast lead clause, muted supporting detail — the emphasis pattern
+     intel.com uses under its hero headlines. */
+  .header__hook {
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 17.5rem), 1fr));
+    gap: 1rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .grid__item {
+    display: flex;
+  }
+
+  .grid__item[hidden] {
+    display: none;
+  }
+
+  .empty {
+    margin: 2.5rem 0 0;
+    color: var(--text-muted);
+    text-align: center;
+  }
+
+  .footer {
+    margin-top: 3rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .footer__copyright {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.6875rem;
+    text-align: center;
+  }
+</style>

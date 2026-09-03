@@ -1,0 +1,70 @@
+---
+/**
+ * Ambient backdrop: three overlapping colour fields echoing the glow Intel puts
+ * behind the silicon on its product heroes.
+ *
+ * Static by design. Drifting these was measured at 32fps against 60 with the
+ * motion removed — a large `filter: blur()` is re-rasterised every frame it
+ * moves, and it compounded badly with the dialog's backdrop-filter, which then
+ * had to re-blur a backdrop that never stopped changing (16fps with a dialog
+ * open). Held still, the same blur costs nothing: the layer is rasterised once.
+ *
+ * Purely decorative, so it is hidden from assistive tech and never takes
+ * pointer events.
+ */
+---
+
+<div class="aurora" aria-hidden="true">
+  <span class="aurora__field aurora__field--1"></span>
+  <span class="aurora__field aurora__field--2"></span>
+  <span class="aurora__field aurora__field--3"></span>
+</div>
+
+<style>
+  .aurora {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .aurora__field {
+    position: absolute;
+    display: block;
+    width: 62vmax;
+    height: 62vmax;
+    border-radius: 50%;
+    opacity: var(--aurora-opacity);
+    filter: blur(var(--aurora-blur));
+    /* Not a hint about future animation — nothing here animates. It promotes
+       each field to its own layer so the blur is rasterised once and cached
+       instead of being recomputed on every frame the page produces. Dropping
+       it measured 31fps against 60. */
+    will-change: transform;
+  }
+
+  .aurora__field--1 {
+    top: -22vmax;
+    left: -8vmax;
+    background: radial-gradient(circle, var(--aurora-1), transparent 68%);
+  }
+
+  .aurora__field--2 {
+    top: -28vmax;
+    right: -10vmax;
+    background: radial-gradient(circle, var(--aurora-2), transparent 68%);
+  }
+
+  /* Smaller and dimmer: a cool highlight below the header rather than a third
+     full-strength wash. The 5.5rem is twice the page title's 2.75rem, in rem
+     rather than vmax so the offset tracks the type instead of the viewport. */
+  .aurora__field--3 {
+    top: calc(2vmax + 5.5rem);
+    left: 34%;
+    width: 38vmax;
+    height: 38vmax;
+    opacity: calc(var(--aurora-opacity) * 0.6);
+    background: radial-gradient(circle, var(--aurora-3), transparent 70%);
+  }
+</style>

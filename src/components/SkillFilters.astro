@@ -1,0 +1,296 @@
+---
+import type { Facet } from '../lib/skills';
+
+interface FacetGroup {
+  /** Key shared with the `data-facet-<key>` attribute on each grid item. */
+  key: string;
+  legend: string;
+  facets: Facet[];
+  /** Renders each chip in its own hardware-class colour rather than neutral. */
+  colorByValue?: boolean;
+}
+
+interface Props {
+  groups: FacetGroup[];
+}
+
+const { groups } = Astro.props;
+const populated = groups.filter((group) => group.facets.length > 0);
+---
+
+<section
+  class="filters"
+  data-filters
+  data-facet-groups={groups.map((group) => group.key).join(',')}
+  aria-labelledby="filters-heading"
+>
+  <h2 id="filters-heading" class="sr-only">Search and filter skills</h2>
+
+  <div class="search">
+    <svg class="search__icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+      <path
+        d="M9 3a6 6 0 1 0 3.7 10.7l3.3 3.3M9 3a6 6 0 0 1 3.7 10.7"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.75"
+        stroke-linecap="round"></path>
+    </svg>
+    <label class="sr-only" for="skill-search">Search skills</label>
+    <input
+      id="skill-search"
+      class="search__input"
+      type="search"
+      placeholder="Search skills by name or product"
+      autocomplete="off"
+      spellcheck="false"
+    />
+  </div>
+
+  {
+    /* role="group" rather than fieldset/legend: a <legend> is taken out of its
+       parent's layout flow, which makes an inline label beside the chips
+       unreliable. The ARIA pairing gives the same grouping to assistive tech. */
+    populated.map((group) => (
+      <div
+        class="facet"
+        role="group"
+        aria-labelledby={`facet-label-${group.key}`}
+        data-facet-group={group.key}
+      >
+        <span class="facet__legend" id={`facet-label-${group.key}`}>
+          {group.legend}
+        </span>
+        <div class="facet__chips">
+          {group.facets.map((facet) => (
+            <label
+              class="chip"
+              data-facet-value={facet.value}
+              data-variant={group.colorByValue ? facet.value : undefined}
+            >
+              <input type="checkbox" class="chip__input" value={facet.value} />
+              <span class="chip__label">{facet.value}</span>
+              <span class="chip__count" data-facet-count>
+                {facet.count}
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+    ))
+  }
+
+  <div class="filters__status" data-filters-status>
+    <p class="filters__count" data-result-count aria-live="polite"></p>
+    <button type="button" class="filters__clear" data-clear-filters hidden>
+      Clear filters
+    </button>
+  </div>
+</section>
+
+<style>
+  .filters {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    margin-bottom: 1.25rem;
+    padding: 0.75rem 0.875rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
+  }
+
+  .search {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .search__icon {
+    position: absolute;
+    left: 0.875rem;
+    width: 1rem;
+    height: 1rem;
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
+  .search__input {
+    width: 100%;
+    padding: 0.4375rem 1rem 0.4375rem 2.375rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.875rem;
+  }
+
+  .search__input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .search__input:focus-visible {
+    border-color: var(--accent);
+    outline-offset: 0;
+  }
+
+  .facet {
+    display: flex;
+    align-items: baseline;
+    gap: 0.625rem;
+  }
+
+  /* Sentence case, matching how intel.com labels its spec-table columns. */
+  .facet__legend {
+    flex: none;
+    /* Aligns the two group labels with each other. */
+    width: 5.5rem;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    font-weight: 400;
+  }
+
+  .facet__chips {
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.0625rem 0.4375rem;
+    border: 1px solid var(--badge-neutral-border);
+    border-radius: 999px;
+    background: var(--badge-neutral-bg);
+    color: var(--badge-neutral-text);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.5;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition:
+      border-color 0.12s ease,
+      background 0.12s ease,
+      opacity 0.12s ease;
+  }
+
+  .chip:hover {
+    border-color: var(--border-strong);
+  }
+
+  .chip:has(:focus-visible) {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  .chip__input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .chip__count {
+    padding: 0 0.25rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, currentColor 12%, transparent);
+    font-size: 0.6875rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Checked: fill with the accent, or with the hardware class's badge colour so
+     the filter chip reads as the same token as the badge it selects. */
+  .chip:has(:checked) {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  /* Hardware-class chips match the uppercase treatment of their badges. */
+  .chip[data-variant] .chip__label {
+    text-transform: uppercase;
+  }
+
+  .chip[data-variant='cpu']:has(:checked) {
+    border-color: var(--badge-cpu-border);
+    background: var(--badge-cpu-bg);
+    color: var(--badge-cpu-text);
+  }
+
+  .chip[data-variant='gpu']:has(:checked) {
+    border-color: var(--badge-gpu-border);
+    background: var(--badge-gpu-bg);
+    color: var(--badge-gpu-text);
+  }
+
+  .chip[data-variant='npu']:has(:checked) {
+    border-color: var(--badge-npu-border);
+    background: var(--badge-npu-bg);
+    color: var(--badge-npu-text);
+  }
+
+  .chip[data-variant='accelerator']:has(:checked) {
+    border-color: var(--badge-accel-border);
+    background: var(--badge-accel-bg);
+    color: var(--badge-accel-text);
+  }
+
+  /* A value that no longer narrows anything, given the other active filters. */
+  .chip:has(:disabled) {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .chip:has(:disabled):hover {
+    border-color: var(--badge-neutral-border);
+  }
+
+  /* Only takes up room once something is filtered, so the resting toolbar has
+     no dead space under the chips. */
+  .filters__status {
+    display: none;
+    align-items: center;
+    gap: 0.875rem;
+  }
+
+  .filters__status--active {
+    display: flex;
+  }
+
+  .filters__count {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+  }
+
+  .filters__clear {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  @media (max-width: 34rem) {
+    .facet {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .facet__legend {
+      width: auto;
+    }
+  }
+</style>

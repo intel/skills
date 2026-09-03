@@ -1,0 +1,215 @@
+/*
+ * Colours and type follow intel.com's product pages, sampled from
+ * /products/details/processors/core-ultra.html: a deep navy canvas (#000F28),
+ * white text over slate-blue secondaries, one saturated blue accent, hairline
+ * borders instead of heavy shadows, and fully rounded controls.
+ *
+ * The Intel One faces are self-hosted from public/fonts/, downloaded from
+ * Intel's shared-asset CDN. Hotlinking them worked but swapped the fallback out
+ * mid-paint on every cold load; served from this origin and preloaded in
+ * Layout.astro they are in hand before first paint.
+ *
+ * `font-display: block` renders the text invisibly until the face arrives
+ * instead of painting it in a fallback and swapping. Because these files are
+ * local and preloaded, that wait is a few milliseconds, so nothing is visibly
+ * missing — and unlike `optional` the page always ends up in the real face.
+ * Measured on a throttled connection: `swap` painted Helvetica and then swapped,
+ * `optional` kept Helvetica for the whole page load, `block` neither.
+ *
+ * Only the weights actually used are declared and shipped: Text 400/500 and
+ * Display 500. There is no bold cut of IntelOne Text, so 500 is the heaviest
+ * body weight; asking for 600+ only gets a synthesised bold.
+ */
+
+@font-face {
+  font-family: 'IntelOne Text';
+  src: url('/fonts/intelone-text-regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'IntelOne Text';
+  src: url('/fonts/intelone-text-medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'IntelOne Display';
+  src: url('/fonts/intelone-display-medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+}
+
+/* Dark only. `color-scheme: dark` also tells the browser to render form
+   controls and the like in their dark variants, so the search field matches
+   rather than coming back as a white box. */
+:root {
+  color-scheme: dark;
+
+  --font-body: 'IntelOne Text', 'intel-one-body-text', 'Intel Clear', Helvetica, Arial,
+    sans-serif;
+  /* No 'IntelOne Text' in this chain on purpose. With it, the h1 fell back to
+     Text while waiting for Display and then shifted again when Display landed —
+     two visible width changes rather than one. */
+  --font-display: 'IntelOne Display', Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas,
+    'Liberation Mono', monospace;
+
+  --page: #000f28;
+  --surface: #0a1b3a;
+  --surface-raised: #102340;
+  --border: #1e2d49;
+  --border-strong: #364764;
+  --text: #ffffff;
+  --text-muted: #8791a2;
+  --accent: #2d76ff;
+  --accent-contrast: #ffffff;
+  --accent-soft: #10254f;
+  --focus: #2d76ff;
+  /* Links that leave the page (GitHub) in Intel's Energy Blue, so they read as
+     a different kind of thing from the classic blue used for actions that stay
+     here — Copy, the filter chips, card hover. */
+  --link-external: #00c7fd;
+
+  --shadow-card: none;
+  --shadow-card-hover: 0 10px 28px rgb(0 0 0 / 45%);
+  --shadow-dialog: 0 24px 64px rgb(0 0 0 / 60%);
+  --radius: 12px;
+  --radius-pill: 999px;
+
+  /* Ambient background layers. The aurora is the glow Intel puts behind its
+     hero silicon. */
+  --aurora-1: #2d76ff;
+  --aurora-2: #653cbd;
+  --aurora-3: #00c7fd;
+  /* Sits 70% of the way from the faintest setting tried back toward the
+     strongest: enough colour to read as a backdrop without competing with the
+     cards in front of it. */
+  --aurora-opacity: 0.35;
+  --aurora-blur: 75px;
+
+  /* Categorical badge hues, pitched to sit in the navy family rather than the
+     pastel set they replaced. */
+  --badge-neutral-bg: #16274a;
+  --badge-neutral-text: #b9c4d6;
+  --badge-neutral-border: #26385c;
+  --badge-cpu-bg: #062a42;
+  --badge-cpu-text: #4cc3f2;
+  --badge-cpu-border: #124a70;
+  --badge-gpu-bg: #1b1c47;
+  --badge-gpu-text: #9d92f5;
+  --badge-gpu-border: #2e2f6b;
+  --badge-npu-bg: #0e2e26;
+  --badge-npu-text: #5fc9a8;
+  --badge-npu-border: #1b4d40;
+  --badge-accel-bg: #3a2110;
+  --badge-accel-text: #f0975a;
+  --badge-accel-border: #5d3618;
+  --badge-validated-bg: #10301f;
+  --badge-validated-text: #5fc98a;
+  --badge-validated-border: #1e4f34;
+
+  /* Status badge tones. Aliases, so they track both schemes automatically and
+     relabelling a status in src/lib/status.ts never touches colour. Point one
+     at a different palette here to recolour that maturity step. */
+  --badge-experimental-bg: var(--badge-neutral-bg);
+  --badge-experimental-text: var(--badge-neutral-text);
+  --badge-experimental-border: var(--badge-neutral-border);
+  --badge-preview-bg: var(--badge-accel-bg);
+  --badge-preview-text: var(--badge-accel-text);
+  --badge-preview-border: var(--badge-accel-border);
+  --badge-prerelease-bg: var(--badge-cpu-bg);
+  --badge-prerelease-text: var(--badge-cpu-text);
+  --badge-prerelease-border: var(--badge-cpu-border);
+  --badge-release-bg: var(--badge-validated-bg);
+  --badge-release-text: var(--badge-validated-text);
+  --badge-release-border: var(--badge-validated-border);
+  --badge-unknown-bg: var(--badge-neutral-bg);
+  --badge-unknown-text: var(--badge-neutral-text);
+  --badge-unknown-border: var(--badge-neutral-border);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* No page scrollbar. Filtering the grid changes the document height, and a
+   scrollbar that comes and goes with it shifts the whole layout sideways by its
+   width on every keystroke. Hiding it is purely visual: wheel, touch, keyboard
+   and scrollbar-less trackpad scrolling all still work.
+   Swap this rule for `scrollbar-gutter: stable` to keep a visible scrollbar and
+   reserve its space instead. */
+html {
+  scrollbar-width: none; /* Firefox, Chrome 121+ */
+  -ms-overflow-style: none; /* legacy Edge */
+}
+
+html::-webkit-scrollbar {
+  display: none; /* older Chrome and Safari */
+}
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+code,
+kbd {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+/* IntelOne Text stops at 500, so bold emphasis uses the real medium cut instead
+   of a browser-synthesised bold. */
+strong,
+b {
+  font-weight: 500;
+}
+
+a {
+  color: var(--accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Every effect below is additive, so collapsing it to its end state is enough.
+   The delay matters as much as the duration: a staggered entrance with its
+   delay intact would leave cards blank for half a second before appearing. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}

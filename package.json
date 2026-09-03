@@ -1,0 +1,24 @@
+{
+  "name": "intel-skills-webpage",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "astro build",
+    "build:with-status": "SHOW_SKILL_STATUS=true astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "dev": "astro dev",
+    "dev:with-status": "SHOW_SKILL_STATUS=true astro dev"
+  },
+  "dependencies": {
+    "astro": "^7.2.9",
+    "gray-matter": "^4.0.3",
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@types/node": "^26.4.0",
+    "typescript": "^6.0.3"
+  }
+}

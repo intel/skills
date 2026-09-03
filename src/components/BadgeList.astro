@@ -1,0 +1,83 @@
+---
+import Badge from './Badge.astro';
+import type { BadgeVariant } from './Badge.astro';
+import type { Skill } from '../lib/skills';
+import { showSkillStatus } from '../lib/features';
+
+interface Props {
+  skill: Skill;
+  /** Cap on product badges, so cards stay a uniform height. Omit to show all. */
+  maxProducts?: number;
+}
+
+const { skill, maxProducts } = Astro.props;
+
+const HW_CLASS_VARIANTS = new Set(['cpu', 'gpu', 'npu', 'accelerator']);
+const hwVariant: BadgeVariant = HW_CLASS_VARIANTS.has(skill.hwClass)
+  ? (skill.hwClass as BadgeVariant)
+  : 'product';
+
+const shownProducts =
+  maxProducts === undefined ? skill.products : skill.products.slice(0, maxProducts);
+const hiddenProductCount = skill.products.length - shownProducts.length;
+---
+
+<ul class="badges">
+  {
+    showSkillStatus && (
+      <li>
+        <Badge variant={skill.statusTone} label="Status">{skill.statusLabel}</Badge>
+      </li>
+    )
+  }
+  {
+    skill.hwClass && (
+      <li>
+        <Badge variant={hwVariant} label="Hardware class">
+          {skill.hwClass}
+        </Badge>
+      </li>
+    )
+  }
+  {
+    shownProducts.map((product) => (
+      <li>
+        <Badge variant="product" label="Intel product">
+          {product}
+        </Badge>
+      </li>
+    ))
+  }
+  {
+    hiddenProductCount > 0 && (
+      <li>
+        <Badge
+          variant="product"
+          title={skill.products.slice(shownProducts.length).join(', ')}
+        >
+          +{hiddenProductCount}
+        </Badge>
+      </li>
+    )
+  }
+  {
+    skill.validatedOn.map((sku) => (
+      <li>
+        <Badge variant="validated" label="Validated on">
+          {sku}
+        </Badge>
+      </li>
+    ))
+  }
+</ul>
+
+<style>
+  .badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+</style>
