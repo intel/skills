@@ -77,6 +77,7 @@ import argparse
 import json
 import re
 import sys
+import time
 
 # Said here rather than left to `import tomllib`, which on 3.10 fails as
 # ModuleNotFoundError -- a message that reads like a missing dependency in a tool whose
@@ -287,6 +288,14 @@ URL_RE = re.compile(r"https?://[^\s<>\"'`\]\\]+")
 INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
 LINK_TIMEOUT = 15
 LINK_WORKERS = 8
+# A 429 is retried rather than accepted as 'unknown'. Rate limiting only warns, which
+# is the right call for someone else's outage — but a host that rate-limits us instead
+# of answering hides whatever the real answer was, and a gate that reports 'reachable'
+# because it was throttled is worse than one that reports nothing. Documentation hosts
+# do this readily: eight workers over ~100 URLs concentrated on a handful of hosts is
+# enough to trigger it.
+LINK_RETRIES = 3
+LINK_RETRY_CAP = 8.0
 # Some documentation hosts answer a bare urllib request with 403. This is the
 # minimum that makes them behave; it is not an attempt to look like a browser.
 LINK_HEADERS = {
@@ -576,33 +585,64 @@ def link_targets(body: str, source: dict | None) -> list[tuple[str, str, bool]]:
     return targets
 
 
+def retry_after(exc: urllib.error.HTTPError, attempt: int) -> float:
+    """How long to wait before retrying a throttled request.
+
+    Retry-After comes in two forms and only the seconds form is honoured. The HTTP
+    date form is what a host sends when the wait is minutes, which is longer than a
+    CI step should hold a pull request open for — exponential backoff and then a
+    warning is the better answer there.
+    """
+    header = exc.headers.get("Retry-After") if exc.headers else None
+    try:
+        wait = float(header)
+    except (TypeError, ValueError):
+        wait = 2.0**attempt
+    return min(max(wait, 0.0), LINK_RETRY_CAP)
+
+
 def probe_url(url: str) -> tuple[str, str]:
     """Reachability of one URL: ('ok'|'dead'|'unknown', detail).
 
     'dead' is reserved for an answer from the server that the target does not
-    exist. Everything else — rate limiting, a 5xx, DNS trouble, a timeout — is
-    'unknown', because a validator that fails a pull request when someone else's
-    CDN hiccups teaches contributors to ignore it.
+    exist. Everything else — a 5xx, DNS trouble, a timeout — is 'unknown', because a
+    validator that fails a pull request when someone else's CDN hiccups teaches
+    contributors to ignore it.
 
     HEAD first, GET on rejection: some hosts answer HEAD with 403 or 405 while
     serving the page. The GET is not read, only opened.
+
+    A 429 is retried with backoff before it is allowed to become 'unknown'. It is the
+    one 'unknown' a host returns *instead of* the real answer rather than alongside
+    it, so accepting it on the first try makes the verdict depend on how busy someone
+    else's CDN was — the same commit passing and failing minutes apart, with a dead
+    link the throttled run never got far enough to see.
     """
-    for method in ("HEAD", "GET"):
-        request = urllib.request.Request(url, method=method, headers=LINK_HEADERS)
-        try:
-            with urllib.request.urlopen(request, timeout=LINK_TIMEOUT) as response:
-                return "ok", f"{response.status}"
-        except urllib.error.HTTPError as exc:
-            if exc.code in (404, 410):
-                return "dead", f"HTTP {exc.code}"
-            if method == "HEAD" and exc.code in (403, 405, 400, 501):
-                continue
-            return "unknown", f"HTTP {exc.code}"
-        except urllib.error.URLError as exc:
-            return "unknown", f"{type(exc.reason).__name__}: {exc.reason}"
-        except (TimeoutError, OSError) as exc:
-            return "unknown", f"{type(exc).__name__}: {exc}"
-    return "unknown", "no method accepted"
+    for attempt in range(LINK_RETRIES + 1):
+        throttled = None
+        for method in ("HEAD", "GET"):
+            request = urllib.request.Request(url, method=method, headers=LINK_HEADERS)
+            try:
+                with urllib.request.urlopen(request, timeout=LINK_TIMEOUT) as response:
+                    return "ok", f"{response.status}"
+            except urllib.error.HTTPError as exc:
+                if exc.code in (404, 410):
+                    return "dead", f"HTTP {exc.code}"
+                if exc.code == 429:
+                    throttled = exc
+                    break
+                if method == "HEAD" and exc.code in (403, 405, 400, 501):
+                    continue
+                return "unknown", f"HTTP {exc.code}"
+            except urllib.error.URLError as exc:
+                return "unknown", f"{type(exc.reason).__name__}: {exc.reason}"
+            except (TimeoutError, OSError) as exc:
+                return "unknown", f"{type(exc).__name__}: {exc}"
+        if throttled is None:
+            return "unknown", "no method accepted"
+        if attempt < LINK_RETRIES:
+            time.sleep(retry_after(throttled, attempt))
+    return "unknown", f"HTTP 429 after {LINK_RETRIES + 1} attempts"
 
 
 def check_links(
