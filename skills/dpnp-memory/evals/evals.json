@@ -1,0 +1,50 @@
+{
+  "skill_name": "dpnp-memory",
+  "evals": [
+    {
+      "id": "capacity-before-chunking",
+      "prompt": "My dpnp script builds one array from a 60 GB dataset and dies with an allocation failure on the GPU. How do I find out how much room the device actually has, and how should I restructure the job?",
+      "expected_output": "Agent reads the device capacity from the array's sycl_device.global_mem_size rather than quoting a number, says that capacity is not free space and that there is no dpnp memory accounting API, and restructures the job as a chunked loop that sizes each chunk below capacity and releases the device arrays with del plus gc.collect() before the next iteration.",
+      "checks": {
+        "must_include": [
+          "global_mem_size",
+          "chunk",
+          "gc.collect()"
+        ],
+        "must_not_include": [
+          "nvidia-smi"
+        ]
+      }
+    },
+    {
+      "id": "loop-allocation-growth",
+      "prompt": "Memory use of my dpnp process climbs steadily inside a loop that computes dpnp.add(a, b) ten thousand times, and eventually the run fails. What is allocating, and how do I stop it?",
+      "expected_output": "Agent identifies that every ufunc call allocates a new device array for the result, pre-allocates one output buffer with dpnp.empty() and passes it as out= so the loop allocates nothing, and explains that del only drops a reference so collection is what returns the allocation.",
+      "checks": {
+        "must_include": [
+          "out=",
+          "dpnp.empty(",
+          "del"
+        ],
+        "must_not_include": [
+          "empty_cache"
+        ]
+      }
+    },
+    {
+      "id": "unexpected-device-placement",
+      "prompt": "The same dpnp code is fast on my workstation and slow in CI, and I suspect it is not running on a GPU there. How do I confirm which device an array is on, list what is visible, and pin execution to a specific device?",
+      "expected_output": "Agent prints the array's sycl_device to see where it landed, lists visible devices with dpctl.get_devices() and their filter strings, explains that dpnp picks a default device by the SYCL default selector rather than the first GPU, and pins allocation explicitly by passing device= or sycl_queue= to the constructor.",
+      "checks": {
+        "must_include": [
+          "sycl_device",
+          "dpctl.get_devices()",
+          "device="
+        ],
+        "must_not_include": [
+          "device_context"
+        ]
+      }
+    }
+  ]
+}

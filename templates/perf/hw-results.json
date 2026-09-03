@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0",
+  "skill_name": "your-skill-name",
+  "skill_version": "1.0",
+  "skill_behavior_sha256": "<64 hex chars — python3 tools/behavior_digest.py skills/your-skill-name>",
+  "run_id": "<uuid — one id covers both arms, because they are one measurement>",
+  "measured_on": "<YYYY-MM-DD>",
+  "measured_by": "<team or benchmark job that took the measurement>",
+
+  "hardware": {
+    "sku": "<exact Intel SKU, e.g. Intel Xeon 6980P>",
+    "sockets": 1,
+    "cores_per_socket": 0,
+    "memory_gb": 0,
+    "accelerator": "<GPU/NPU SKU, or null for CPU-only>",
+    "os": "<distribution and kernel>",
+    "driver": "<GPU/NPU driver version, or null>"
+  },
+
+  "workload": {
+    "name": "<what is being run>",
+    "model": "<model name and version, if applicable>",
+    "input_shape": "<shape or dataset>",
+    "batch_size": 0,
+    "precision": "<fp32 | bf16 | int8 | ...>",
+    "iterations": 0,
+    "warmup_iterations": 0
+  },
+
+  "arms": {
+    "no_skill": {
+      "description": "The code the agent wrote WITHOUT the skill loaded — the reference config.",
+      "software": {
+        "framework": "<framework and version>",
+        "optimizations": "<none, or what the agent applied unprompted>"
+      },
+      "metrics": {
+        "throughput_fps": 0.0,
+        "latency_p50_ms": 0.0,
+        "latency_p99_ms": 0.0,
+        "accuracy_top1": null
+      }
+    },
+    "with_skill": {
+      "description": "The code the agent wrote WITH the skill loaded — the Intel path.",
+      "software": {
+        "framework": "<Intel tool and version>",
+        "optimizations": "<what the skill led the agent to apply>"
+      },
+      "metrics": {
+        "throughput_fps": 0.0,
+        "latency_p50_ms": 0.0,
+        "latency_p99_ms": 0.0,
+        "accuracy_top1": null
+      }
+    }
+  },
+
+  "gain": {
+    "throughput": "<N>x",
+    "latency_p50": "<N>x faster",
+    "accuracy_delta": "<+/-X%, or null>"
+  },
+
+  "caveats": [
+    "Results are specific to the SKU above. Other hardware will show different numbers.",
+    "<Accuracy delta, batch size, driver version, thermal state — anything that would change the number.>"
+  ]
+}

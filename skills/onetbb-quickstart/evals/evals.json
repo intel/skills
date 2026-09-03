@@ -1,0 +1,50 @@
+{
+  "skill_name": "onetbb-quickstart",
+  "evals": [
+    {
+      "id": "parallel-for-body-takes-a-subrange",
+      "prompt": "I wrote oneapi::tbb::parallel_for over a range and my lambda takes a size_t index, but it will not compile. Show me a correct parallel_for that writes out[i] = f(in[i]) for i in 0..n.",
+      "expected_output": "Agent shows parallel_for over a blocked_range<size_t>(0, n) with a lambda taking a const reference to the subrange and an inner loop from r.begin() to r.end(), and explains that the body is called many times with subranges rather than once per index, so anything captured by reference and written to is shared mutable state.",
+      "checks": {
+        "must_include": [
+          "blocked_range",
+          "r.begin()",
+          "parallel_for"
+        ],
+        "must_not_include": [
+          "omp parallel for"
+        ]
+      }
+    },
+    {
+      "id": "reduction-without-shared-accumulator",
+      "prompt": "I am summing a large std::vector<double> inside a oneTBB parallel_for and accumulating into one double captured by reference. The result changes between runs. What is the correct oneTBB way to do this?",
+      "expected_output": "Agent identifies the shared accumulator as a data race, replaces the loop with parallel_reduce over a blocked_range where the body folds a subrange into a partial result and a combiner merges two partials, and notes that even the correct version is not deterministic in floating point because the combination order varies, so parallel_deterministic_reduce is the answer when reproducibility matters more than speed.",
+      "checks": {
+        "must_include": [
+          "parallel_reduce",
+          "blocked_range",
+          "parallel_deterministic_reduce"
+        ],
+        "must_not_include": [
+          "tbb::atomic"
+        ]
+      }
+    },
+    {
+      "id": "cmake-links-onetbb",
+      "prompt": "How do I link oneTBB into my CMake project, and why might find_package fail on a machine where oneTBB is installed?",
+      "expected_output": "Agent gives find_package(TBB REQUIRED) and target_link_libraries with the TBB::tbb imported target, and explains that find_package needs oneTBB's own package config on CMAKE_PREFIX_PATH, which the environment script or the package install puts there — a build that cannot find it usually has not sourced the environment.",
+      "checks": {
+        "must_include": [
+          "find_package(TBB REQUIRED)",
+          "TBB::tbb",
+          "cmake_prefix_path"
+        ],
+        "must_not_include": [
+          "-ltbb"
+        ]
+      }
+    }
+  ]
+}

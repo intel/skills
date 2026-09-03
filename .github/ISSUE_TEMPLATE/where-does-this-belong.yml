@@ -1,0 +1,36 @@
+name: Where should my skill live?
+description: Ask before writing, when it is not obvious whether a skill belongs in this catalog or in a product repository.
+labels: ["scope"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        You do not need an issue to contribute — open a pull request. This template is for
+        the one question that is cheaper to ask first: this repository is a hub, Intel
+        product teams also maintain focused collections of their own, and skill names are
+        unique across all of them. Answering "which repository" after the skill is written
+        costs a rewrite.
+  - type: textarea
+    id: skill
+    attributes:
+      label: What the skill would do
+      description: The user request it answers, and what an agent would do differently with it.
+    validations:
+      required: true
+  - type: input
+    id: name
+    attributes:
+      label: Proposed name
+      description: kebab-case. Check it is not already taken — `npx github:intel/skills list`.
+    validations:
+      required: false
+  - type: textarea
+    id: products
+    attributes:
+      label: Which Intel products or tools it covers
+      description: |
+        If it is one product, a product team may already own the right home for it. If it
+        spans several, or is about the platform rather than a product, this hub is probably
+        it.
+    validations:
+      required: true

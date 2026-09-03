@@ -1,0 +1,28 @@
+# Who is asked for review, automatically, on every pull request that touches a path.
+#
+# Ownership here is about the machinery, not about the skills. A skill's own maintainer is
+# recorded in skills.yaml — that field is who is accountable for its content, and it is
+# read by people rather than by GitHub. This file exists so that a change to the parts
+# every skill depends on cannot merge without someone who maintains them looking at it.
+#
+# A handle listed here must have write access to the repository, or GitHub shows the entry
+# as an unknown owner and requests no review at all.
+
+# The default. Everything not matched below.
+*                       @napetrov @xaleryb
+
+# The gates and the installer: a change here changes what is enforced on everyone else,
+# and a permissive bug in the content scan or in `verify` is invisible in a green build.
+/tools/                 @napetrov @xaleryb
+/bin/                   @napetrov @xaleryb
+/.github/               @napetrov @xaleryb
+/schemas/               @napetrov @xaleryb
+
+# The pins. A moved commit is a change to bytes this repository republishes under someone
+# else's licence, which is the one diff that must not be skimmed.
+/skills.yaml            @napetrov @xaleryb
+/NOTICE                 @napetrov @xaleryb
+
+# The evaluator portfolio: which task counts toward which capability, and the bar a skill
+# has to clear. Changing it changes what "validated" means.
+/evaluation/            @napetrov @xaleryb

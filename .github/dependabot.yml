@@ -1,0 +1,11 @@
+version: 2
+updates:
+  # No package manifest: the validators are Python standard library only and the
+  # repository ships no dependencies. Actions are pinned by commit SHA, so this is
+  # what keeps those pins current.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

@@ -1,0 +1,44 @@
+{
+  "skill_name": "dpnp-interop",
+  "evals": [
+    {
+      "id": "sklearn-rejects-device-array",
+      "prompt": "I compute features with dpnp and pass them straight to LinearRegression().fit(), which raises a type error about ndarray. What is the fix, and is there anything Intel-specific that helps the training itself?",
+      "expected_output": "Agent explains that scikit-learn checks for a NumPy array, converts the features and the target once with dpnp.asnumpy() before fit, and wraps predictions back with dpnp.array() if they re-enter device math. It mentions that the Intel extension for scikit-learn accelerates the estimators on the host but does not remove the conversion, and that activation should be checked against the installed version.",
+      "checks": {
+        "must_include": [
+          "dpnp.asnumpy(",
+          "fit",
+          "patch_sklearn"
+        ]
+      }
+    },
+    {
+      "id": "torch-tensor-from-dpnp-array",
+      "prompt": "I have a dpnp array x and I need a torch tensor from it, and later I need to bring a torch tensor back into dpnp. What are the two conversions?",
+      "expected_output": "Agent goes through NumPy in both directions: torch.from_numpy(dpnp.asnumpy(x)) on the way out, and dpnp.array(tensor.cpu().numpy()) on the way back, noting that .numpy() on a device tensor raises so the host copy is not optional. It may add that a pipeline which is entirely a model is better kept in PyTorch's own Intel GPU path instead of passing through dpnp.",
+      "checks": {
+        "must_include": [
+          "dpnp.asnumpy(",
+          "torch.from_numpy(",
+          ".cpu()"
+        ],
+        "must_not_include": [
+          "torch.from_numpy(x)"
+        ]
+      }
+    },
+    {
+      "id": "conversion-inside-the-loop",
+      "prompt": "My mixed pipeline reads a CSV with pandas, normalizes with dpnp, and feeds a PyTorch model. It is slower than the all-NumPy version it replaced, even though the normalization itself got faster. Why, and how should the pipeline be arranged?",
+      "expected_output": "Agent identifies repeated host-device conversion as the cost: a conversion per iteration copies the data every time and can outweigh a faster numeric stage. It moves the conversions to the ends of the pipeline — one dpnp.array() after the pandas read, one dpnp.asnumpy() before the model — and says to time the whole pipeline rather than the numeric stage.",
+      "checks": {
+        "must_include": [
+          "dpnp.array(",
+          "dpnp.asnumpy(",
+          "loop"
+        ]
+      }
+    }
+  ]
+}

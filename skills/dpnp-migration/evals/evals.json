@@ -1,0 +1,47 @@
+{
+  "skill_name": "dpnp-migration",
+  "evals": [
+    {
+      "id": "probe-instead-of-coverage-table",
+      "prompt": "I am porting a script to dpnp. Does dpnp support numpy.polynomial.polyfit and numpy.unique with return_counts?",
+      "expected_output": "Agent separates the two: the polynomial family is host data structures with no device counterpart, so that code stays on NumPy, while unique is a numeric function whose presence and signature must be read from the installed release with hasattr and inspect.signature rather than from a remembered coverage list. It names the release it checked, or says it cannot check and gives the probe to run.",
+      "checks": {
+        "must_include": [
+          "hasattr",
+          "installed release",
+          "polynomial"
+        ]
+      }
+    },
+    {
+      "id": "cupy-current-device-has-no-equivalent",
+      "prompt": "My CuPy code calls cupy.cuda.Device(0).use() at startup and then allocates arrays. What is the dpnp equivalent?",
+      "expected_output": "Agent says there is no ambient current-device setting in dpnp and no context manager to translate into: placement is an argument at construction, device= or sycl_queue=, and a later array can inherit an existing array's queue. It does not invent a device-context API.",
+      "checks": {
+        "must_include": [
+          "sycl_queue",
+          "device="
+        ],
+        "must_not_include": [
+          "device_context",
+          "dpnp.cuda"
+        ]
+      }
+    },
+    {
+      "id": "fallback-belongs-around-the-function",
+      "prompt": "To be safe I wrapped every dpnp call in my inner loop in try/except and fall back to numpy on failure. The port runs correctly now. Is this the right structure?",
+      "expected_output": "Agent says correctness is not the issue and the structure is: each fallback is a device-to-host copy, a host computation, and a copy back, so a wrapper inside the loop can cost more than the whole device stage saves. It moves the fallback to the specific unsupported function, keeps a record of which functions fell back, and asks for an end-to-end timing against the unported original rather than asserting an improvement.",
+      "checks": {
+        "must_include": [
+          "asnumpy",
+          "NotImplementedError"
+        ],
+        "must_not_include": [
+          "will be faster",
+          "empty_cache"
+        ]
+      }
+    }
+  ]
+}

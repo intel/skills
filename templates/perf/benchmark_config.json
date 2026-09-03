@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "run_id": "<uuid — the same id as in hw-results.json>",
+
+  "$purpose": "Pins everything that would change the number, so the run can be repeated. If a field here is wrong, hw-results.json describes a measurement nobody can reproduce.",
+
+  "harness": {
+    "infrastructure": "<the benchmark job or runner that produced this>",
+    "command": "<the exact command that produced hw-results.json>",
+    "iterations": 0,
+    "warmup_iterations": 0,
+    "repeats": 0,
+    "reported_statistic": "<median | mean of repeats>"
+  },
+
+  "environment": {
+    "os": "<distribution and kernel>",
+    "driver": "<GPU/NPU driver version, or null>",
+    "container_image": "<image and digest, or null for bare metal>",
+    "python": "<version>",
+    "packages": {
+      "<package>": "<exact version>"
+    },
+    "env_vars": {
+      "<VAR>": "<value that affects the result, e.g. thread or device selection>"
+    }
+  },
+
+  "system_state": {
+    "cpu_governor": "<performance | powersave>",
+    "smt": "<on | off>",
+    "numa_binding": "<how the run was pinned, or null>",
+    "thread_count": 0
+  },
+
+  "workload": {
+    "name": "<what is being run>",
+    "model_source": "<URL or internal path, with a version or digest>",
+    "dataset": "<name and version, or synthetic input description>",
+    "batch_size": 0,
+    "precision": "<fp32 | bf16 | int8 | ...>"
+  },
+
+  "arms": {
+    "no_skill": { "code": "<path or gist of the agent's code without the skill>" },
+    "with_skill": { "code": "<path or gist of the agent's code with the skill>" }
+  }
+}

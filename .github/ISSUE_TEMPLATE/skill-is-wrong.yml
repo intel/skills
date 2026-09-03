@@ -1,0 +1,43 @@
+name: A skill gave wrong guidance
+description: A skill in this catalog told an agent something untrue, out of date, or that does not run.
+labels: ["skill-defect"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A skill is a claim about behaviour, so the useful report is what the agent *did*,
+        not only what the file says. If the skill is imported from another repository —
+        `npx github:intel/skills show <skill>` prints where it came from — the fix belongs
+        upstream, and this issue is how we get it there.
+  - type: input
+    id: skill
+    attributes:
+      label: Skill
+      description: The directory name under skills/.
+      placeholder: dpnp-quickstart
+    validations:
+      required: true
+  - type: textarea
+    id: claim
+    attributes:
+      label: What the skill says
+      description: Quote the line or block, with the file and roughly where in it.
+    validations:
+      required: true
+  - type: textarea
+    id: reality
+    attributes:
+      label: What is actually true, and how you know
+      description: |
+        An error message, a version where the API does not exist, or a link to the
+        documentation that contradicts it. "It looks wrong" is hard to act on; a traceback
+        or a doc link is not.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Where you saw it
+      description: Agent and model, package versions, and the hardware if it matters.
+    validations:
+      required: false

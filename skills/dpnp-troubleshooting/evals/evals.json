@@ -1,0 +1,46 @@
+{
+  "skill_name": "dpnp-troubleshooting",
+  "evals": [
+    {
+      "id": "unimplemented-api-guard",
+      "prompt": "One code path calls dpnp.unique and raises NotImplementedError on my release. I was going to guard every dpnp call with hasattr(dpnp, name) before calling it. Is that the right guard, and what should the fallback be?",
+      "expected_output": "Agent says hasattr is not a coverage check, because the attribute can exist while the call still raises and coverage is per keyword argument as well as per function. It guards with try/except around the call instead, catching NotImplementedError and the related TypeError, and falls back by converting to host with dpnp.asnumpy(), calling NumPy, and converting back — hoisted out of any loop.",
+      "checks": {
+        "must_include": [
+          "try",
+          "except",
+          "dpnp.asnumpy("
+        ]
+      }
+    },
+    {
+      "id": "missing-sycl-runtime",
+      "prompt": "import dpnp fails on a fresh machine with OSError: libsycl.so.7: cannot open shared object file. The package is installed and pip shows it. What is missing and how do I fix it?",
+      "expected_output": "Agent distinguishes ImportError on the module name from OSError on the shared object: the package is present and the SYCL runtime is not. It installs the runtime, either through the Intel conda channel alongside dpnp and dpctl or with pip install intel-cmplr-lib-rt, and notes that the runtime is not the kernel driver, so a GPU the driver does not expose stays invisible either way.",
+      "checks": {
+        "must_include": [
+          "intel-cmplr-lib-rt",
+          "runtime"
+        ],
+        "must_not_include": [
+          "install -c intel "
+        ]
+      }
+    },
+    {
+      "id": "no-device-force-cpu",
+      "prompt": "On a build server dpctl.get_devices() returns an empty list and my dpnp code behaves differently than on my laptop. How do I pin execution to the CPU while I debug, both from Python and from the environment?",
+      "expected_output": "Agent explains that an empty device list means the driver stack is not visible to SYCL. From Python it selects the device explicitly with dpctl.SyclDevice for an opencl:cpu filter string and passes device= at allocation rather than relying on process-wide state; from outside the process it sets ONEAPI_DEVICE_SELECTOR to the CPU filter, noting that the older SYCL_DEVICE_FILTER no longer takes effect on current runtimes.",
+      "checks": {
+        "must_include": [
+          "oneapi_device_selector",
+          "opencl:cpu",
+          "device="
+        ],
+        "must_not_include": [
+          "cuda_visible_devices"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "skill_name": "dpnp-random",
+  "evals": [
+    {
+      "id": "same-seed-different-numbers",
+      "prompt": "I set numpy.random.seed(42) and dpnp.random.seed(42) and the two randn calls give completely different numbers. Which one is broken, and how do I make them match?",
+      "expected_output": "Agent explains that neither is broken: dpnp.random is backed by oneMKL and numpy.random uses its own bit generator, so one seed produces two different streams by design. It says the two sequences cannot be made to match, that a test comparing them across libraries is testing the wrong thing, and that a reproducibility chain must stay inside one library or compare statistics instead.",
+      "checks": {
+        "must_include": [
+          "onemkl",
+          "generator",
+          "different"
+        ],
+        "must_not_include": [
+          "is a bug in dpnp"
+        ]
+      }
+    },
+    {
+      "id": "missing-distribution-host-fallback",
+      "prompt": "dpnp.random has no dirichlet, but I need Dirichlet samples feeding a dpnp computation. What is the right way to handle this?",
+      "expected_output": "Agent generates the samples on the host with numpy.random and moves one large batch to the device with dpnp.array(), rather than drawing per iteration, and notes that the cost is the transfer so the batch should be large. It advises checking the installed release for coverage instead of trusting a remembered list of missing distributions.",
+      "checks": {
+        "must_include": [
+          "numpy.random",
+          "dpnp.array(",
+          "batch"
+        ],
+        "must_not_include": [
+          "dpnp.random.dirichlet"
+        ]
+      }
+    },
+    {
+      "id": "reseeding-inside-the-loop",
+      "prompt": "For reproducibility I call dpnp.random.seed(0) at the top of every iteration of my training loop before drawing a noise batch. Is that a good idea?",
+      "expected_output": "Agent says no: reseeding every iteration resets the generator so every iteration draws the same values, and it adds cost without adding determinism. It moves the seed call above the loop, or draws one large batch up front and indexes it, and adds that a result which must be replayed exactly elsewhere should be persisted rather than regenerated from a seed.",
+      "checks": {
+        "must_include": [
+          "seed",
+          "loop",
+          "same"
+        ],
+        "must_not_include": [
+          "default_rng"
+        ]
+      }
+    }
+  ]
+}

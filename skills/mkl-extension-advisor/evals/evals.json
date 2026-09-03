@@ -1,0 +1,46 @@
+{
+  "skill_name": "mkl-extension-advisor",
+  "evals": [
+    {
+      "id": "fft-wiring-proof",
+      "prompt": "How do I tell whether numpy's FFT calls in this environment are actually going through mkl_fft? Is mkl_fft.is_patched() returning False enough to say they are not?",
+      "expected_output": "Agent says the proof of an active FFT is the bound function's module, np.fft.fft.__module__, and that is_patched() is a patch counter rather than a state check: on a build-wired numpy the FFT is live while the counter still reads False. Read together the pair tells you how it was wired — in-process patch versus build-wired — and neither should be inferred from the channel, the installer, or a version string.",
+      "checks": {
+        "must_include": [
+          "__module__",
+          "is_patched",
+          "build-wired"
+        ]
+      }
+    },
+    {
+      "id": "generator-api-out-of-scope",
+      "prompt": "My simulation draws everything through rng = np.random.default_rng(0) and calls rng.normal and rng.integers in a hot loop. Will installing and patching mkl_random help it?",
+      "expected_output": "Agent says no, and says why: mkl_random covers the legacy RandomState surface, not the Generator API that default_rng returns, so patching changes nothing for this code and adds a reproducibility hazard for no benefit. It declines to promise a speedup, and points at the mkl_random reference for the current covered API rather than answering from memory.",
+      "checks": {
+        "must_include": [
+          "default_rng",
+          "randomstate"
+        ],
+        "must_not_include": [
+          "will be faster"
+        ]
+      }
+    },
+    {
+      "id": "scipy-fft-backend-missing",
+      "prompt": "mkl_fft is installed but mkl_fft.interfaces.scipy_fft does not exist, so I cannot register the SciPy FFT backend. Nothing raises, the attribute is just absent. What is wrong with this environment?",
+      "expected_output": "Agent identifies the missing dependency: the SciPy interface imports the mkl module at module level, so without mkl-service installed the backend is guarded out silently rather than raising, and scipy itself is required for that backend as well. It installs both from the Intel channel or Intel's index used as the primary index, and confirms the result by re-reading the runtime state rather than the package list.",
+      "checks": {
+        "must_include": [
+          "mkl-service",
+          "scipy",
+          "silent"
+        ],
+        "must_not_include": [
+          "install -c intel "
+        ]
+      }
+    }
+  ]
+}

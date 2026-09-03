@@ -1,0 +1,29 @@
+{
+  "skill_name": "your-skill-name",
+  "evals": [
+    {
+      "id": "happy-path",
+      "prompt": "<A real user request, with their symptom or their goal in their own words.>",
+      "expected_output": "<Prose: what a correct answer contains. Read by a human reviewer, and by whoever writes the answer-track rubric for a task covering this — never string-matched, so describe the reasoning, not only the API calls.>",
+      "checks": {
+        "must_include": [
+          "<a literal an answer cannot be correct without: an API call, a flag, a file name>"
+        ]
+      }
+    },
+    {
+      "id": "edge-case-no-overclaim",
+      "prompt": "<The request where this technology is the wrong answer, or where the honest answer is 'measure first'.>",
+      "expected_output": "<What a correct answer declines to promise, and what it recommends instead.>",
+      "checks": {
+        "must_include": [
+          "<the literal that shows the limit was stated>"
+        ],
+        "must_not_include": [
+          "guaranteed speedup",
+          "always faster"
+        ]
+      }
+    }
+  ]
+}

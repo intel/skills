@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://www.intel.com/content/www/us/en/security-center/vulnerability-handling-guidelines.html
+    about: Do not open an issue. Report it through Intel's vulnerability handling process — see SECURITY.md.
+  - name: Contributing a skill
+    url: https://github.com/intel/skills/blob/main/CONTRIBUTING.md
+    about: The field-by-field reference. You do not need an issue to open a pull request.

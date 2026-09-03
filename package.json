@@ -1,0 +1,31 @@
+{
+  "name": "intel-skills",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Intel agent skills catalog: install a catalogued skill into Claude Code, Codex, or any .agents-compatible harness",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/intel/skills.git"
+  },
+  "homepage": "https://github.com/intel/skills#readme",
+  "bugs": "https://github.com/intel/skills/issues",
+  "type": "module",
+  "bin": {
+    "intel-skills": "bin/intel-skills.mjs"
+  },
+  "files": [
+    "bin/",
+    "skills/",
+    "!skills/**/evals/**",
+    "!skills/**/perf/**",
+    "skills.yaml",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {}
+}
