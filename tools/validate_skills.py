@@ -63,7 +63,10 @@ Everything above is offline. `--check-links` adds the guide's "link check": it
 resolves the http(s) links in each SKILL.md, and for an imported skill the upstream
 repository and its pinned commit, so a moved or deleted target is caught before a
 reader follows a dead reference. It is opt-in and a separate CI step because it is
-the one check whose result depends on someone else's server being up.
+the one check whose result depends on someone else's server being up. A dead link in
+an imported body warns rather than fails, for the same reason 8 does: the fix belongs
+upstream, and an edited import no longer matches its pin. The pinned commit itself
+still fails, because that one is this repository's own claim rather than upstream's.
 
 Needs Python 3.11 or newer for tomllib. Nothing else outside the standard library.
 """
@@ -546,8 +549,8 @@ def extract_urls(body: str) -> list[str]:
     return urls
 
 
-def link_targets(body: str, source: dict | None) -> list[tuple[str, str]]:
-    """(url, what it is) pairs to probe for one skill.
+def link_targets(body: str, source: dict | None) -> list[tuple[str, str, bool]]:
+    """(url, what it is, came from an imported body) triples to probe for one skill.
 
     For an imported skill the pinned commit is probed as well as the repository, from
     .source.json rather than from the body: the body is upstream's own text and says
@@ -556,15 +559,20 @@ def link_targets(body: str, source: dict | None) -> list[tuple[str, str]]:
     provenance leads nowhere, while a reachable repository with an unreachable commit
     means the SHA was rewritten out of history, so nothing can be re-verified against
     what we shipped.
+
+    The third element separates those two origins. A link in an imported body is
+    upstream's, and the pin is ours, so a dead one is a different kind of finding
+    even though both are dead URLs.
     """
-    targets = [(url, "link") for url in extract_urls(body)]
+    imported = source is not None
+    targets = [(url, "link", imported) for url in extract_urls(body)]
     if not source:
         return targets
 
     repo = str(source.get("repo", "")).rstrip("/").removesuffix(".git")
     commit = str(source.get("commit", ""))
     if UPSTREAM_URL_RE.fullmatch(repo) and COMMIT_RE.match(commit):
-        targets.append((f"{repo}/commit/{commit}", "pinned commit"))
+        targets.append((f"{repo}/commit/{commit}", "pinned commit", False))
     return targets
 
 
@@ -597,24 +605,46 @@ def probe_url(url: str) -> tuple[str, str]:
     return "unknown", "no method accepted"
 
 
-def check_links(targets: list[tuple[str, str, str]], report: Report) -> None:
-    """Probe every collected link. targets are (where, url, kind) triples."""
+def check_links(
+    targets: list[tuple[str, str, str, bool]], report: Report
+) -> None:
+    """Probe every collected link.
+
+    targets are (where, url, kind, from an imported body) quadruples. A dead link
+    warns rather than fails when it came from an imported body, matching check 8: the
+    body is upstream's, editing it here would break the byte-compare against the pin
+    that tools/sync_external.py --check enforces, and the repair has to land upstream
+    and arrive through a moved pin. The warning names that so it is actionable rather
+    than noise. Everything this repository wrote — its own skills, and the pin itself
+    — still fails.
+    """
     if not targets:
         return
-    unique = sorted({url for _, url, _ in targets})
+    unique = sorted({url for _, url, _, _ in targets})
     with ThreadPoolExecutor(max_workers=LINK_WORKERS) as pool:
         results = dict(zip(unique, pool.map(probe_url, unique)))
 
-    for where, url, kind in targets:
+    for where, url, kind, upstream_body in targets:
         verdict, detail = results[url]
         if verdict == "dead":
-            report.error(f"{where}: {kind} {url} is gone ({detail})")
+            note = f"{where}: {kind} {url} is gone ({detail})"
+            if upstream_body:
+                report.warn(
+                    f"{note} (imported: upstream's body is kept as it is — fix it "
+                    "upstream, then move external-commit)"
+                )
+            else:
+                report.error(note)
         elif verdict == "unknown":
             report.warn(f"{where}: {kind} {url} was not reachable ({detail})")
 
     checked = len(unique)
-    dead = sum(1 for verdict, _ in results.values() if verdict == "dead")
-    print(f"link check: {checked} URL(s), {dead} gone")
+    dead = {url for url, (verdict, _) in results.items() if verdict == "dead"}
+    ours = {url for _, url, _, imported in targets if url in dead and not imported}
+    summary = f"link check: {checked} URL(s), {len(dead)} gone"
+    if dead - ours:
+        summary += f", {len(dead - ours)} of them only in imported bodies (warned)"
+    print(summary)
 
 
 def check_length(text: str, skill_dir: Path, report: Report) -> None:
@@ -1353,7 +1383,7 @@ def main() -> int:
         action="store_true",
         help="also resolve the http(s) links in each SKILL.md, and an imported skill's "
         "upstream repository and pinned commit. Needs network; a 404 fails, a timeout "
-        "warns.",
+        "warns, and a 404 in an imported body warns because the fix belongs upstream.",
     )
     args = parser.parse_args()
 
@@ -1367,7 +1397,7 @@ def main() -> int:
     descriptions: dict[str, str] = {}
     fronts: dict[str, dict] = {}
     sources: dict[str, dict | None] = {}
-    links: list[tuple[str, str, str]] = []
+    links: list[tuple[str, str, str, bool]] = []
     for skill_dir in skill_dirs:
         sources[skill_dir.name] = read_source(skill_dir, report)
         skill_md = skill_dir / "SKILL.md"
@@ -1388,17 +1418,21 @@ def main() -> int:
         if args.check_links:
             where = f"skills/{skill_dir.name}/SKILL.md"
             links += [
-                (where, url, kind)
-                for url, kind in link_targets(body, sources[skill_dir.name])
+                (where, url, kind, upstream_body)
+                for url, kind, upstream_body in link_targets(
+                    body, sources[skill_dir.name]
+                )
             ]
             # references/ as well as SKILL.md. The guide asks for "the links in the
             # references table", and for a skill of any size those links are one
             # indirection away, in the file the table points at — official-sources.md
-            # is nothing but links.
+            # is nothing but links. On an imported skill these files are upstream's
+            # too: sync_external.py vendors the whole directory, not just SKILL.md.
+            upstream_body = sources[skill_dir.name] is not None
             for path in sorted((skill_dir / "references").glob("*.md")):
                 rel = path.relative_to(REPO_ROOT).as_posix()
                 links += [
-                    (rel, url, "link")
+                    (rel, url, "link", upstream_body)
                     for url in extract_urls(path.read_text(encoding="utf-8"))
                 ]
 
