@@ -1,0 +1,73 @@
+name: Deploy GitHub Pages
+
+# Builds the Astro catalog from two branches: `github_page_src` (site) and `main`
+# (skills.yaml + skill trees). Runs on every push to main so catalog changes ship;
+# push an empty commit to main after updating `github_page_src` if only the site changed.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out catalog (main)
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: main
+          path: catalog
+          persist-credentials: false
+
+      - name: Check out webpage (github_page_src)
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: github_page_src
+          path: webpage
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: webpage/.nvmrc
+          cache: npm
+          cache-dependency-path: webpage/package-lock.json
+
+      - name: Install dependencies
+        working-directory: webpage
+        run: npm ci
+
+      - name: Build static site
+        working-directory: webpage
+        env:
+          CATALOG_ROOT: ${{ github.workspace }}/catalog
+          SITE_BASE: /skills/
+        run: npm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: webpage/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
