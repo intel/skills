@@ -12,7 +12,8 @@ on:
 # job that deploys, and are granted there: `build` runs `npm ci` and `npm run build`
 # over a lockfile and a second checked-out branch, which is the step in this workflow
 # where third-party code executes, and it has no reason to hold a token that can
-# publish a site or mint an OIDC identity.
+# publish a site or mint an OIDC identity. Both jobs below state what they need, so
+# this line is the floor a job added later inherits if it states nothing.
 permissions:
   contents: read
 
@@ -24,6 +25,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # A job's permissions block replaces the workflow-level map rather than adding to
+    # it, so `contents: read` is restated here for the two checkouts. `pages: read` is
+    # the one Pages scope this job needs: `Setup Pages` reads where the site is served
+    # from, and nothing here writes to Pages.
+    permissions:
+      contents: read
+      pages: read
     steps:
       - name: Check out catalog (main)
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -49,15 +57,24 @@ jobs:
         working-directory: webpage
         run: npm ci
 
+      # Before the build, and with an id, because the build takes its base path from
+      # this step's output. base_path is the path GitHub actually serves the site
+      # under, read from the repository's own Pages configuration; hardcoding it
+      # duplicates a fact GitHub already holds and goes wrong the moment the
+      # repository is renamed or a custom domain is set, where base_path is '' and
+      # every asset URL has to lose its /skills/ prefix. astro.config.mjs normalises
+      # the value, so '/skills' and '/skills/' build the same site and '' builds at
+      # the domain root.
+      - name: Setup Pages
+        id: pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
+
       - name: Build static site
         working-directory: webpage
         env:
           CATALOG_ROOT: ${{ github.workspace }}/catalog
-          SITE_BASE: /skills/
+          SITE_BASE: ${{ steps.pages.outputs.base_path }}
         run: npm run build
-
-      - name: Setup Pages
-        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
