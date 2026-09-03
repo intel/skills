@@ -203,6 +203,15 @@ written, and that is what the pin records. Keep the imported text as it was — 
 it means existing measurements of the original no longer describe the file here. The one
 edit the generator does make is to repository-relative command paths, which would
 otherwise point at upstream's layout and resolve to nothing once the skill is installed.
+
+That is also why two checks report an imported body as a warning where they would fail a
+skill written here: an unmentioned file, and a link that has gone 404. Both name a real
+defect and neither can be fixed in this repository — editing the body breaks the
+byte-compare in `sync_external.py --check`, which is the thing that proves the copy is
+still what was reviewed. The route is a pull request upstream, then move
+`external-commit` and re-run `--write`. A warning that outlives a release is worth
+raising with the upstream maintainer rather than living with; if upstream will not take
+the fix, the pin is the wrong pin.
 Every file it touches is listed in `.source.json` under `modified-files` and carries a
 one-line notice saying so, and the validator fails if either is missing.
 

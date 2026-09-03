@@ -48,8 +48,10 @@ jobs:
 
       # Its own step because it is the one check that depends on someone else's
       # server. A 404 or 410 fails it — that is a pointer an agent would follow
-      # into nothing. A timeout, a 5xx, or rate limiting only warns, so an outage
-      # somewhere on the internet cannot hold a contributor's pull request.
+      # into nothing — unless the link came from an imported body, where it warns
+      # instead, because the repair has to land upstream and arrive through a moved
+      # pin. A timeout, a 5xx, or rate limiting only warns, so an outage somewhere on
+      # the internet cannot hold a contributor's pull request.
       - name: Link check
         run: python3 tools/validate_skills.py --check-links
 
