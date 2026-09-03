@@ -1,0 +1,139 @@
+name: Harbor oracle smoke
+
+# The half of Level 1 that needs a container but still needs no credential.
+#
+# Harbor's oracle agent applies each task's own solution/solve.sh. No model, no
+# API key, no Intel hardware — so this runs on a pull request from a fork, and it
+# answers the one question that must be settled before any scored run is worth
+# starting: is every task solvable, and does its verifier emit a reward?
+#
+# It is separate from validate.yml because it is minutes rather than seconds: the
+# dpnp image is built from PyPI on each run. The paths filter keeps it off pull
+# requests that cannot affect it.
+#
+# The scored arms (Level 2) are deliberately absent — they need inference
+# credentials no fork can have. See evaluation/harbor/README.md.
+
+on:
+  pull_request:
+    paths:
+      - "evaluation/harbor/**"
+      - "skills/**"
+      - "tools/check_harbor_job.py"
+      - ".github/workflows/harbor-smoke.yml"
+  push:
+    branches: [main]
+    paths:
+      - "evaluation/harbor/**"
+      - "skills/**"
+      - "tools/check_harbor_job.py"
+      - ".github/workflows/harbor-smoke.yml"
+
+permissions:
+  contents: read
+
+# One run per ref, and a superseded run is cancelled rather than queued behind the
+# one that replaced it: a contributor pushing a fixup should not wait for the CI of
+# the commit they just replaced. Keyed on head_ref for a pull request and on ref
+# otherwise, so a pull request and the branch it targets never cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  oracle:
+    # The one job that needs a Docker daemon, which the hosted runner image has.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      HARBOR_TELEMETRY: "off"
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+
+      # Pinned to the version evaluation/harbor/README.md documents. The PyPI
+      # package is "harbor"; "harbor-cli" is an unrelated project. Harbor ships a
+      # console script only — `python3 -m harbor` does not work — so --user
+      # installs need ~/.local/bin on PATH.
+      - name: Install Harbor
+        run: |
+          python3 -m pip install --user harbor==0.20.0
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Show versions
+        run: harbor --version
+
+      # Harbor drives `docker compose` and buildx for every task container. The
+      # hosted runner image ships both, so this step normally does nothing — it is
+      # here so that a runner image which drops a plugin fails as a missing plugin
+      # rather than as Harbor's "unknown flag: --project-name". Both are single
+      # static binaries, pinned.
+      - name: Install Docker CLI plugins
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.docker/cli-plugins"
+          if ! docker compose version >/dev/null 2>&1; then
+            curl -fsSL --retry 3 -o "$HOME/.docker/cli-plugins/docker-compose" \
+              https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64
+            chmod +x "$HOME/.docker/cli-plugins/docker-compose"
+          fi
+          if ! docker buildx version >/dev/null 2>&1; then
+            curl -fsSL --retry 3 -o "$HOME/.docker/cli-plugins/docker-buildx" \
+              https://github.com/docker/buildx/releases/download/v0.19.3/buildx-v0.19.3.linux-amd64
+            chmod +x "$HOME/.docker/cli-plugins/docker-buildx"
+          fi
+
+      # Harbor calls compose and buildx and fails with "unknown flag: --project-name"
+      # or "unknown flag: --file" when either is missing, which is a confusing way to
+      # learn it, so assert instead.
+      - name: Check Docker plugins
+        run: |
+          docker compose version
+          docker buildx version
+
+      - name: Oracle smoke
+        run: |
+          set -euo pipefail
+          # Task list and expected count both come from the tasks/ tree itself, so
+          # adding a task cannot leave this job silently evaluating the old set.
+          # Deliberately not suites.json: a suite entry is a maintainer's decision
+          # about which capability a task counts toward, and a contributor's task is
+          # worth running the moment it exists — that is the feedback the task was
+          # written for.
+          mapfile -t ARGS < <(python3 - <<'PY'
+          from pathlib import Path
+          for task in sorted(p for p in Path("evaluation/harbor/tasks").iterdir() if p.is_dir()):
+              print("--include-task-name")
+              print(task.name)
+          PY
+          )
+          EXPECTED=$(( ${#ARGS[@]} / 2 ))
+          echo "expecting $EXPECTED task(s) under evaluation/harbor/tasks/"
+          harbor run \
+            --path evaluation/harbor/tasks \
+            --agent oracle \
+            "${ARGS[@]}" \
+            --job-name oracle-smoke \
+            --jobs-dir harbor-jobs \
+            --n-concurrent 2 \
+            --yes
+          python3 tools/check_harbor_job.py harbor-jobs/oracle-smoke/result.json \
+            --expected-trials "$EXPECTED" --reward-floor 1.0
+
+      # An oracle failure is almost always inside the container, where the job log
+      # shows only the exception type. Print the verifier output so the cause is in
+      # the log rather than in an artifact nobody downloads.
+      - name: Verifier output on failure
+        if: failure()
+        run: |
+          for log in harbor-jobs/oracle-smoke/*/verifier/*.txt \
+                     harbor-jobs/oracle-smoke/*/trial/exception.txt; do
+            [ -f "$log" ] || continue
+            echo "=== $log ==="
+            tail -40 "$log"
+          done

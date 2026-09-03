@@ -1,0 +1,47 @@
+{
+  "skill_name": "dpnp-quickstart",
+  "evals": [
+    {
+      "id": "unsupported-parameter-fallback",
+      "prompt": "I replaced numpy.unique(arr, sorted=False) with dpnp.unique(arr, sorted=False) in production code and got TypeError: unexpected keyword argument 'sorted'. How should I check API compatibility before migration, and what is the recommended fallback for unsupported parameters?",
+      "expected_output": "Agent explains that not all NumPy APIs are available in dpnp and that coverage is per-parameter, not just per-function, so the function existing does not mean the signature matches. It names dir(dpnp) or the documentation as the way to check before migrating, and gives a try/except fallback that converts to host memory with dpnp.asnumpy() and calls NumPy.",
+      "checks": {
+        "must_include": [
+          "dpnp.asnumpy(",
+          "except",
+          "dir(dpnp)"
+        ]
+      }
+    },
+    {
+      "id": "device-selection-cpu-fallback",
+      "prompt": "My dpnp code works on my workstation with a GPU but crashes on a cloud VM with 'Default device is unavailable'. How do I check which device dpnp will use, force CPU, and handle environments where no GPU exists?",
+      "expected_output": "Agent explains that dpnp allocates on the default SYCL device, shows how to inspect it with dpctl.select_default_device() and the array's sycl_device property, pins the allocation by passing device= or sycl_queue= to the constructor, and recommends detecting the device at runtime instead of assuming GPU.",
+      "checks": {
+        "must_include": [
+          "dpctl.select_default_device()",
+          "sycl_device",
+          "cpu"
+        ],
+        "must_not_include": [
+          "device_context"
+        ]
+      }
+    },
+    {
+      "id": "small-array-no-speedup-claim",
+      "prompt": "I have a 500-element NumPy array processed inside a loop. Will switching to dpnp make it faster on my Intel laptop?",
+      "expected_output": "Agent declines to promise a speedup, explains that dispatch overhead dominates at this size so dpnp is commonly slower than NumPy below roughly 1,000 elements, and recommends staying on NumPy or timing a warmed-up comparison first.",
+      "checks": {
+        "must_include": [
+          "overhead",
+          "slower"
+        ],
+        "must_not_include": [
+          "guaranteed speedup",
+          "always faster"
+        ]
+      }
+    }
+  ]
+}

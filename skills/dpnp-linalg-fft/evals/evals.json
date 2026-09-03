@@ -1,0 +1,43 @@
+{
+  "skill_name": "dpnp-linalg-fft",
+  "evals": [
+    {
+      "id": "fft-mismatch-is-roundoff",
+      "prompt": "I ported an FFT step from numpy.fft.fft to dpnp.fft.fft and my regression test now fails: the outputs differ in the last few digits. Is dpnp's FFT wrong?",
+      "expected_output": "Agent explains that dpnp dispatches to oneMKL while NumPy uses its own bundled transform, so agreement is to within floating-point roundoff rather than bitwise, and that the test should compare with numpy.testing.assert_allclose and a tolerance instead of equality. It does not call this a bug in either library.",
+      "checks": {
+        "must_include": [
+          "assert_allclose",
+          "onemkl"
+        ],
+        "must_not_include": [
+          "is a bug in dpnp"
+        ]
+      }
+    },
+    {
+      "id": "missing-matrix-function-fallback",
+      "prompt": "I need a matrix exponential in the middle of a dpnp linear algebra pipeline, but dpnp.linalg has no expm. What should I do?",
+      "expected_output": "Agent says the matrix functions are not implemented in dpnp, converts to host with dpnp.asnumpy(), calls scipy.linalg.expm, and converts the result back to a device array once at that boundary. It advises verifying coverage against the installed release rather than trusting a remembered list, and counts the two transfers when judging whether the pipeline is still worth running on a device.",
+      "checks": {
+        "must_include": [
+          "scipy.linalg.expm",
+          "dpnp.asnumpy(",
+          "installed"
+        ]
+      }
+    },
+    {
+      "id": "batched-solve-not-a-python-loop",
+      "prompt": "I have to solve ten thousand independent 100x100 linear systems with dpnp. My current code loops over them and calls dpnp.linalg.solve once per system, and it is slow. What should I change, and how do I time the improvement honestly?",
+      "expected_output": "Agent stacks the systems into a batched array so leading dimensions are handled in one dispatch by dpnp.linalg.solve rather than a Python loop, and says to warm up before timing because the first call on a new shape includes compilation. It gives no speedup figure of its own.",
+      "checks": {
+        "must_include": [
+          "batch",
+          "dpnp.linalg.solve",
+          "warm"
+        ]
+      }
+    }
+  ]
+}

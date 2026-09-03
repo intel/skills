@@ -1,0 +1,977 @@
+{
+  "$comment": "The evaluator portfolio: which tasks evaluate which skill, what each task is for, and the bar a skill must clear. Tasks live in tasks/ rather than being pinned by reference, because a result nobody outside Intel can reproduce is not evidence; each task carries its origin in 'provenance'. tools/validate_skills.py checks that this file, tasks/, and skills.yaml agree, and that every 'covers' resolves to a capability declared in the same suite.",
+  "schema_version": "1.0",
+  "policy": {
+    "minimum_tasks_per_skill": 5,
+    "minimum_discriminating_tasks_per_skill": 2,
+    "required_capability_classes": [
+      "correctness",
+      "selection",
+      "integration",
+      "debugging",
+      "performance"
+    ],
+    "attempts": {
+      "development_probe": 1,
+      "calibration": 3,
+      "promotion": 5
+    },
+    "gate": {
+      "arms": ["no_skill", "previous", "candidate"],
+      "metric": "mean_reward",
+      "condition": "candidate - no_skill >= 0.10",
+      "note": "no_skill is the baseline and is never optional. 'previous' is skipped on a skill's first evaluation. All arms must share task revision, agent, model, attempt count, and timeouts."
+    },
+    "promotion_thresholds": {
+      "maximum_task_mean_regression": 0.10,
+      "maximum_suite_mean_regression": 0.03
+    },
+    "imported_skills": {
+      "$comment": "An entry with \"evaluated_here\": false is an imported skill: its directory under skills/ is a copy of an upstream commit that skills.yaml pins, and it is maintained and evaluated where it was written. What this repository verifies instead of a reward is that the copy is still the bytes that commit holds (tools/sync_external.py --check) and that the commit still resolves. Such an entry declares no tasks and no capabilities, and it stays 'published' here — 'validated' would be a claim about a file this repository does not own. Which upstream repository and which commit is stated in skills.yaml, where the pin lives, and in the skill's own .source.json; it is not repeated per entry, so an entry below carries a 'note' only when it has something of its own to say."
+    },
+    "$comment": "A suite that does not meet minimum_tasks_per_skill, minimum_discriminating_tasks_per_skill, or required_capability_classes blocks promotion to 'validated'. It does not block a pull request: a skill is allowed to sit at 'published' with a partial portfolio, or with no suite at all, as long as any gap in an existing suite is written down here as a planned task."
+  },
+  "evidence": {
+    "oracle_smoke": {
+      "date": "2026-08-22",
+      "harbor": "0.20.0",
+      "host": "Ubuntu 24.04 / x86_64, no GPU",
+      "result": "5 trials, 0 exceptions, every reward 1.0",
+      "means": "every implemented task is solvable and its verifier emits a reward"
+    },
+    "scored_arms": {
+      "status": "run for dpnp-quickstart only",
+      "date": "2026-08-26",
+      "harbor": "0.20.0",
+      "host": "Ubuntu 24.04 / x86_64, 16 vCPU, no GPU",
+      "agent": "claude-code",
+      "model": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arms": ["no_skill", "candidate"],
+      "attempts": 3,
+      "result": "30 trials (15 per arm), 0 errored, 0 retries, every reward 1.0. no_skill 1.000, candidate 1.000, candidate - no_skill = +0.000.",
+      "cost": "no_skill $0.28 / 14940 output tokens; candidate $0.47 / 28160 output tokens",
+      "means": "The harness is proven end to end - two arms, real inference, no lost trials - and the dpnp-quickstart portfolio is proven to be entirely at a ceiling for this model. The +0.000 is not a verdict on the skill: five ceilings cannot produce a delta in either direction. No skill may cite a measured improvement from this run, and no perf/ directory may be populated from it. What it does establish is a task-design requirement: the two planned discriminating tasks are the blocking work for a real gate result, not optional portfolio-filling.",
+      "previous_arm": "not run - dpnp-quickstart has no published version yet, so this is a first evaluation",
+      "other_suites": "onetbb-* and mkl-* have no scored run at all"
+    },
+    "negative_control": {
+      "status": "valid, sensitivity confirmed",
+      "date": "2026-08-27",
+      "what": "A deliberately falsified copy of dpnp-quickstart (float32 mandate, axis unimplemented, no device fallback, matmul not accelerated, asnumpy removed) run as one arm over the same five tasks, 3 attempts each. Kept outside skills/ and never published.",
+      "result": "15 trials, 0 errored, Skill called in every one. Mean reward 0.667 against 1.000 for the candidate arm: -0.333. Per task: device-fallback 1/1/0 (rel err 1.69e-08 > 1e-09, from the float32 mandate), fft-pipeline 1/1/1, linalg-matmul 1/0/1 (verifier: must use dpnp.matmul or @), migration-replace-numpy 1/0/1 (rel err 5.90e-04), reduction-stats 0/0/1 (test_solution_uses_axis_parameter FAILED twice). The failing attempts wrote the falsified pattern; the passing ones did not.",
+      "invalid_first_attempt": "An earlier run on 2026-08-26 scored 5/5 at 1.0 and was discarded: its SKILL.md carried a 'NEGATIVE CONTROL - every claim below is deliberately false' banner, the agent read it, quoted it back and ignored the skill. Anything a skill says about itself is part of the treatment - a version string or a warning comment is text the agent acts on.",
+      "means": "The suite has sensitivity to skill content, so the +0.000 of the scored run is a statement about five tasks at a ceiling rather than about an inert instrument. It also clears the verifiers of being too permissive: they reject work that faithfully followed wrong guidance. Two limits: the effect is probabilistic (the same false claim is followed on one attempt and ignored on the next, so a per-task reading at 3 attempts is noisy), and the treatment instruction itself tells the agent to prefer the environment over the skill, so part of the resistance is authored here rather than discovered. Detecting a wrong skill is not the same as sizing a right one - that still needs the discriminating tasks.",
+      "leakage_lint": "tools/lint_task_leakage.py, run over all 15 tasks on 2026-08-26: every task that measured nothing in the scored run gives away symbols the skill teaches, worst dpnp-migration-replace-numpy at 5. The three zeros are onetbb-parallel-scan, onetbb-flow-graph and onetbb-parallel-sort, two of which were already the predicted oneTBB discriminators."
+    }
+  },
+  "suites": [
+    {
+      "skill": "dpnp-quickstart",
+      "target_task_count": 8,
+      "capabilities": [
+        {
+          "id": "numpy-api-parity",
+          "class": "correctness",
+          "description": "Reproduce NumPy results, dtypes, and shapes after moving an array path to dpnp."
+        },
+        {
+          "id": "device-and-queue-selection",
+          "class": "selection",
+          "description": "Select a SYCL device with dpctl, and fall back to CPU when no GPU is visible instead of failing."
+        },
+        {
+          "id": "host-device-boundaries",
+          "class": "integration",
+          "description": "Cross the dpnp/NumPy boundary correctly, including asnumpy handoff to libraries that only accept host arrays."
+        },
+        {
+          "id": "unsupported-api-triage",
+          "class": "debugging",
+          "description": "Recognize a NumPy API or keyword dpnp does not implement and route around it rather than guessing."
+        },
+        {
+          "id": "transfer-cost-awareness",
+          "class": "performance",
+          "description": "Account for host-device transfer and first-call compilation before claiming a speedup."
+        }
+      ],
+      "tasks": [
+        {
+          "name": "dpnp-device-fallback",
+          "status": "implemented",
+          "role": "discriminating",
+          "calibration": "ceiling",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["device-and-queue-selection"],
+          "note": "Predicted the most likely discriminator of the five - the instruction states the requirement but not the dpctl API that satisfies it - and measured otherwise: 3/3 attempts scored 1.0 in the no_skill arm on 2026-08-26 with claude-haiku-4-5. The role is left as declared pending a harder model-and-task decision; the calibration field carries the measurement."
+        },
+        {
+          "name": "dpnp-reduction-stats",
+          "status": "implemented",
+          "role": "smoke",
+          "calibration": "ceiling",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["numpy-api-parity"]
+        },
+        {
+          "name": "dpnp-linalg-matmul",
+          "status": "implemented",
+          "role": "smoke",
+          "calibration": "ceiling",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["numpy-api-parity", "host-device-boundaries"]
+        },
+        {
+          "name": "dpnp-fft-pipeline",
+          "status": "implemented",
+          "role": "smoke",
+          "calibration": "ceiling",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["host-device-boundaries"]
+        },
+        {
+          "name": "dpnp-migration-replace-numpy",
+          "status": "implemented",
+          "role": "smoke",
+          "calibration": "ceiling",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["numpy-api-parity", "unsupported-api-triage"],
+          "note": "Measured at a ceiling on 2026-08-26, as predicted. Cannot discriminate as written: its instruction already contains the NumPy-fallback pattern the skill teaches, so the no_skill arm can pass without the skill. Kept as smoke and regression coverage. Replacing it with a version that states the requirement without the pattern is tracked as dpnp-unsupported-keyword-triage."
+        },
+        {
+          "name": "dpnp-unsupported-keyword-triage",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["unsupported-api-triage"],
+          "note": "Second discriminating task, required by policy. Must state the failure symptom only, never the fallback pattern."
+        },
+        {
+          "name": "dpnp-transfer-cost-claim",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "answer",
+          "environment": "hosted-cpu",
+          "covers": ["transfer-cost-awareness"],
+          "note": "Scores prose against tests/rubric.json, including an unsupported_claims list: a speedup asserted without accounting for host-device transfer zeroes the reward."
+        }
+      ],
+      "provenance": {
+        "origin": "Written by their author for an Intel evaluation set that is not published. The copies under tasks/ are the only public form; nothing here depends on the originals, and no result reported here needs them to be reproduced.",
+        "author": "Nikolay Petrov",
+        "applies_to": [
+          "dpnp-device-fallback",
+          "dpnp-reduction-stats",
+          "dpnp-linalg-matmul",
+          "dpnp-fft-pipeline",
+          "dpnp-migration-replace-numpy"
+        ],
+        "adapted": "schema_version 1.3, allow_internet replaced by network_mode, and [metadata] gained skill, capability_class, role, and covers. Instructions, Dockerfiles, oracle solutions, and verifiers are unchanged."
+      }
+    },
+    {
+      "skill": "dpnp-interop",
+      "target_task_count": 5,
+      "note": "Adapted alongside seven others from the same body of Intel dpnp material as dpnp-quickstart, and no task is implemented yet: the five capabilities below are the portfolio this skill needs, and the planned tasks are the written-down gap policy asks for rather than a claim of coverage. Nothing here has been measured, so the skill stays at 'published'.",
+      "capabilities": [
+        {
+          "id": "conversion-correctness",
+          "class": "correctness",
+          "description": "Convert at the boundary so a host library receives the array type it checks for, with values and dtype preserved in both directions."
+        },
+        {
+          "id": "library-route-choice",
+          "class": "selection",
+          "description": "Choose between converting through dpnp and staying inside a framework's own Intel path when the whole pipeline is a model."
+        },
+        {
+          "id": "mixed-pipeline-assembly",
+          "class": "integration",
+          "description": "Place conversions at the ends of a pandas, scikit-learn, or PyTorch pipeline rather than between its stages."
+        },
+        {
+          "id": "type-error-triage",
+          "class": "debugging",
+          "description": "Recognize a host-library type error on a device array and fix it at the call site that raised, without wrapping every call."
+        },
+        {
+          "id": "conversion-count-awareness",
+          "class": "performance",
+          "description": "Count conversions per unit of work, and time the whole pipeline, before claiming a mixed pipeline got faster."
+        }
+      ],
+      "tasks": [
+        {
+          "name": "dpnp-interop-sklearn-boundary",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["conversion-correctness", "type-error-triage"],
+          "note": "Must state the failing symptom — the type error naming ndarray — and never the asnumpy pattern, or the no_skill arm passes on the instruction alone."
+        },
+        {
+          "name": "dpnp-interop-mixed-pipeline",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["mixed-pipeline-assembly", "library-route-choice"]
+        },
+        {
+          "name": "dpnp-interop-conversion-cost-claim",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "answer",
+          "environment": "hosted-cpu",
+          "covers": ["conversion-count-awareness"],
+          "note": "Scored against a rubric with an unsupported_claims list: a speedup asserted without counting the conversions zeroes the reward."
+        }
+      ]
+    },
+    {
+      "skill": "dpnp-io",
+      "target_task_count": 5,
+      "note": "Same port, same state: capabilities declared, no task implemented, nothing measured.",
+      "capabilities": [
+        {
+          "id": "roundtrip-correctness",
+          "class": "correctness",
+          "description": "Persist and reload an array through NumPy with shape, dtype, and values intact, given that dpnp has no native binary writer."
+        },
+        {
+          "id": "format-choice",
+          "class": "selection",
+          "description": "Choose between .npy, .npz, HDF5, Zarr, and CSV for a dataset of a stated size and access pattern."
+        },
+        {
+          "id": "library-handoff",
+          "class": "integration",
+          "description": "Drive h5py, Zarr, or pandas from dpnp code, converting only where the library requires a host array."
+        },
+        {
+          "id": "oversize-file-triage",
+          "class": "debugging",
+          "description": "Turn a file that does not fit in memory into a chunked read that never materializes the whole array."
+        },
+        {
+          "id": "io-bound-awareness",
+          "class": "performance",
+          "description": "Separate I/O time from compute time before concluding a device helped, and avoid per-iteration conversions."
+        }
+      ],
+      "tasks": [
+        {
+          "name": "dpnp-io-npy-roundtrip",
+          "status": "planned",
+          "role": "smoke",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["roundtrip-correctness", "library-handoff"]
+        },
+        {
+          "name": "dpnp-io-chunked-mmap-read",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["oversize-file-triage", "format-choice"],
+          "note": "The verifier must reject a solution that reads the file whole, which means the instruction has to make the memory bound real rather than described."
+        },
+        {
+          "name": "dpnp-io-bound-pipeline-claim",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "answer",
+          "environment": "hosted-cpu",
+          "covers": ["io-bound-awareness"]
+        }
+      ]
+    },
+    {
+      "skill": "dpnp-linalg-fft",
+      "target_task_count": 5,
+      "note": "Same port, same state: capabilities declared, no task implemented, nothing measured.",
+      "capabilities": [
+        {
+          "id": "numerical-agreement",
+          "class": "correctness",
+          "description": "Compare a oneMKL-backed result against NumPy with a tolerance rather than equality, and get the tolerance right."
+        },
+        {
+          "id": "transform-choice",
+          "class": "selection",
+          "description": "Pick the transform and the batching that fit the data: real versus complex, batched call versus Python loop."
+        },
+        {
+          "id": "scipy-fallback-boundary",
+          "class": "integration",
+          "description": "Fall back to SciPy for an unimplemented matrix function with exactly one conversion at each end."
+        },
+        {
+          "id": "coverage-triage",
+          "class": "debugging",
+          "description": "Establish whether a linalg or FFT call exists in the installed release instead of asserting it from a remembered list."
+        },
+        {
+          "id": "warmup-and-batch-awareness",
+          "class": "performance",
+          "description": "Warm a shape before timing it, and account for plan creation and dispatch amortization."
+        }
+      ],
+      "tasks": [
+        {
+          "name": "dpnp-linalg-tolerance-comparison",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["numerical-agreement", "coverage-triage"],
+          "note": "A failing exact-equality test is the symptom; the instruction must not name assert_allclose."
+        },
+        {
+          "name": "dpnp-fft-real-transform-choice",
+          "status": "planned",
+          "role": "smoke",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["transform-choice"]
+        },
+        {
+          "name": "dpnp-linalg-scipy-fallback",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["scipy-fallback-boundary", "warmup-and-batch-awareness"]
+        }
+      ]
+    },
+    {
+      "skill": "dpnp-memory",
+      "target_task_count": 5,
+      "note": "Same port, same state: capabilities declared, no task implemented, nothing measured. The capacity-dependent tasks need a device with a known global_mem_size, so a hosted-cpu environment can only exercise the reasoning, not the limit.",
+      "capabilities": [
+        {
+          "id": "placement-correctness",
+          "class": "correctness",
+          "description": "Report where an array actually lives by reading sycl_device and sycl_queue rather than assuming the default."
+        },
+        {
+          "id": "device-targeting",
+          "class": "selection",
+          "description": "Pin an allocation to a chosen device with device= or sycl_queue= instead of relying on process-wide state."
+        },
+        {
+          "id": "chunked-workload-assembly",
+          "class": "integration",
+          "description": "Process a dataset larger than the device in chunks that release their allocations between iterations."
+        },
+        {
+          "id": "leak-diagnosis",
+          "class": "debugging",
+          "description": "Trace growing memory use to per-iteration allocation, and distinguish dropping a reference from freeing an allocation."
+        },
+        {
+          "id": "allocation-cost-awareness",
+          "class": "performance",
+          "description": "Judge when pre-allocation or chunking is worth it, and measure rather than assume the trade."
+        }
+      ],
+      "tasks": [
+        {
+          "name": "dpnp-memory-out-buffer-reuse",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["leak-diagnosis", "allocation-cost-awareness"],
+          "note": "The instruction states that memory grows, not that ufuncs take out=; a verifier can count allocations to score it."
+        },
+        {
+          "name": "dpnp-memory-explicit-device-target",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["placement-correctness", "device-targeting"]
+        },
+        {
+          "name": "dpnp-memory-chunked-capacity-plan",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "answer",
+          "environment": "hosted-cpu",
+          "covers": ["chunked-workload-assembly"],
+          "note": "Answer track on purpose: the rubric rewards reading capacity from the device and penalizes a chunk size quoted from nowhere."
+        }
+      ]
+    },
+    {
+      "skill": "dpnp-migration",
+      "target_task_count": 5,
+      "note": "Same state as the ports it sits with: capabilities declared, no task implemented, nothing measured. This suite is the one that can be run honestly on a hosted CPU, because what it grades is whether the answer was read off the installed release rather than recalled — hosted-cpu is enough for hasattr and inspect.signature.",
+      "capabilities": [
+        {
+          "id": "release-probing",
+          "class": "correctness",
+          "description": "Establish what the installed dpnp implements with hasattr and inspect.signature instead of quoting a coverage list, and name the release the answer was checked against."
+        },
+        {
+          "id": "host-family-recognition",
+          "class": "selection",
+          "description": "Recognise the families with no device counterpart — strings, datetimes, structured arrays, polynomials, masked arrays — and leave that code on NumPy rather than promising a port."
+        },
+        {
+          "id": "fallback-construction",
+          "class": "integration",
+          "description": "Write a fallback that catches the ways a call can refuse, converts at the boundary, and returns a device array to the caller."
+        },
+        {
+          "id": "refusal-diagnosis",
+          "class": "debugging",
+          "description": "Tell NotImplementedError, AttributeError and a TypeError from a narrower signature apart, and act on the difference."
+        },
+        {
+          "id": "fallback-cost-awareness",
+          "class": "performance",
+          "description": "Judge where a fallback belongs relative to a loop, and require end-to-end timing against the unported original rather than asserting a gain."
+        }
+      ],
+      "tasks": [
+        {
+          "name": "dpnp-migration-probe-not-recall",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["release-probing", "host-family-recognition"],
+          "note": "The strongest discriminator here: a coverage answer that happens to be right still fails, because the rubric scores whether the installed release was read. Executable track — the probe either ran or it did not."
+        },
+        {
+          "name": "dpnp-migration-fallback-placement",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["fallback-construction", "fallback-cost-awareness"],
+          "note": "The prompt presents a working per-iteration wrapper, so nothing is broken; the task is to see that correct code has the wrong structure and to count the transfers it costs."
+        },
+        {
+          "name": "dpnp-migration-cupy-device-model",
+          "status": "planned",
+          "role": "smoke",
+          "calibration": "uncalibrated",
+          "track": "answer",
+          "environment": "hosted-cpu",
+          "covers": ["refusal-diagnosis"],
+          "note": "Answer track: the rubric rewards saying there is no current-device equivalent and zeroes any invented context manager."
+        }
+      ]
+    },
+    {
+      "skill": "dpnp-random",
+      "target_task_count": 5,
+      "note": "Same port, same state: capabilities declared, no task implemented, nothing measured.",
+      "capabilities": [
+        {
+          "id": "distribution-correctness",
+          "class": "correctness",
+          "description": "Draw from the intended distribution with the NumPy spelling dpnp implements, and validate statistically rather than by sequence."
+        },
+        {
+          "id": "host-or-device-choice",
+          "class": "selection",
+          "description": "Generate where the data is consumed, and choose a host fallback for a distribution dpnp does not implement."
+        },
+        {
+          "id": "seed-and-persistence-handling",
+          "class": "integration",
+          "description": "Seed once outside the loop, and persist a draw through NumPy when a result must be replayed exactly elsewhere."
+        },
+        {
+          "id": "cross-library-mismatch-triage",
+          "class": "debugging",
+          "description": "Explain a seeded dpnp sequence differing from a seeded NumPy one as two generators, not a defect."
+        },
+        {
+          "id": "batch-generation-awareness",
+          "class": "performance",
+          "description": "Prefer one large draw to many small ones, and count the transfer when a host fallback is in the loop."
+        }
+      ],
+      "tasks": [
+        {
+          "name": "dpnp-random-seed-mismatch-triage",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "answer",
+          "environment": "hosted-cpu",
+          "covers": ["cross-library-mismatch-triage", "distribution-correctness"],
+          "note": "The rubric must reject any answer that promises the two libraries can be made to agree on a sequence."
+        },
+        {
+          "name": "dpnp-random-reseeding-loop",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["seed-and-persistence-handling", "batch-generation-awareness"]
+        },
+        {
+          "name": "dpnp-random-missing-distribution",
+          "status": "planned",
+          "role": "smoke",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["host-or-device-choice"]
+        }
+      ]
+    },
+    {
+      "skill": "dpnp-troubleshooting",
+      "target_task_count": 5,
+      "note": "Same port, same state: capabilities declared, no task implemented, nothing measured. Two of the three planned tasks need a broken environment rather than a broken program, which is a Dockerfile problem more than a task problem — that is why none is implemented yet.",
+      "capabilities": [
+        {
+          "id": "fallback-correctness",
+          "class": "correctness",
+          "description": "Guard an unimplemented call with try/except and a host fallback that returns the right type, hoisted out of the loop."
+        },
+        {
+          "id": "device-pinning-choice",
+          "class": "selection",
+          "description": "Pin execution to a chosen device from inside Python or from the environment, using the variable current runtimes honour."
+        },
+        {
+          "id": "install-repair",
+          "class": "integration",
+          "description": "Distinguish a missing package from a missing SYCL runtime and repair the environment accordingly."
+        },
+        {
+          "id": "symptom-to-check-mapping",
+          "class": "debugging",
+          "description": "Map a traceback to the one command that produces an answer, and report what it printed."
+        },
+        {
+          "id": "slower-than-numpy-triage",
+          "class": "performance",
+          "description": "Attribute a slowdown to array size, first-call compilation, or a conversion in the loop, and measure the fix."
+        }
+      ],
+      "tasks": [
+        {
+          "name": "dpnp-troubleshooting-hasattr-is-not-coverage",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["fallback-correctness", "symptom-to-check-mapping"],
+          "note": "The starting code guards with hasattr and still raises; a correct solution replaces the guard rather than adding another attribute check."
+        },
+        {
+          "name": "dpnp-troubleshooting-missing-runtime",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["install-repair", "device-pinning-choice"],
+          "note": "Needs an image where the package is installed and the SYCL runtime is not, which is the whole point of the task and the reason it is not trivial to build."
+        },
+        {
+          "name": "dpnp-troubleshooting-slower-than-numpy",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "answer",
+          "environment": "hosted-cpu",
+          "covers": ["slower-than-numpy-triage"]
+        }
+      ]
+    },
+    {
+      "skill": "mkl-extension-advisor",
+      "target_task_count": 5,
+      "note": "Three tasks came over with the skill from an unpublished Intel evaluation set; nothing is measured yet, and every role below is a prediction the first scored run may overturn. The three implemented tasks all exercise activation and runtime-state reading, because that is what an executable verifier can see. The skill's other half — an honest no on code the extensions do not cover — has no executable form, so the two remaining capabilities stay on the answer track and are still planned.",
+      "capabilities": [
+        {
+          "id": "activation-correctness",
+          "class": "correctness",
+          "description": "Activate an extension so existing call sites dispatch to it without being rewritten, and match the NumPy reference within tolerance rather than bitwise."
+        },
+        {
+          "id": "eligibility-judgement",
+          "class": "correctness",
+          "description": "Decide from the code and the documented gates whether a call site is covered by an extension, including an honest no."
+        },
+        {
+          "id": "surface-routing",
+          "class": "selection",
+          "description": "Route each call site to the one extension it implicates, and load no reference for a surface the code does not use."
+        },
+        {
+          "id": "environment-wiring",
+          "class": "integration",
+          "description": "Get the install and activation right, including the mkl-service and scipy dependencies the SciPy FFT backend needs."
+        },
+        {
+          "id": "state-probe-triage",
+          "class": "debugging",
+          "description": "Read wiring from runtime state — bound-function module, patch counters, ufunc types — never from a version string or a channel."
+        },
+        {
+          "id": "benefit-restraint",
+          "class": "performance",
+          "description": "State eligibility without stating a speedup, and point at measurement on the user's own hardware instead."
+        }
+      ],
+      "provenance": "The three implemented tasks were written by Nikolay Petrov for an Intel evaluation set that is not published; the copies under tasks/ are the only public form. Only task.toml changed: schema_version 1.3, docker_image dropped, allow_internet replaced by network_mode, and the [metadata] skill and covers fields added. instruction.md, environment/, solution/ and tests/ are byte-identical to the originals apart from line endings.",
+      "tasks": [
+        {
+          "name": "mkl-fft-patch-numpy",
+          "status": "implemented",
+          "role": "smoke",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["activation-correctness", "state-probe-triage"],
+          "note": "Activate mkl_fft so an unchanged np.fft.fft call site dispatches to oneMKL, proven from np.fft.fft.__module__ rather than from is_patched(). Predicted smoke because the activation call is documented upstream; the __module__ proof is the part that may make it discriminate."
+        },
+        {
+          "name": "mkl-umath-coverage-report",
+          "status": "implemented",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["activation-correctness", "state-probe-triage"],
+          "note": "Activate mkl_umath and report which ufuncs actually dispatch. An agent that reports the documented list instead of the observed one fails, which is the same restraint the skill is written for."
+        },
+        {
+          "name": "mkl-random-parallel-streams",
+          "status": "implemented",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["activation-correctness", "surface-routing"],
+          "note": "Independent per-worker streams through mkl_random's MT2203 family. Seeding one generator differently per worker passes a naive eye and fails the independence check, so the task turns on picking the parametrised BRNG."
+        },
+        {
+          "name": "mkl-advisor-generator-api-honest-no",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "answer",
+          "environment": "hosted-cpu",
+          "covers": ["eligibility-judgement", "benefit-restraint"],
+          "note": "Code that uses only default_rng. The rubric rewards a clear no and zeroes any promised speedup — the strongest discriminator in this suite, because the skill-less answer is to recommend patching."
+        },
+        {
+          "name": "mkl-advisor-scipy-backend-repair",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["environment-wiring"],
+          "note": "The image ships mkl_fft without mkl-service, so the backend is absent and nothing raises — the silent failure the skill exists to catch."
+        }
+      ]
+    },
+    {
+      "skill": "onetbb-quickstart",
+      "target_task_count": 9,
+      "note": "Seven tasks came over with the skill from an unpublished Intel evaluation set; nothing is measured yet, and every role below is a prediction the first scored run may overturn. All seven are the same shape — convert a serial C++17 reference to a named oneTBB algorithm, match the validation signature, write a binary — so they cover writing a correct parallel body and linking the library, and cover nothing else. Three things the capabilities name are still absent: the tasks each name the API to use, so nothing scores choosing it; they hand over serial rather than racy code, so nothing scores diagnosing a race; and the verifiers time out rather than compare, so nothing scores overhead. The two planned tasks are those gaps. The find_package half of build-integration is also untested — every implemented task links with g++ and -ltbb.",
+      "capabilities": [
+        {
+          "id": "algorithm-correctness",
+          "class": "correctness",
+          "description": "Write a parallel_for or parallel_reduce whose body handles a subrange and produces the serial result."
+        },
+        {
+          "id": "algorithm-choice",
+          "class": "selection",
+          "description": "Choose between parallel_for, parallel_reduce, and parallel_deterministic_reduce for the stated requirement."
+        },
+        {
+          "id": "build-integration",
+          "class": "integration",
+          "description": "Build and link a oneTBB program: the header, the link line — -ltbb directly or the find_package imported target — and the runtime on the library path."
+        },
+        {
+          "id": "race-diagnosis",
+          "class": "debugging",
+          "description": "Identify shared mutable state captured by a parallel body, and remove it rather than locking around it."
+        },
+        {
+          "id": "overhead-awareness",
+          "class": "performance",
+          "description": "Recognize a body too small to cover task overhead, a bandwidth-bound loop, and oversubscription from nested parallelism."
+        }
+      ],
+      "provenance": "The seven implemented tasks were written by Nikolay Petrov for an Intel evaluation set that is not published; the copies under tasks/ are the only public form. Only task.toml changed: schema_version 1.3, docker_image dropped, allow_internet replaced by network_mode, and the [metadata] skill and covers fields added. instruction.md, environment/, solution/ and tests/ are byte-identical to the originals apart from line endings.",
+      "tasks": [
+        {
+          "name": "onetbb-parallel-reduce",
+          "status": "implemented",
+          "role": "smoke",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["algorithm-correctness", "build-integration"],
+          "note": "parallel_reduce over a named range, matched against a serial reference."
+        },
+        {
+          "name": "onetbb-parallel-scan",
+          "status": "implemented",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["algorithm-correctness", "build-integration"],
+          "note": "parallel_scan needs a body that runs twice with a pre-scan tag and carries a running sum across both passes; getting that wrong still compiles. Predicted the strongest discriminator of the seven."
+        },
+        {
+          "name": "onetbb-flow-graph",
+          "status": "implemented",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["algorithm-correctness", "build-integration"],
+          "note": "Node types, edges and wait_for_all are a different mental model from the loop algorithms, and the flow graph headers are a separate include."
+        },
+        {
+          "name": "onetbb-parallel-sort",
+          "status": "implemented",
+          "role": "smoke",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["algorithm-correctness", "build-integration"],
+          "note": "parallel_sort as a drop-in for std::sort."
+        },
+        {
+          "name": "onetbb-nstream",
+          "status": "implemented",
+          "role": "smoke",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["algorithm-correctness", "build-integration"],
+          "note": "Bandwidth-bound elementwise kernel under parallel_for. Nothing here scores recognising that it is bandwidth-bound — see overhead-awareness, still planned."
+        },
+        {
+          "name": "onetbb-stencil",
+          "status": "implemented",
+          "role": "smoke",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["algorithm-correctness", "build-integration"],
+          "note": "Two-dimensional parallel_for with an interior-only range, where an off-by-one on the boundary is the usual failure."
+        },
+        {
+          "name": "onetbb-transpose",
+          "status": "implemented",
+          "role": "smoke",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["algorithm-correctness", "build-integration"],
+          "note": "Blocked transpose over a two-dimensional range."
+        },
+        {
+          "name": "onetbb-reduce-shared-accumulator",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": ["race-diagnosis", "algorithm-choice"],
+          "note": "The starting code accumulates into a captured double and the verifier runs it repeatedly; a mutex around the body passes correctness, so the rubric also has to reject giving back the parallelism."
+        },
+        {
+          "name": "onetbb-grain-size-restraint",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "answer",
+          "environment": "hosted-cpu",
+          "covers": ["overhead-awareness"],
+          "note": "The prompt asks for a grain size. A specific number with no measurement behind it is the failure being scored."
+        }
+      ]
+    },
+    {
+      "skill": "linux-perf",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": [],
+      "note": "Imported, the first skill this repository took in: intel/intel-performance-skills at the commit skills.yaml pins. See policy.imported_skills for what an entry like this is and is not."
+    },
+    {
+      "skill": "performance-patterns",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": [],
+      "note": "Imported from the same upstream repository as linux-perf, at the same pinned commit. Two entries rather than one because upstream ships two skills with two descriptions and two trigger sets: an agent routes on the description, so merging them would make one routing decision out of two."
+    },
+    {
+      "skill": "phoronix-test-suite",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": [],
+      "note": "Imported, the third and last skill intel/intel-performance-skills ships at the pinned commit. It automates benchmark runs rather than reading a profile, so it is its own routing decision and not a variant of linux-perf's."
+    },
+    {
+      "skill": "cuda-to-xpu-migration",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": [],
+      "note": "Imported. The first of twenty entries copied from intel/gpu-ai-skills at one pinned commit. Twenty rather than one because these skills name each other in their own descriptions to route work between them; an umbrella entry would collapse twenty routing decisions into one and break those cross-references."
+    },
+    {
+      "skill": "llamacpp-xpu-run",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": []
+    },
+    {
+      "skill": "model-can-it-fit",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": []
+    },
+    {
+      "skill": "model-config-recommend",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": []
+    },
+    {
+      "skill": "sglang-xpu-bench",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": []
+    },
+    {
+      "skill": "sglang-xpu-run",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": []
+    },
+    {
+      "skill": "torch-xpu-bench",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": []
+    },
+    {
+      "skill": "torch-xpu-profile",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": []
+    },
+    {
+      "skill": "torch-xpu-run",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": []
+    },
+    {
+      "skill": "vllm-xpu-bench",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": []
+    },
+    {
+      "skill": "vllm-xpu-profile",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": []
+    },
+    {
+      "skill": "vllm-xpu-run",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": []
+    },
+    {
+      "skill": "xpu-container-run",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": []
+    },
+    {
+      "skill": "xpu-deploy-plan",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": []
+    },
+    {
+      "skill": "xpu-discover",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": []
+    },
+    {
+      "skill": "xpu-model-type-detect",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": []
+    },
+    {
+      "skill": "xpu-port",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": []
+    },
+    {
+      "skill": "xpu-profile-unitrace",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": []
+    },
+    {
+      "skill": "xpu-runtime-preflight",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": []
+    },
+    {
+      "skill": "xpu-system-setup",
+      "evaluated_here": false,
+      "capabilities": [],
+      "tasks": []
+    }
+  ]
+}

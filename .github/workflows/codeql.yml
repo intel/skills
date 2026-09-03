@@ -1,0 +1,44 @@
+name: CodeQL
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "31 9 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+  # codeql-action/init reads the workflow run it is part of. Without this it fails
+  # with "Resource not accessible by integration" on the workflow-runs endpoint,
+  # before any analysis starts.
+  actions: read
+
+# One run per ref, and a superseded run is cancelled rather than queued behind the
+# one that replaced it: a contributor pushing a fixup should not wait for the CI of
+# the commit they just replaced. Keyed on head_ref for a pull request and on ref
+# otherwise, so a pull request and the branch it targets never cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    # Uploading SARIF needs GitHub Advanced Security, which a public repository has
+    # and a private one does not: there the analysis succeeds and only the upload
+    # fails, with "Advanced Security must be enabled for this repository". The guard
+    # keeps the job from being permanently red for anyone holding this tree in a
+    # private repository, because a check that is always red teaches people to
+    # ignore red checks.
+    if: github.event.repository.visibility == 'public'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
+        with:
+          languages: python
+      - uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e

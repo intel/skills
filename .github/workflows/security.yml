@@ -1,0 +1,70 @@
+name: Security
+
+# Workflow-level audit: the two checks that read this repository's own CI.
+#
+# Both run from digest-pinned container images rather than from marketplace
+# actions. A container image is not an action: nothing is resolved against an
+# organisation's allowed-actions policy and no third-party code is handed a token,
+# so these two checks behave the same in a fork and under a restrictive policy.
+# The runner image provides the Docker daemon they need, as harbor-smoke.yml
+# already relies on.
+#
+# Not here, deliberately rather than by omission:
+#
+#   gitleaks — gitleaks-action requires an organisation licence key, which this
+#   repository has no secret for, so the job could only ever fail. Secret scanning
+#   is covered at the org level instead.
+#
+#   CodeQL — see codeql.yml. It is its own workflow because the SARIF upload needs
+#   GitHub Advanced Security, so the job guards itself on the repository being
+#   public rather than failing where that is unavailable.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly. Both checks can start finding something without anyone touching this
+    # repository — an action pin that gets yanked, a new rule in either tool.
+    - cron: "17 9 * * 1"
+
+permissions:
+  contents: read
+
+# One run per ref, and a superseded run is cancelled rather than queued behind the
+# one that replaced it: a contributor pushing a fixup should not wait for the CI of
+# the commit they just replaced. Keyed on head_ref for a pull request and on ref
+# otherwise, so a pull request and the branch it targets never cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Workflow syntax, expressions, and action references.
+  actionlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: actionlint
+        run: |
+          docker run --rm --volume "$PWD:/repo:ro" --workdir /repo \
+            rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \
+            -color
+
+  # Workflow security audit: unpinned actions, injectable expressions, excessive
+  # permissions, credential and artifact leaks.
+  zizmor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: zizmor
+        run: |
+          docker run --rm --volume "$PWD:/repo:ro" --workdir /repo \
+            ghcr.io/zizmorcore/zizmor@sha256:863026d54f91271b10b60b67ad8054cb37120167e162482597db102b3026a284 \
+            --min-severity=medium --min-confidence=medium --no-progress .github/workflows

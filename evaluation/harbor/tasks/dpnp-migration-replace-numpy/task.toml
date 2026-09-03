@@ -1,0 +1,32 @@
+schema_version = "1.3"
+
+[metadata]
+# The task -> skill link is this field, not the directory path: `harbor run` needs
+# a single discovery root, so tasks cannot nest under skills/.
+skill = "dpnp-quickstart"
+# Capability ids declared by this skill's suite in ../../suites.json, which owns the
+# capability class and the smoke/discriminating role. Kept here too so the task is
+# self-describing in `harbor view --tasks`; validate_skills.py checks they agree.
+covers = ["numpy-api-parity", "unsupported-api-triage"]
+author_name = "Nikolay Petrov"
+author_email = "nikolay.a.petrov@intel.com"
+difficulty = "easy"
+difficulty_explanation = "Drop-in NumPy → dpnp migration with fallback for unsupported API, validated against a NumPy reference pipeline"
+category = "machine-learning"
+tags = ["python", "dpnp", "numpy", "migration", "intel", "data-parallel"]
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 300.0
+
+[environment]
+build_timeout_sec = 600.0
+# The image is built from environment/Dockerfile, which installs dpnp from PyPI.
+# Network is needed for the build and for nothing after it.
+network_mode = "no-network"
+cpus = 4
+memory_mb = 4096
+storage_mb = 8192
+gpus = 0

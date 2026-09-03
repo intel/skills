@@ -1,0 +1,28 @@
+__pycache__/
+*.py[cod]
+
+# `npm pack` output and anything npm installs. The package has no dependencies, so
+# node_modules/ only ever appears by accident, and a tarball is a build artifact.
+node_modules/
+*.tgz
+.openclaw/
+.DS_Store
+*.log
+tmp/
+answers.json
+
+# Anchored, unlike the patterns above. Unanchored, `results/` matches at every depth
+# and swallows evaluation/harbor/results/ — the directory the comment below names as
+# where a kept result goes, which would then be silently unaddable.
+/results/
+/reports/
+
+# Harbor writes trials, trajectories, container logs, and skill-arm snapshots
+# here. Some of it is large and some of it is agent output that was never
+# reviewed, so none of it belongs in the repository. A result worth keeping gets
+# summarized into perf/ or evaluation/harbor/results/ by hand.
+harbor-jobs/
+
+# The virtualenv evaluation/harbor/README.md tells a maintainer to create, at the
+# path it tells them to create it.
+.harborenv/

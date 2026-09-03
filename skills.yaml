@@ -1,0 +1,400 @@
+# Skill registry for github.com/intel/skills
+#
+# Every directory under skills/ must have exactly one entry here, and every entry
+# must have a directory. tools/validate_skills.py checks both directions.
+#
+# An entry is two lines — the name, and the maintainer's GitHub handle, which for an
+# Intel contributor is rarely the same string as their Intel username:
+#
+#   - name: your-skill-name
+#     maintainer: "your-github-handle"
+#
+# Everything below is optional. status lives ONLY here, never in SKILL.md
+# frontmatter, and there are two values:
+#
+#   published   the default, and what an entry means when it says nothing. The skill
+#               is in the catalog and agents load it.
+#   validated   hardware measurements stand behind it: perf/ with all three files
+#               and a current behaviour digest, references/official-sources.md,
+#               intel-source-ledger, intel-hw-validated-on, and a capability suite.
+#               A maintainer sets it, in a separate PR from the one adding the skill.
+#
+# Intel catalog fields (intel-*) belong here, not in frontmatter, so SKILL.md stays
+# conformant to the agentskills.io spec and portable across agent platforms.
+#
+#   intel-products          comma-separated canonical Intel product names. Fill it in
+#                           and the validator checks the description carries their
+#                           vocabulary; leave it out and that check does not run
+#   intel-hw-class          cpu | gpu | npu | accelerator
+#   intel-hw-validated-on   semicolon-separated specific SKUs; required for validated
+#   intel-source-ledger     path to the skill's references/official-sources.md;
+#                           required for validated
+#
+# An empty intel-* value means "does not apply", not "to be filled in later" — so
+# leave the field out rather than writing an empty string.
+#
+#   license                 defaults to Apache-2.0, this repository's own licence, which
+#                           is what a skill written here is published under. Set it when
+#                           a skill arrived under other terms: this is where the licence
+#                           is recorded, and a license in SKILL.md may repeat it but not
+#                           contradict it. SKILL.md does not have to carry one at all
+#
+# An imported entry carries four more fields: the pin naming the upstream commit its
+# directory under skills/ is a copy of. The copy is produced from the pin by
+# tools/sync_external.py rather than written by hand — the pin is what needs review —
+# and it keeps the name upstream gives it, so an agent routing by name finds the skill
+# every other catalog knows:
+#
+#   - name: upstream-skill-name
+#     maintainer: "your-github-handle"
+#     external-repo: "https://github.com/intel/example-skills"
+#     external-commit: "<full 40-char SHA; a branch or tag would let the copy drift>"
+#     external-path: "skills/upstream-skill-name"
+#     external-license: "MIT"   # upstream's, which is why the field exists at all
+#
+# The skill then ships a .source.json stating those same four, so an installed copy
+# carries its own provenance; NOTICE names the upstream it republishes; and
+# `python3 tools/sync_external.py --check` re-fetches the pinned commit and byte-compares.
+
+# Ten of the entries below were adapted from existing Intel dpnp, oneMKL and oneTBB
+# material rather than written here. Every technical claim and code block is that
+# material's; what changed is that unmeasured speedup multipliers were dropped and
+# four self-contradictions corrected. No measurement taken before that adaptation
+# describes these files, which is why perf/ is empty and none of them is validated.
+
+- name: dpnp-quickstart
+  maintainer: "xaleryb"
+  intel-products: "dpnp, dpctl"
+  intel-hw-class: "gpu"
+  intel-source-ledger: "skills/dpnp-quickstart/references/official-sources.md"
+
+- name: dpnp-interop
+  maintainer: "xaleryb"
+  intel-products: "dpnp"
+  intel-hw-class: "gpu"
+  intel-source-ledger: "skills/dpnp-interop/references/official-sources.md"
+
+- name: dpnp-io
+  maintainer: "xaleryb"
+  intel-products: "dpnp"
+  intel-hw-class: "gpu"
+  intel-source-ledger: "skills/dpnp-io/references/official-sources.md"
+
+- name: dpnp-linalg-fft
+  maintainer: "xaleryb"
+  intel-products: "dpnp, oneMKL"
+  intel-hw-class: "gpu"
+  intel-source-ledger: "skills/dpnp-linalg-fft/references/official-sources.md"
+
+- name: dpnp-memory
+  maintainer: "xaleryb"
+  intel-products: "dpnp, dpctl"
+  intel-hw-class: "gpu"
+  intel-source-ledger: "skills/dpnp-memory/references/official-sources.md"
+
+# The one entry here that does not correspond to a single piece of that material: it
+# answers "will this NumPy or CuPy program run on dpnp", which the material only ever
+# addressed inside two files that could not come over whole.
+- name: dpnp-migration
+  maintainer: "xaleryb"
+  # dpnp only, though step 6 uses dpctl's device objects: the field drives the
+  # trigger-vocabulary check, and someone porting CuPy code types "dpnp", not
+  # "dpctl". Naming dpctl here would force a word into the description that no
+  # user of this skill would search for.
+  intel-products: "dpnp"
+  intel-hw-class: "gpu"
+  intel-source-ledger: "skills/dpnp-migration/references/official-sources.md"
+
+- name: dpnp-random
+  maintainer: "xaleryb"
+  intel-products: "dpnp, oneMKL"
+  intel-hw-class: "gpu"
+  intel-source-ledger: "skills/dpnp-random/references/official-sources.md"
+
+- name: dpnp-troubleshooting
+  maintainer: "xaleryb"
+  intel-products: "dpnp, dpctl"
+  intel-hw-class: "gpu"
+  intel-source-ledger: "skills/dpnp-troubleshooting/references/official-sources.md"
+
+# cpu, not gpu: the MKL extension packages patch NumPy and SciPy call sites on the
+# host and have no device path at all — the skill's own description says so.
+- name: mkl-extension-advisor
+  maintainer: "xaleryb"
+  intel-products: "mkl_fft, mkl_random, mkl_umath, mkl-service"
+  intel-hw-class: "cpu"
+  intel-source-ledger: "skills/mkl-extension-advisor/references/official-sources.md"
+
+- name: onetbb-quickstart
+  maintainer: "xaleryb"
+  intel-products: "oneTBB"
+  intel-hw-class: "cpu"
+  intel-source-ledger: "skills/onetbb-quickstart/references/official-sources.md"
+
+# The three entries below are copies of one upstream repository, intel/intel-performance-skills,
+# MIT, pinned at e9d0b6410fb1. Three skills there, so three entries here: one locally
+# invented name covering them would merge three routing decisions into one.
+- name: linux-perf
+  maintainer: "napetrov"
+  external-repo: "https://github.com/intel/intel-performance-skills"
+  external-commit: "e9d0b6410fb1ad7a50fb81e0868fd23ae886882c"
+  external-path: "skills/linux-perf"
+  external-license: "MIT"
+  intel-products: "linux-perf"
+  intel-hw-class: "cpu"
+  # Empty because upstream ships no references/official-sources.md — the file this
+  # repository's own skills use to record the documentation behind a measurement. The
+  # copy carries upstream's references/ as upstream wrote them, and the pin above is
+  # what says which commit they are.
+  intel-source-ledger: ""
+
+- name: performance-patterns
+  maintainer: "napetrov"
+  external-repo: "https://github.com/intel/intel-performance-skills"
+  external-commit: "e9d0b6410fb1ad7a50fb81e0868fd23ae886882c"
+  external-path: "skills/performance-patterns"
+  external-license: "MIT"
+  # Empty, and it earns the warning the validator prints for that. This skill covers
+  # x86/C++ code patterns rather than an Intel product, so there is no product name to
+  # record — and the description is upstream's bytes, so naming one here to silence
+  # the warning would only make the check fail instead.
+  intel-products: ""
+  intel-hw-class: "cpu"
+  intel-source-ledger: ""
+
+- name: phoronix-test-suite
+  maintainer: "napetrov"
+  external-repo: "https://github.com/intel/intel-performance-skills"
+  external-commit: "e9d0b6410fb1ad7a50fb81e0868fd23ae886882c"
+  external-path: "skills/phoronix-test-suite"
+  external-license: "MIT"
+  # The third and last skill upstream ships at this commit. Empty for the same reason
+  # as performance-patterns: the Phoronix Test Suite is not an Intel product, and the
+  # description is upstream's bytes.
+  intel-products: ""
+  intel-hw-class: "cpu"
+  intel-source-ledger: ""
+
+# The twenty entries below are the second upstream repository: intel/gpu-ai-skills,
+# Apache-2.0, pinned at 3fb51a0b6952. Same mechanism, three things worth knowing.
+#
+# One entry per upstream skill, again under upstream's own name — twenty entries
+# rather than one "gpu-ai" umbrella, because these skills route against each other
+# by name in their own descriptions ("use vllm-xpu-run", "route those to
+# bench/deploy/recommend"). An umbrella entry would give an agent one description
+# for twenty routing decisions and break the cross-references upstream relies on.
+#
+# The repository also ships plugins/intel-gpu-ai-skills/skills/../template/, whose
+# SKILL.md is named `template-skill`. It is not listed here: it is a scaffold, not a
+# skill, and the identity rule in tools/sync_external.py would reject the import
+# anyway because the directory name and the frontmatter name disagree.
+#
+# intel-products claims only the vocabulary upstream's own description carries, and
+# nothing more. Two of the twenty (vllm-xpu-profile, xpu-port) name no Intel product
+# at all in their description — they earn the empty-products warning rather than a
+# claim this repository cannot back, because the description is upstream's own text and
+# a product added here would only turn the warning into a reachability error.
+
+- name: cuda-to-xpu-migration
+  maintainer: "xaleryb"
+  external-repo: "https://github.com/intel/gpu-ai-skills"
+  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-path: "plugins/intel-gpu-ai-skills/skills/cuda-to-xpu-migration"
+  external-license: "Apache-2.0"
+  intel-products: "Intel Arc, Intel Arc Pro"
+  intel-hw-class: "gpu"
+  intel-source-ledger: ""
+
+- name: llamacpp-xpu-run
+  maintainer: "xaleryb"
+  external-repo: "https://github.com/intel/gpu-ai-skills"
+  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-path: "plugins/intel-gpu-ai-skills/skills/llamacpp-xpu-run"
+  external-license: "Apache-2.0"
+  intel-products: "Intel GPU, Level Zero"
+  intel-hw-class: "gpu"
+  intel-source-ledger: ""
+
+- name: model-can-it-fit
+  maintainer: "xaleryb"
+  external-repo: "https://github.com/intel/gpu-ai-skills"
+  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-path: "plugins/intel-gpu-ai-skills/skills/model-can-it-fit"
+  external-license: "Apache-2.0"
+  intel-products: "Intel GPU"
+  intel-hw-class: "gpu"
+  intel-source-ledger: ""
+
+- name: model-config-recommend
+  maintainer: "xaleryb"
+  external-repo: "https://github.com/intel/gpu-ai-skills"
+  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-path: "plugins/intel-gpu-ai-skills/skills/model-config-recommend"
+  external-license: "Apache-2.0"
+  intel-products: "Intel Arc"
+  intel-hw-class: "gpu"
+  intel-source-ledger: ""
+
+- name: sglang-xpu-bench
+  maintainer: "xaleryb"
+  external-repo: "https://github.com/intel/gpu-ai-skills"
+  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-path: "plugins/intel-gpu-ai-skills/skills/sglang-xpu-bench"
+  external-license: "Apache-2.0"
+  intel-products: "Intel GPU"
+  intel-hw-class: "gpu"
+  intel-source-ledger: ""
+
+- name: sglang-xpu-run
+  maintainer: "xaleryb"
+  external-repo: "https://github.com/intel/gpu-ai-skills"
+  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-path: "plugins/intel-gpu-ai-skills/skills/sglang-xpu-run"
+  external-license: "Apache-2.0"
+  intel-products: "Intel GPU, Level Zero"
+  intel-hw-class: "gpu"
+  intel-source-ledger: ""
+
+- name: torch-xpu-bench
+  maintainer: "xaleryb"
+  external-repo: "https://github.com/intel/gpu-ai-skills"
+  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-path: "plugins/intel-gpu-ai-skills/skills/torch-xpu-bench"
+  external-license: "Apache-2.0"
+  intel-products: "Intel GPU"
+  intel-hw-class: "gpu"
+  intel-source-ledger: ""
+
+- name: torch-xpu-profile
+  maintainer: "xaleryb"
+  external-repo: "https://github.com/intel/gpu-ai-skills"
+  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-path: "plugins/intel-gpu-ai-skills/skills/torch-xpu-profile"
+  external-license: "Apache-2.0"
+  intel-products: "Intel GPU"
+  intel-hw-class: "gpu"
+  intel-source-ledger: ""
+
+- name: torch-xpu-run
+  maintainer: "xaleryb"
+  external-repo: "https://github.com/intel/gpu-ai-skills"
+  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-path: "plugins/intel-gpu-ai-skills/skills/torch-xpu-run"
+  external-license: "Apache-2.0"
+  intel-products: "Intel GPU"
+  intel-hw-class: "gpu"
+  intel-source-ledger: ""
+
+- name: vllm-xpu-bench
+  maintainer: "xaleryb"
+  external-repo: "https://github.com/intel/gpu-ai-skills"
+  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-path: "plugins/intel-gpu-ai-skills/skills/vllm-xpu-bench"
+  external-license: "Apache-2.0"
+  intel-products: "Intel GPU"
+  intel-hw-class: "gpu"
+  intel-source-ledger: ""
+
+- name: vllm-xpu-profile
+  maintainer: "xaleryb"
+  external-repo: "https://github.com/intel/gpu-ai-skills"
+  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-path: "plugins/intel-gpu-ai-skills/skills/vllm-xpu-profile"
+  external-license: "Apache-2.0"
+  # Empty by construction, see the note above: upstream's description names the
+  # server and the profiler, never the hardware vendor.
+  intel-products: ""
+  intel-hw-class: "gpu"
+  intel-source-ledger: ""
+
+- name: vllm-xpu-run
+  maintainer: "xaleryb"
+  external-repo: "https://github.com/intel/gpu-ai-skills"
+  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-path: "plugins/intel-gpu-ai-skills/skills/vllm-xpu-run"
+  external-license: "Apache-2.0"
+  intel-products: "Intel GPU"
+  intel-hw-class: "gpu"
+  intel-source-ledger: ""
+
+- name: xpu-container-run
+  maintainer: "xaleryb"
+  external-repo: "https://github.com/intel/gpu-ai-skills"
+  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-path: "plugins/intel-gpu-ai-skills/skills/xpu-container-run"
+  external-license: "Apache-2.0"
+  intel-products: "Intel GPU"
+  intel-hw-class: "gpu"
+  intel-source-ledger: ""
+
+- name: xpu-deploy-plan
+  maintainer: "xaleryb"
+  external-repo: "https://github.com/intel/gpu-ai-skills"
+  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-path: "plugins/intel-gpu-ai-skills/skills/xpu-deploy-plan"
+  external-license: "Apache-2.0"
+  intel-products: "Intel XPU"
+  intel-hw-class: "gpu"
+  intel-source-ledger: ""
+
+- name: xpu-discover
+  maintainer: "xaleryb"
+  external-repo: "https://github.com/intel/gpu-ai-skills"
+  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-path: "plugins/intel-gpu-ai-skills/skills/xpu-discover"
+  external-license: "Apache-2.0"
+  intel-products: "Intel Arc, Intel Arc Pro, Intel Data Center GPU Max"
+  intel-hw-class: "gpu"
+  intel-source-ledger: ""
+
+- name: xpu-model-type-detect
+  maintainer: "xaleryb"
+  external-repo: "https://github.com/intel/gpu-ai-skills"
+  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-path: "plugins/intel-gpu-ai-skills/skills/xpu-model-type-detect"
+  external-license: "Apache-2.0"
+  intel-products: "Intel XPU"
+  intel-hw-class: "gpu"
+  intel-source-ledger: ""
+
+- name: xpu-port
+  maintainer: "xaleryb"
+  external-repo: "https://github.com/intel/gpu-ai-skills"
+  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-path: "plugins/intel-gpu-ai-skills/skills/xpu-port"
+  external-license: "Apache-2.0"
+  # Empty by construction, see the note above: upstream's description says XPU
+  # throughout and never Intel, so there is no product token to look for.
+  intel-products: ""
+  intel-hw-class: "gpu"
+  intel-source-ledger: ""
+
+- name: xpu-profile-unitrace
+  maintainer: "xaleryb"
+  external-repo: "https://github.com/intel/gpu-ai-skills"
+  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-path: "plugins/intel-gpu-ai-skills/skills/xpu-profile-unitrace"
+  external-license: "Apache-2.0"
+  intel-products: "Intel XPU, pti-gpu, oneCCL"
+  intel-hw-class: "gpu"
+  intel-source-ledger: ""
+
+- name: xpu-runtime-preflight
+  maintainer: "xaleryb"
+  external-repo: "https://github.com/intel/gpu-ai-skills"
+  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-path: "plugins/intel-gpu-ai-skills/skills/xpu-runtime-preflight"
+  external-license: "Apache-2.0"
+  intel-products: "Intel GPU"
+  intel-hw-class: "gpu"
+  intel-source-ledger: ""
+
+- name: xpu-system-setup
+  maintainer: "xaleryb"
+  external-repo: "https://github.com/intel/gpu-ai-skills"
+  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-path: "plugins/intel-gpu-ai-skills/skills/xpu-system-setup"
+  external-license: "Apache-2.0"
+  intel-products: "Intel GPU, Intel Arc Pro, xpu-smi, Level Zero"
+  intel-hw-class: "gpu"
+  intel-source-ledger: ""

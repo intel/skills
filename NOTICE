@@ -1,0 +1,56 @@
+Skills
+Copyright 2026 Intel Corporation.
+
+This product includes software developed at Intel Corporation.
+Licensed under the Apache License, Version 2.0 — see LICENSE.
+
+--------------------------------------------------------------------------------
+Third-party content
+--------------------------------------------------------------------------------
+
+Some skills under skills/ are copies of skills maintained in other repositories.
+Each such directory carries a .source.json naming the repository, path, commit and
+licence it came from; skills.yaml pins the same four, and
+tools/sync_external.py --check re-verifies the copy against that commit. The bytes
+are upstream's, except where .source.json records a file as modified — in which case
+the file itself says so and states why.
+
+The upstreams republished here, and the terms they are received and redistributed
+under:
+
+  intel/gpu-ai-skills — https://github.com/intel/gpu-ai-skills
+    Commit:  3fb51a0b69527fadcdec3e4ae6b84121d39115dc
+    Licence: Apache-2.0 (the same terms as this repository; see LICENSE)
+    Skills:  cuda-to-xpu-migration, llamacpp-xpu-run, model-can-it-fit,
+             model-config-recommend, sglang-xpu-bench, sglang-xpu-run,
+             torch-xpu-bench, torch-xpu-profile, torch-xpu-run, vllm-xpu-bench,
+             vllm-xpu-profile, vllm-xpu-run, xpu-container-run, xpu-deploy-plan,
+             xpu-discover, xpu-model-type-detect, xpu-port, xpu-profile-unitrace,
+             xpu-runtime-preflight, xpu-system-setup
+
+  intel/intel-performance-skills — https://github.com/intel/intel-performance-skills
+    Commit:  e9d0b6410fb1ad7a50fb81e0868fd23ae886882c
+    Licence: MIT
+    Skills:  linux-perf, performance-patterns, phoronix-test-suite
+
+    MIT License
+
+    Copyright (c) 2026 Intel Corporation
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
