@@ -214,11 +214,13 @@ Blocking, keyless, and runnable on a fork:
   still byte-for-byte the pinned upstream commit
 - `npx … install` writes every skill in the catalog, and `verify` accepts each one and
   rejects an installed copy that was altered
-- a link that answers 404 or 410 — a pointer an agent would follow into nothing. A timeout,
-  a 5xx or rate limiting only warns, so an outage elsewhere cannot hold up a pull request
+- a link that answers 404 or 410 — a pointer an agent would follow into nothing; a warning
+  rather than a failure in an imported body, for the same reason as the mentions check, and
+  because the repair has to land upstream and arrive here through a moved pin. A timeout, a
+  5xx or rate limiting only warns, so an outage elsewhere cannot hold up a pull request
 
 Reported but not blocking: the coverage gaps between what a suite claims and what it
-implements.
+implements, and a dead link in a body this repository copied rather than wrote.
 
 Everything else — eval cases, hardware measurements, the differential, discoverability —
 is described in [MAINTAINERS.md](MAINTAINERS.md) and gates promotion, not merging.

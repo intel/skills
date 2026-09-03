@@ -55,8 +55,9 @@ commit still resolves.
 
 `python3 tools/validate_skills.py`. Keyless, offline, runs on every pull request
 including from a fork, and is the only level that can block a merge. What it enforces is
-in the README; what it reports without blocking is dead links and the coverage gaps
-between what a suite claims and what it implements.
+in the README; what it reports without blocking is a dead link in an imported body — a
+dead link in a skill written here fails — and the coverage gaps between what a suite
+claims and what it implements.
 
 Two things it deliberately does not do. It does not check that `SKILL.md` carries no
 measured numbers — that rule is enforced by review, because a validator cannot tell a
@@ -203,6 +204,8 @@ written, and that is what the pin records. Keep the imported text as it was — 
 it means existing measurements of the original no longer describe the file here. The one
 edit the generator does make is to repository-relative command paths, which would
 otherwise point at upstream's layout and resolve to nothing once the skill is installed.
+Every file it touches is listed in `.source.json` under `modified-files` and carries a
+one-line notice saying so, and the validator fails if either is missing.
 
 That is also why two checks report an imported body as a warning where they would fail a
 skill written here: an unmentioned file, and a link that has gone 404. Both name a real
@@ -212,8 +215,6 @@ still what was reviewed. The route is a pull request upstream, then move
 `external-commit` and re-run `--write`. A warning that outlives a release is worth
 raising with the upstream maintainer rather than living with; if upstream will not take
 the fix, the pin is the wrong pin.
-Every file it touches is listed in `.source.json` under `modified-files` and carries a
-one-line notice saying so, and the validator fails if either is missing.
 
 ## CI
 
