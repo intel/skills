@@ -62,7 +62,13 @@ jobs:
       # the commit under the pin, and both mean this repository publishes something
       # nobody reviewed. Upstream being unreachable only warns, for the same reason
       # the link check does.
+      #
+      # if: always() because these two checks are independent and this one is the more
+      # serious of the pair. Without it a dead link upstream — someone else's edit, on
+      # someone else's schedule — decides whether this repository ever finds out that
+      # what it publishes stopped matching what was reviewed.
       - name: Imported skills match their pinned upstream
+        if: always()
         run: python3 tools/sync_external.py --check
 
   # Kept apart from `validate` because it is the only job that needs node, and because
