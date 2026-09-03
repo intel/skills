@@ -9,3 +9,12 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    # codeql-action/init and codeql-action/analyze are two entry points into one
+    # action, and the bundle checks at runtime that both halves are the same release:
+    # "Loaded a configuration file for version '4.37.9', but running version '4.36.2'".
+    # Ungrouped, dependabot opens one pull request per path, so each one bumps half the
+    # pair and cannot pass its own CI. Grouping makes the pin move as the unit it is.
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
