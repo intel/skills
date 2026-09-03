@@ -14,7 +14,15 @@ updates:
     # "Loaded a configuration file for version '4.37.9', but running version '4.36.2'".
     # Ungrouped, dependabot opens one pull request per path, so each one bumps half the
     # pair and cannot pass its own CI. Grouping makes the pin move as the unit it is.
+    # The pattern is stated twice because a group covers version updates only unless it
+    # says otherwise: a security advisory on one half would arrive as its own
+    # single-dependency pull request and split the pin exactly as above.
     groups:
       codeql-action:
+        applies-to: version-updates
+        patterns:
+          - "github/codeql-action*"
+      codeql-action-security:
+        applies-to: security-updates
         patterns:
           - "github/codeql-action*"
