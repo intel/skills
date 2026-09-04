@@ -7,7 +7,6 @@
 - [ ] I checked `description` against requests a user would really type — see
       CONTRIBUTING.md.
 - [ ] `python3 tools/validate_skills.py` passes locally.
-- [ ] Every commit is signed off with `git commit -s` (DCO).
 
 <!--
 Everything else is checked by CI, so there is nothing to attest here.

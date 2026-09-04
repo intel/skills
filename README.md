@@ -186,11 +186,7 @@ favour someone does.
 
 ### 6. Open the pull request
 
-Open a pull request that clearly describes the skill, completes the PR checklist, and includes the required DCO-signed commit.
-
-```bash
-git commit -s -m "Add your-skill-name skill"      # -s is the DCO sign-off
-```
+Open a pull request that clearly describes the skill and completes the PR checklist.
 
 ## What CI checks
 
@@ -207,7 +203,6 @@ Blocking, keyless, and runnable on a fork:
   install script, a destructive delete, an instruction aimed at the agent's operator, a
   route for a secret out, or a way to switch a protection off
 - `skills.yaml` has an entry with a maintainer, and the catalog and the tree agree
-- every commit carries a DCO sign-off
 - the workflows themselves lint clean (`actionlint`, `zizmor`)
 - for a new skill: its Harbor task is solvable, oracle reward 1.0
 - for an imported skill: `skills.yaml`, `.source.json` and `NOTICE` agree, and the copy is
@@ -277,16 +272,10 @@ Apache-2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). A skill brought here
 another repository keeps its own licence, recorded in `skills.yaml` and in its
 `.source.json`.
 
-**DCO.** Every commit needs a `Signed-off-by` line, certifying you have the right to
-submit the contribution under Apache-2.0 — the same pattern as the Linux kernel.
-`.github/workflows/dco.yml` checks every non-merge commit on the pull request and fails
-it by commit SHA, so this is a gate rather than a request.
-
-```bash
-git commit -s -m "your message"      # sign off
-git commit --amend -s                # forgot on the last commit
-git rebase HEAD~N --signoff          # forgot on several
-```
+**Contributions.** Opening a pull request here licenses what is in it under Apache-2.0 —
+[CONTRIBUTING.md](CONTRIBUTING.md) states it, and section 5 of the licence says it for any
+contribution intentionally submitted for inclusion. Nothing else is asked: no sign-off
+trailer, no CLA, no separate agreement.
 
 **Security.** Report vulnerabilities via [SECURITY.md](SECURITY.md) or Intel PSIRT.
 

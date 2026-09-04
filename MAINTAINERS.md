@@ -222,7 +222,6 @@ the fix, the pin is the wrong pin.
 |---|---|---|---|
 | `validate.yml` | `validate` — `validate_skills.py`, `run_evals.py --validate`, link check | every PR | yes |
 | `validate.yml` | `install` — the installer resolves, lists, and installs from the catalog | every PR | yes |
-| `dco.yml` | sign-off on every non-merge commit, failing by commit SHA | every PR | yes |
 | `harbor-smoke.yml` | the oracle arm over every task in `tasks/` | PRs touching tasks or skills | yes |
 | `security.yml` | `actionlint`, `zizmor` | every PR | yes |
 | `codeql.yml` | code scanning, Python | PRs, push, weekly | reports |
