@@ -13,7 +13,7 @@ mkdir -p skills/your-skill-name
 cp templates/SKILL.md skills/your-skill-name/SKILL.md
 # write it, then:
 python3 tools/validate_skills.py
-git commit -s -m "Add your-skill-name skill"      # -s is the DCO sign-off
+git commit -m "Add your-skill-name skill"
 ```
 
 ## `SKILL.md` frontmatter
@@ -166,79 +166,17 @@ python3 tools/run_evals.py --validate            # only if you wrote evals/evals
 
 Keyless, stdlib-only, and Python 3.11 or newer — the first and third need no network. If
 all three pass, the blocking checks left are about the repository rather than your text: the
-DCO sign-off on every commit, the workflow linters, the installer round trip, and — if you
-imported a skill from another repository — `python3 tools/sync_external.py --check`.
+workflow linters, the installer round trip, and — if you imported a skill from another
+repository — `python3 tools/sync_external.py --check`.
 
-## Licence and sign-off
+## Licence
 
-The two sections below are Intel's standard contributor text. The project name and the link
-to [LICENSE](LICENSE) are filled in; the wording and the Developer Certificate of Origin it
-quotes are unchanged, and the DCO itself may not be changed by anyone.
-
-### License
+The paragraph below is Intel's standard contributor text, with the project name and the
+link to [LICENSE](LICENSE) filled in. It is what makes a contribution inbound-licensed, and
+it is the only thing this repository asks you to agree to — there is no separate sign-off,
+no per-commit trailer, and no CLA.
 
 Intel Skills is licensed under the terms in [LICENSE](LICENSE). By contributing to the project, you agree to the license and copyright terms therein and release your contribution under these terms.
-
-### Sign your work
-
-Please use the sign-off line at the end of the patch. Your signature certifies that you wrote the patch or otherwise have the right to pass it on as an open-source patch. The rules are pretty simple: if you can certify
-the below (from [developercertificate.org](http://developercertificate.org/)):
-
-```
-Developer Certificate of Origin
-Version 1.1
-
-Copyright (C) 2004, 2006 The Linux Foundation and its contributors.
-660 York Street, Suite 102,
-San Francisco, CA 94110 USA
-
-Everyone is permitted to copy and distribute verbatim copies of this
-license document, but changing it is not allowed.
-
-Developer's Certificate of Origin 1.1
-
-By making a contribution to this project, I certify that:
-
-(a) The contribution was created in whole or in part by me and I
-    have the right to submit it under the open source license
-    indicated in the file; or
-
-(b) The contribution is based upon previous work that, to the best
-    of my knowledge, is covered under an appropriate open source
-    license and I have the right under that license to submit that
-    work with modifications, whether created in whole or in part
-    by me, under the same open source license (unless I am
-    permitted to submit under a different license), as indicated
-    in the file; or
-
-(c) The contribution was provided directly to me by some other
-    person who certified (a), (b) or (c) and I have not modified
-    it.
-
-(d) I understand and agree that this project and the contribution
-    are public and that a record of the contribution (including all
-    personal information I submit with it, including my sign-off) is
-    maintained indefinitely and may be redistributed consistent with
-    this project or the open source license(s) involved.
-```
-
-Then you just add a line to every git commit message:
-
-    Signed-off-by: Joe Smith <joe.smith@email.com>
-
-Use your real name (sorry, no pseudonyms or anonymous contributions.)
-
-If you set your `user.name` and `user.email` git configs, you can sign your
-commit automatically with `git commit -s`.
-
-Two shortcuts for when you forget:
-
-```bash
-git commit --amend -s                # the last commit
-git rebase HEAD~N --signoff          # several
-```
-
-CI checks every non-merge commit and fails by commit SHA.
 
 ## Review
 
