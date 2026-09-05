@@ -23,7 +23,7 @@ Install with the standard skills CLI, which reads this repository directly:
 npx skills add intel/skills
 ```
 
-That opens the catalog and lets you pick. The other three commands worth knowing:
+That opens the catalog and lets you pick. Three variants worth knowing:
 
 ```bash
 # browse without installing anything
@@ -38,80 +38,39 @@ npx skills add intel/skills --skill linux-perf --agent claude-code --global
 
 Installs are project-scoped by default — `./.claude/skills/<name>` for Claude Code, and the
 equivalent directory for each other agent you name. `--global` writes the per-user location
-instead. `npx skills update` and `npx skills remove` manage what you installed. Check your
-agent's own documentation for the directory it reads.
-
-Then describe the task in your own words. An agent selects a skill from its `description`,
-so naming the skill is optional — and a skill that is not reached for is a skill whose
-description is wrong, which is why that field gets the most review here.
+instead. Check your agent's own documentation for the directory it reads.
 
 A pinned, offline, byte-verifiable install path also exists, for controlled environments:
 [Reproducible and offline installation](#reproducible-and-offline-installation).
 
-## What can Intel Skills help with?
+## Using what you installed
 
-Things worth asking a coding agent once these are installed:
+Describe the task in your own words and start a new session. The agent reads each installed
+skill's `description` and opens the one that matches, so naming it is optional:
 
-- *"Prepare this Ubuntu host for Intel GPU inference and tell me what is missing."*
-- *"Will this model fit on my Intel GPU, and which serving configuration should I use?"*
-- *"Serve this Hugging Face model with vLLM on Intel GPU and verify a real response."*
-- *"Port this CUDA PyTorch workload to XPU without silently changing what it computes."*
-- *"This C++ service stops scaling past eight cores. Profile it and name the bottleneck."*
-- *"Parallelize this C++ loop with oneTBB and check the result is still correct."*
-- *"Move this NumPy workload to an Intel GPU, and tell me where it should stay on the CPU."*
+> *"Serve `Qwen/Qwen3-8B` on my Intel GPU with an OpenAI-compatible endpoint."*
 
-## Browse by workflow
+Naming it works too, and is the fastest way to check an install took:
 
-The catalog is searchable and filterable by product, hardware and source:
-**[intel.github.io/skills](https://intel.github.io/skills/)**. It is generated from
-[`skills.yaml`](skills.yaml) and the skills themselves, so it is current and this table is
-deliberately not a full list.
+> *"Use the vllm-xpu-run skill to serve `Qwen/Qwen3-8B`."*
 
-| What you are doing | Representative skills |
-|---|---|
-| Set up and diagnose a host | `xpu-discover`, `xpu-system-setup`, `xpu-runtime-preflight`, `xpu-container-run` |
-| Plan and configure | `model-can-it-fit`, `model-config-recommend`, `xpu-model-type-detect`, `xpu-deploy-plan` |
-| Run and serve models | `torch-xpu-run`, `vllm-xpu-run`, `sglang-xpu-run`, `llamacpp-xpu-run` |
-| Port and migrate | `cuda-to-xpu-migration`, `xpu-port`, `dpnp-migration` |
-| Profile, benchmark, optimize | `linux-perf`, `performance-patterns`, `torch-xpu-profile`, `xpu-profile-unitrace`, `vllm-xpu-bench`, `phoronix-test-suite` |
-| Develop with Intel libraries | `onetbb-quickstart`, `dpnp-quickstart`, `dpnp-linalg-fft`, `mkl-extension-advisor` |
-
-Several of these are designed to hand work to each other: `xpu-deploy-plan` calls
-preflight, sizing and configuration before a runtime skill; `linux-perf` routes a
-benchmark to `phoronix-test-suite` and a diagnosed pattern to `performance-patterns`.
-
-## Expert workflows, not copied documentation
-
-Product documentation says what an API supports. A skill encodes how someone who has done
-the task before applies it.
-
-| Documentation | Expert workflow |
-|---|---|
-| describes the available APIs and options | starts from an outcome the user asked for |
-| assumes the reader knows their own environment | inspects hardware, driver, runtime, versions, limits |
-| presents several valid choices | picks one supported path and says why |
-| gives commands | runs an ordered procedure with safeguards |
-| explains the expected behaviour | tests whether it actually happened |
-| lists known issues | recognizes the failure signal and takes a recovery path |
-| ends when the feature is explained | returns a result and the evidence for it |
-
-The shape a good skill has:
-
-```text
-Recognize → Inspect → Decide → Act → Verify → Recover → Report
+```bash
+npx skills list              # what is installed, where, and for which agent
+npx skills update            # pull the current version of each installed skill
+npx skills remove            # take one back out
 ```
 
-[`skills/vllm-xpu-run`](skills/vllm-xpu-run) is the worked example. It recognizes a request
-for an OpenAI-compatible endpoint on an Intel GPU; inspects image, model architecture,
-`/dev/dri` access and available memory; decides dtype, attention backend, quantization and
-KV-cache pairing, and whether the transformers backend fallback is needed; launches the
-container; sends a real generation request and confirms the work landed on the GPU;
-diagnoses an unsupported architecture, an OOM, a oneCCL initialization failure or a missing
-device node; and hands off to `vllm-xpu-bench` the moment the question becomes "how fast is
-it?". That is the part a Markdown copy of the vLLM documentation does not carry.
+If the agent does something generic and never opens a skill you know covers the task, name
+the skill explicitly to confirm it is installed and being read — then
+[open an issue](https://github.com/intel/skills/issues/new) with the wording you used. A
+skill an agent does not reach for is a defect in its `description`, it fails silently, and
+the request you actually typed is the only thing that finds it.
 
-This is also the authoring standard — [CONTRIBUTING.md](CONTRIBUTING.md) asks each of those
-questions of a new skill.
+Which skill covers what: **[intel.github.io/skills](https://intel.github.io/skills/)**,
+searchable and filterable by product and hardware, generated from this repository on every
+push. Several skills chain — a deployment plan calls preflight, sizing and configuration
+before a runtime skill; a CPU profile hands off to benchmarking and to optimization
+patterns — and each skill's own text says when it hands off and to what.
 
 ## Trust and validation
 

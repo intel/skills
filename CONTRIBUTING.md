@@ -22,8 +22,20 @@ Add it when you want the stronger claim.
 ## What makes a skill worth merging
 
 Product documentation says what an API supports. A skill encodes how someone who has done
-the task before applies it, which is a different document. Before writing, answer these —
-a reviewer will ask them, and the answers are the skill's outline:
+the task before applies it, which is a different document:
+
+| Documentation | Expert workflow |
+|---|---|
+| describes the available APIs and options | starts from an outcome the user asked for |
+| assumes the reader knows their own environment | inspects hardware, driver, runtime, versions, limits |
+| presents several valid choices | picks one supported path and says why |
+| gives commands | runs an ordered procedure with safeguards |
+| explains the expected behaviour | tests whether it actually happened |
+| lists known issues | recognizes the failure signal and takes a recovery path |
+| ends when the feature is explained | returns a result and the evidence for it |
+
+Before writing, answer these — a reviewer will ask them, and the answers are the skill's
+outline:
 
 1. What user intent should activate this skill? (this is the `description`)
 2. What must the agent inspect before it acts?
@@ -34,10 +46,23 @@ a reviewer will ask them, and the answers are the skill's outline:
 7. What result and evidence does it return?
 8. When should it hand off to another skill instead of continuing?
 
-A skill that answers 1, 4 and 7 only is a tutorial. `Recognize → Inspect → Decide → Act →
-Verify → Recover → Report` is the shape to aim for;
-[`skills/vllm-xpu-run`](skills/vllm-xpu-run) and [`skills/linux-perf`](skills/linux-perf)
-are the worked examples.
+A skill that answers 1, 4 and 7 only is a tutorial. The shape to aim for:
+
+```text
+Recognize → Inspect → Decide → Act → Verify → Recover → Report
+```
+
+[`skills/vllm-xpu-run`](skills/vllm-xpu-run) is the worked example. It recognizes a request
+for an OpenAI-compatible endpoint on an Intel GPU; inspects image, model architecture,
+`/dev/dri` access and available memory; decides dtype, attention backend, quantization and
+KV-cache pairing, and whether the transformers backend fallback is needed; launches the
+container; sends a real generation request and confirms the work landed on the GPU;
+diagnoses an unsupported architecture, an OOM, a oneCCL initialization failure or a missing
+device node; and hands off to `vllm-xpu-bench` the moment the question becomes "how fast is
+it?". That is the part a Markdown copy of the vLLM documentation does not carry.
+[`skills/linux-perf`](skills/linux-perf) is the same shape on a CPU scalability problem,
+including two hand-offs: benchmark setup to `phoronix-test-suite`, a diagnosed pattern to
+`performance-patterns`.
 
 ## 1. Fork, clone, create the directory
 
