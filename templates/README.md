@@ -2,11 +2,16 @@
 
 Copy-paste starting points. Nothing here is loaded by an agent or read by CI —
 `tools/validate_skills.py` scans `skills/` only, so a placeholder in this directory
-cannot fail a build, and a template cannot silently become a skill.
+cannot fail a build.
+
+The skill template is `SKILL.template.md`, not `SKILL.md`, and the suffix is load-bearing:
+the ecosystem `skills` CLI discovers an installable skill by looking for a `SKILL.md` in a
+child directory, so a file with that exact name here would put `your-skill-name` in the
+catalog a user browses. Do not rename it back.
 
 | Template | Copy to | Needed for |
 |---|---|---|
-| [`SKILL.md`](SKILL.md) | `skills/<name>/SKILL.md` | every skill |
+| [`SKILL.template.md`](SKILL.template.md) | `skills/<name>/SKILL.md` | every skill |
 | [`task_example.md`](task_example.md) | reference, not a file to copy | a skill written here, not imported |
 | [`evals.json`](evals.json) | `skills/<name>/evals/evals.json` | optional |
 | [`perf/hw-results.json`](perf/hw-results.json) | `skills/<name>/perf/hw-results.json` | `validated` |
@@ -20,12 +25,12 @@ What `validated` needs: [MAINTAINERS.md](../MAINTAINERS.md).
 
 ```bash
 mkdir -p skills/your-skill-name
-cp templates/SKILL.md skills/your-skill-name/SKILL.md
+cp templates/SKILL.template.md skills/your-skill-name/SKILL.md
 # edit it, then:
 python3 tools/validate_skills.py
 ```
 
-`templates/SKILL.md` ends in an HTML comment addressed to you. **Delete it before
+`templates/SKILL.template.md` ends in an HTML comment addressed to you. **Delete it before
 committing** — an agent loading the skill would pay context for it.
 
 `templates/evals.json` is schema-valid as it stands — deliberately, so that
