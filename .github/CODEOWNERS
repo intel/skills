@@ -9,20 +9,20 @@
 # as an unknown owner and requests no review at all.
 
 # The default. Everything not matched below.
-*                       @napetrov @xaleryb
+*                       @napetrov @xaleryb @benjaminum
 
 # The gates and the installer: a change here changes what is enforced on everyone else,
 # and a permissive bug in the content scan or in `verify` is invisible in a green build.
-/tools/                 @napetrov @xaleryb
-/bin/                   @napetrov @xaleryb
-/.github/               @napetrov @xaleryb
-/schemas/               @napetrov @xaleryb
+/tools/                 @napetrov @xaleryb @benjaminum
+/bin/                   @napetrov @xaleryb @benjaminum
+/.github/               @napetrov @xaleryb @benjaminum
+/schemas/               @napetrov @xaleryb @benjaminum
 
 # The pins. A moved commit is a change to bytes this repository republishes under someone
 # else's licence, which is the one diff that must not be skimmed.
-/skills.yaml            @napetrov @xaleryb
-/NOTICE                 @napetrov @xaleryb
+/skills.yaml            @napetrov @xaleryb @benjaminum
+/NOTICE                 @napetrov @xaleryb @benjaminum
 
 # The evaluator portfolio: which task counts toward which capability, and the bar a skill
 # has to clear. Changing it changes what "validated" means.
-/evaluation/            @napetrov @xaleryb
+/evaluation/            @napetrov @xaleryb @benjaminum
