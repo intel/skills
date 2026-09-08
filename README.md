@@ -75,18 +75,19 @@ patterns — and each skill's own text says when it hands off and to what.
 ## Trust and validation
 
 **Official** describes this catalog: Intel-hosted, reviewed here, with every entry's
-maintainer named in [`skills.yaml`](skills.yaml). It does not mean every entry carries the
-same evidence, so the status is per skill and stated in one place:
+maintainer named in [`skills.yaml`](skills.yaml). What that buys you is the same for every
+entry in it. Each one parses against the [agentskills.io](https://agentskills.io) format,
+is scanned for content that would make an agent act against the person running it, is read
+by a human who knows the subject, and — where it was written here — ships one runnable task
+proving it describes something real.
 
-| Status in `skills.yaml` | What it claims |
-|---|---|
-| `published` | in the catalog and agents load it: structurally checked, content-scanned, reviewed by a human, and — for a skill written here — carrying one runnable task proving it describes something real |
-| `validated` | hardware evidence stands behind it: `perf/` measurements from named Intel SKUs, a task portfolio meeting the suite policy, and a differential run that cleared its gate |
-
-Today every entry is `published`. `validated` is a bar a maintainer raises a skill to in a
-separate pull request that carries the evidence, and nothing in this repository states a
-number it has not measured. What the two levels require, and why an imported skill cannot
-reach `validated` here, is in [MAINTAINERS.md](MAINTAINERS.md).
+It does not mean every entry carries the same evidence, and this repository does not pretend
+otherwise. A skill is a claim — *give an agent this text and it does better work* — and no
+keyless check tests that claim. Where a measurement exists it is in the repository next to
+the skill and says which machine produced it; nothing here states a number it has not
+measured, and no entry is labelled as more proven than the evidence beside it.
+[MAINTAINERS.md](MAINTAINERS.md) has what review covers and how a skill is measured after
+it lands.
 
 Provenance is checkable rather than asserted. Every imported skill ships a `.source.json`
 naming the upstream repository, path, commit and licence it came from; `skills.yaml` pins
@@ -154,8 +155,8 @@ provenance; the two ask for different things, and neither asks for a measurement
 
 [CONTRIBUTING.md](CONTRIBUTING.md) has the walkthrough, the skill format field by field,
 the local gate, what CI blocks on, and the evaluation levels.
-[MAINTAINERS.md](MAINTAINERS.md) has what happens after a merge: promotion, the
-differential, discoverability, and hardware evidence. Contributing a broad platform skill,
+[MAINTAINERS.md](MAINTAINERS.md) has what happens after a merge: the differential,
+discoverability, and hardware evidence. Contributing a broad platform skill,
 or unsure where yours belongs? [Open an
 issue](https://github.com/intel/skills/issues/new) before writing anything.
 
@@ -180,10 +181,10 @@ you chose, against your data. What a skill *causes* is the product of that combi
 not of the file.
 
 So the same skill gives different results across harnesses, models, model versions,
-hardware and driver stacks. `validated` in [`skills.yaml`](skills.yaml) means someone
-measured a skill under a stated configuration — not that its output is warranted. Nothing
-here is validated for safety-critical or regulated use, or as a control on a production
-system. Measurements under `perf/` are point observations on the configuration recorded
+hardware and driver stacks. Where this repository records a measurement, it means someone
+observed that result under the configuration stated beside it — not that a skill's output is
+warranted. Nothing here is validated for safety-critical or regulated use, or as a control
+on a production system. Measurements under `perf/` are point observations on the configuration recorded
 beside them; performance varies by use, configuration and other factors — see
 [www.intel.com/PerformanceIndex](https://www.intel.com/PerformanceIndex).
 
