@@ -89,11 +89,13 @@ measured, and no entry is labelled as more proven than the evidence beside it.
 [MAINTAINERS.md](MAINTAINERS.md) has what review covers and how a skill is measured after
 it lands.
 
-Provenance is checkable rather than asserted. Every imported skill ships a `.source.json`
-naming the upstream repository, path, commit and licence it came from; `skills.yaml` pins
-the same full commit SHA; and `python3 tools/sync_external.py --check` re-fetches that
-commit and byte-compares. The licence a skill arrived under is preserved and recorded, and
-[NOTICE](NOTICE) names what this repository republishes.
+Provenance is checkable rather than asserted. For a skill maintained in another Intel
+repository, `python3 tools/sync_external.py --check` re-fetches the exact upstream commit
+this repository pinned and byte-compares it against the copy here, so "unmodified" is a
+thing CI proves rather than a thing the README says —
+[Catalog federation](#catalog-federation) has how the pin works. The licence a skill
+arrived under is preserved and recorded, and [NOTICE](NOTICE) names what this repository
+republishes.
 
 ## Reproducible and offline installation
 
@@ -130,12 +132,28 @@ agent config, or pasted into a system prompt. A skill directory is self-containe
 
 ## Catalog federation
 
-This repository is a hub. Some skills are written and maintained here; most are exact
-copies of skills maintained by an Intel product team in their own repository —
-[intel/gpu-ai-skills](https://github.com/intel/gpu-ai-skills) and
-[intel/intel-performance-skills](https://github.com/intel/intel-performance-skills) today.
-An import keeps the name upstream gives it, so an agent routing by name finds the same
-skill in either place, and skill names are unique across the hub.
+This repository is a hub. A skill is either written and maintained here, or an exact copy of
+one maintained by an Intel product team in its own repository — the Intel stack is large
+enough that the team shipping a runtime is the team that should own the workflow for it.
+Which of the two any skill is, is recorded rather than inferred. An imported entry in
+[`skills.yaml`](skills.yaml) carries its origin:
+
+```yaml
+- name: some-skill
+  maintainer: "some-github-handle"
+  external-repo: https://github.com/intel/some-product-repo
+  external-commit: <full 40-character sha>
+  external-path: skills/some-skill
+  external-license: MIT
+```
+
+The directory here is generated from that pin, never hand-copied, so it is the upstream
+directory at that exact commit, byte for byte — and the same pin is repeated in a
+`.source.json` beside `SKILL.md`, so it travels with an install. A full SHA rather than a
+branch is what makes that checkable: a moving ref would let the copy drift silently. An
+upstream change reaches users only by moving the pin, which is a reviewed diff like any
+other. An import keeps the name upstream gives it, so an agent routing by name finds the
+same skill in either place, and names are unique across the hub.
 
 Where to report a problem follows from that. A defect in an imported body has to be fixed
 upstream and arrive here through a moved pin — editing the copy here would only break the
