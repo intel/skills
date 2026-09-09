@@ -1,9 +1,9 @@
 # Maintainers
 
 Everything this repository can do beyond merging a skill. Nothing here is asked of a
-contributor: [README.md](README.md) states the whole merge bar, and this file describes
-what happens after — how a skill earns `validated`, what the measurement machinery is,
-and what is deliberately not measured.
+contributor: [CONTRIBUTING.md](CONTRIBUTING.md) states the whole merge bar, and this file
+describes what happens after — how a skill earns `validated`, what the measurement
+machinery is, and what is deliberately not measured.
 
 If you are contributing a skill, you do not need this file.
 
@@ -19,7 +19,7 @@ If you are contributing a skill, you do not need this file.
 | `skills/<name>/.source.json` | present when the skill was imported: upstream repo, path, commit |
 | `skills.yaml` | the catalog. Maintainer, status, and the optional Intel product fields |
 | `evaluation/harbor/` | the task suites, the runner config, and the suite policy |
-| `templates/` | starting points: `SKILL.md`, `task_example.md`, `evals.json`, `perf/` |
+| `templates/` | starting points: `SKILL.template.md`, `task_example.md`, `evals.json`, `perf/` |
 | `schemas/` | JSON Schema for the files that have one |
 | `tools/` | every check, all stdlib-only Python, all runnable offline |
 | `bin/intel-skills.mjs` | the installer `npx github:intel/skills` runs. Node 20+, no dependencies |
@@ -55,7 +55,7 @@ commit still resolves.
 
 `python3 tools/validate_skills.py`. Keyless, offline, runs on every pull request
 including from a fork, and is the only level that can block a merge. What it enforces is
-in the README; what it reports without blocking is a dead link in an imported body — a
+in CONTRIBUTING.md; what it reports without blocking is a dead link in an imported body — a
 dead link in a skill written here fails — and the coverage gaps between what a suite
 claims and what it implements.
 
