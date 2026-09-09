@@ -1,0 +1,85 @@
+name: Skill security scan
+
+# The gate whose subject is what a skill would do to the machine that installs it.
+# validate.yml asks whether a skill is well-formed; this asks whether it is safe, using
+# NVIDIA SkillSpector — 71 patterns across 17 categories, an AST pass over the scripts a
+# skill ships, YARA signatures, and an OSV.dev lookup for the dependencies a skill
+# names. tools/validate_skills.py keeps its own five hand-written content shapes: they
+# are the ones this repository will not wait for someone else's release to enforce.
+#
+# Keyless and fork-safe, for the same reason validate.yml is: the scan runs static
+# analysis only (--no-llm), so no model credential is needed and a pull request from a
+# fork gets the same result as one from a branch. SkillSpector's semantic stage would
+# raise precision, and it is deliberately not here — a check that cannot run in a fork
+# does not gate a contribution.
+#
+# Installed from a commit-pinned git URL rather than from a marketplace action, because
+# SkillSpector publishes neither an action nor a container image. Nothing third-party is
+# handed a token and no organisation's allowed-actions policy has to list anything new.
+# The pin is the full 40-character commit for the same reason skills.yaml demands one of
+# an imported skill: a tag can be moved under the thing that points at it.
+#
+# Dependabot does not move this pin — it watches the github-actions ecosystem and this
+# repository ships no Python manifest — so the weekly run is what makes a stale scanner
+# visible. It is also what catches a finding nobody here caused: SkillSpector's rule set
+# grows, OSV.dev learns about a dependency a skill names, and either can turn a skill
+# that passed last week into one that needs a look.
+#
+# Outbound HTTPS to api.osv.dev is used for live vulnerability data. When it is
+# unreachable SkillSpector falls back to a built-in list rather than failing, so an
+# outage on someone else's service cannot hold a contributor's pull request.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly, offset from the other two scheduled workflows so three runs do not start
+    # in the same minute.
+    - cron: "47 9 * * 1"
+
+permissions:
+  contents: read
+
+# One run per ref, and a superseded run is cancelled rather than queued behind the one
+# that replaced it: a contributor pushing a fixup should not wait for the CI of the
+# commit they just replaced. Keyed on head_ref for a pull request and on ref otherwise,
+# so a pull request and the branch it targets never cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # SkillSpector v2.11.2. Moving this is a reviewed change, not a rubber stamp: the
+      # baseline suppresses by rule id, so a new version can report a rule this catalog
+      # has never triaged. Bump it in a pull request of its own and read the table.
+      SKILLSPECTOR_COMMIT: 69dcdfb74487d361ba4c811d088cfdea2ff3a9dc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      # Pin the interpreter rather than take whatever the runner image ships, so a
+      # change in the image cannot quietly change what the gate ran on. SkillSpector
+      # requires 3.12 or newer.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+
+      - name: Install SkillSpector
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check \
+            "skillspector @ git+https://github.com/NVIDIA/skillspector.git@${SKILLSPECTOR_COMMIT}"
+
+      # The wrapper runs the 33 scans concurrently, applies .skillspector-baseline.yaml,
+      # writes the table to the step summary, and fails on any skill scoring above 50 —
+      # SkillSpector's own DO_NOT_INSTALL boundary. The JSON is kept in the workspace
+      # for a maintainer re-running the job with a debug session; it is not uploaded,
+      # because the table is what a reviewer actually reads.
+      - name: Scan every skill
+        run: python3 tools/scan_skills.py --json "${RUNNER_TEMP}/skillspector.json"

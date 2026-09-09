@@ -216,7 +216,30 @@ python3 tools/sync_external.py --check           # only if you imported a skill
 ```
 
 The first and third need no network. If they pass, the blocking checks left are about the
-repository rather than your text: the workflow linters and the installer round trip.
+repository rather than your text — the workflow linters and the installer round trip — with
+one exception, below.
+
+### The security scan
+
+One blocking check reads your text and is the only one that needs something installed: CI
+scans every skill with [NVIDIA SkillSpector](https://github.com/NVIDIA/SkillSpector) and
+fails a skill whose risk score is above 50. Run it on yours before you push:
+
+```bash
+pip install "skillspector @ git+https://github.com/NVIDIA/skillspector.git@<commit>"
+python3 tools/scan_skills.py your-skill-name
+```
+
+The commit to pin is in [`.github/workflows/skillspector.yml`](.github/workflows/skillspector.yml);
+pin the same one, because the scanner's rule set moves between versions. Static analysis
+only, so it needs no API key and gives a fork the same answer as a branch.
+
+A finding is a question, not a verdict — the scanner does not know that `--device /dev/dri`
+is how a container sees a GPU. Read it, then either change the skill or add a rule to
+[`.skillspector-baseline.yaml`](.skillspector-baseline.yaml) saying why the pattern is right
+for this catalog. Rules, never generated fingerprints: a fingerprint is bound to the bytes
+it was made from, so it would reactivate on your next edit. Say what it is you are
+accepting — the reason is the whole value of the entry.
 
 ## 5. If you are writing a new skill, add a Harbor task
 
@@ -268,6 +291,12 @@ Blocking, keyless, and runnable on a fork:
 - no file the skill ships carries content this repository will not publish — a piped
   install script, a destructive delete, an instruction aimed at the agent's operator, a
   route for a secret out, or a way to switch a protection off
+- every skill scores at or below 50 on a static [SkillSpector](https://github.com/NVIDIA/SkillSpector)
+  scan, after the reviewed suppressions in
+  [`.skillspector-baseline.yaml`](.skillspector-baseline.yaml). The check above is this
+  repository's own five content shapes; this one is 71 patterns someone else maintains,
+  plus an AST pass over the scripts a skill ships and an OSV.dev lookup for the
+  dependencies it names
 - `skills.yaml` has an entry with a maintainer, and the catalog and the tree agree
 - the workflows themselves lint clean (`actionlint`, `zizmor`)
 - for a new skill: its Harbor task is solvable, oracle reward 1.0

@@ -1,0 +1,154 @@
+# SkillSpector suppression baseline for github.com/intel/skills
+#
+# Read with:  skillspector scan skills/<name> --baseline .skillspector-baseline.yaml
+# See tools/scan_skills.py and .github/workflows/skillspector.yml.
+#
+# Only drift-tolerant `rules` are used, never generated `fingerprints`. A fingerprint
+# is bound to the exact bytes it was generated from, so every edit to a skill would
+# reactivate the finding it accepted and the gate would go red on content changes that
+# have nothing to do with security. A rule states why a pattern is accepted in this
+# catalog, and keeps stating it after the surrounding text is reworded.
+#
+# Two kinds of entry, kept apart on purpose:
+#
+#   POLICY      the pattern is inherent to what this catalog documents — GPU device
+#               passthrough, loopback inference endpoints, first-party tooling that
+#               shells out to perf and docker. It is not going to be fixed, because
+#               there is nothing wrong with it.
+#   TRACKED     the finding is real and is not fixed in this pull request. Each one
+#               names what would fix it. These are the entries to delete, not to grow.
+#
+# Every rule carries a reason: the file is the audit trail, so a suppression nobody
+# can justify has nowhere to hide.
+
+version: 2
+
+rules:
+  # ----------------------------------------------------------------- POLICY
+  # PE5 — container flags an accelerator workload cannot do without. A Level Zero or
+  # compute-runtime container needs the render node, and multi-process inference
+  # servers need the host IPC namespace for shared memory. Host networking is how
+  # every vLLM/SGLang container in this catalog reaches its own port. `--privileged`
+  # and `nsenter` are deliberately NOT suppressed: the first is a documented last
+  # resort with its own section in xpu-container-run, the second appears only in an
+  # instruction not to use it, and both are worth re-reading whenever they move.
+  - id: "PE5"
+    message: "*--device /dev/*"
+    reason: "POLICY: render-node passthrough (/dev/dri) is how an XPU container sees the GPU"
+  - id: "PE5"
+    message: "*--ipc=host*"
+    reason: "POLICY: host IPC namespace is required for multi-process inference server shared memory"
+  - id: "PE5"
+    message: "*--net=host*"
+    reason: "POLICY: host networking is how the documented container reaches its own inference port"
+  - id: "PE5"
+    message: "*--network host*"
+    reason: "POLICY: host networking is how the documented container reaches its own inference port"
+
+  # PE2/TM2 — sudo. Driver install, perf_event_paranoid, and cgroup limits cannot be
+  # done without it. The skills do not run it silently: SKILL.md carries a sudo
+  # protocol that makes the agent present the command and wait for the user, and
+  # tools/validate_skills.py already fails a skill whose text tells the agent to
+  # elevate without asking.
+  - id: "PE2"
+    reason: "POLICY: privileged setup is the subject of these skills; a sudo protocol gates it and validate_skills.py enforces the protocol"
+  - id: "TM2"
+    message: "*sudo*"
+    reason: "POLICY: same sudo protocol, reached through a pipe or a && chain"
+
+  # E1/SC2/SSRF2 — loopback. A run skill starts an inference server and then proves it
+  # answers. The request never leaves the machine, so it is neither exfiltration nor
+  # remote code execution; the pattern is what a health check looks like.
+  - id: "E1"
+    message: "*localhost*"
+    reason: "POLICY: health/completion probe against the server this skill just started"
+  - id: "E1"
+    message: "*127.0.0.1*"
+    reason: "POLICY: health/completion probe against the server this skill just started"
+  - id: "SC2"
+    message: "*localhost*"
+    reason: "POLICY: curl to a loopback inference endpoint fetches a JSON response, not a script"
+  - id: "SC2"
+    message: "*127.0.0.1*"
+    reason: "POLICY: curl to a loopback inference endpoint fetches a JSON response, not a script"
+  - id: "SSRF2"
+    message: "*127.0.0.1*"
+    reason: "POLICY: the loopback address is the target on purpose — the server under test runs there"
+
+  # AST3/AST4/AST7 — first-party tooling under skills/*/tools and skills/*/scripts.
+  # These call perf, addr2line, docker and torch with list argv and no shell, which is
+  # the safe form; the alternative to shelling out to perf is not having a perf skill.
+  - id: "AST4"
+    reason: "POLICY: first-party tools invoke perf/addr2line/docker with list argv, never shell=True"
+  - id: "AST3"
+    message: "*__import__(module)*"
+    reason: "POLICY: availability probe for an optional dependency, module name from a literal table"
+  - id: "AST7"
+    message: "*getattr(torch,*"
+    reason: "POLICY: dtype lookup on torch from a validated --dtype choice"
+
+  # RA2 — `mkdir -p` of a working directory is not session persistence. `systemctl
+  # enable` is NOT suppressed: xpu-system-setup really does enable a unit, and that is
+  # worth seeing every time it changes.
+  - id: "RA2"
+    message: "*mkdir -p*"
+    reason: "POLICY: creating an output directory is not cross-session persistence"
+
+  # LP3 — no declared permission manifest. There is no permissions field to declare:
+  # the agentskills.io frontmatter spec has name and description, and this repository
+  # deliberately keeps everything else in skills.yaml so SKILL.md stays portable.
+  - id: "LP3"
+    reason: "POLICY: the agentskills.io skill spec has no permissions field; catalog metadata lives in skills.yaml"
+
+  # English prose that reads as an instruction to a regex. Each of these matched a
+  # sentence about SIMD, output formatting, or a licence header.
+  - id: "MP3"
+    message: "*swap*"
+    reason: "POLICY: 'swap instructions' / 'Swap rules' are SIMD instruction names, not agent memory writes"
+  - id: "P6"
+    message: "*display rules*"
+    reason: "POLICY: 'display rules' is about how to render a perf table, not about revealing a system prompt"
+  - id: "OH3"
+    message: "*no truncation*"
+    reason: "POLICY: 'no truncation' describes report output, not unescaped rendering of untrusted content"
+  - id: "P2"
+    message: "*Intel Corporation, MIT license*"
+    reason: "POLICY: the match is the copyright comment an imported file is required to keep"
+  - id: "EA2"
+    message: "*auto*Run*"
+    reason: "POLICY: the match is the word 'auto' in a table of --mode values"
+  - id: "TM1"
+    message: "*rm intel/sglang-dev*"
+    reason: "POLICY: a documented `docker rmi` cleanup step for an image this skill pulled"
+  - id: "PE3"
+    message: "*.env*"
+    reason: "POLICY: `--env-file .env` hands a container its own configuration; no credential file is read"
+
+  # AE1 — the scanner reports a referenced artifact it could only inspect in part. The
+  # cause is its own nested-artifact bound meeting a 400-line shell script, not
+  # anything the skill does to evade analysis. Scoped to the three artifacts it is
+  # true of, so a new partially-inspected reference still surfaces.
+  - id: "AE1"
+    message: "*build_plan.sh (partial)*"
+    reason: "POLICY: nested-artifact inspection bound on a 385-line first-party script, not evasion"
+  - id: "AE1"
+    message: "*check_battlemage_prerequisites.sh (partial)*"
+    reason: "POLICY: nested-artifact inspection bound on a 402-line first-party script, not evasion"
+  - id: "AE1"
+    message: "*remote-deploy.md (partial)*"
+    reason: "POLICY: nested-artifact inspection bound on a reference document, not evasion"
+
+  # ---------------------------------------------------------------- TRACKED
+  # AST1/AST6/AST8 — xpu-port's verifier execs the model-builder snippet the user
+  # passes on its own command line. That is the tool's documented purpose and it
+  # carries a Bandit justification at the call site; it is listed here rather than as
+  # POLICY because exec of caller-supplied text is worth a maintainer's eyes.
+  - id: "AST1"
+    path: "scripts/xpu_port_verify.py"
+    reason: "TRACKED: exec of the --builder snippet is the tool's documented purpose (nosec B102 at the call site) — confirm before this becomes POLICY"
+  - id: "AST6"
+    path: "scripts/xpu_port_verify.py"
+    reason: "TRACKED: same call site as AST1"
+  - id: "AST8"
+    path: "scripts/xpu_port_verify.py"
+    reason: "TRACKED: same call site as AST1 — reported CRITICAL because exec is chained with compile"
