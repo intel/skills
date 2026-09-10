@@ -53,6 +53,11 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      # For the SARIF upload, and only in a run that can have it: a fork's token is
+      # read-only whatever this says. Same grant codeql.yml already makes.
+      security-events: write
     env:
       # SkillSpector v2.11.2. Moving this is a reviewed change, not a rubber stamp: the
       # baseline suppresses by rule id, so a new version can report a rule this catalog
@@ -90,8 +95,82 @@ jobs:
       # and the link check in validate.yml. The JSON is kept in the workspace for a
       # maintainer re-running the job with a debug session; it is not uploaded, because
       # the table is what a reviewer actually reads.
+      # Which skills this pull request added or changed. The scan reports those in full
+      # rather than as a row in a table of 33: a reviewer reading a two-skill diff
+      # should not have to find their two findings among the catalog's. Names are
+      # filtered to kebab-case here — they come from the tree the pull request brings,
+      # and they are about to be passed to a shell.
+      - name: Find the skills this change touches
+        id: touched
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          names=$(git diff --name-only "${BASE_SHA}" HEAD -- skills/ \
+            | cut -d/ -f2 \
+            | grep -E '^[a-z0-9][a-z0-9-]*$' \
+            | sort -u \
+            | while read -r name; do
+                if [ -f "skills/${name}/SKILL.md" ]; then echo "${name}"; fi
+              done \
+            | tr '\n' ' ')
+          echo "skills=${names}" >> "${GITHUB_OUTPUT}"
+          echo "Touched: ${names:-none}"
+
+      # --annotate turns each finding into a workflow command, so it renders against
+      # the file and line in Files changed instead of only in this log. --detail prints
+      # the full finding — matched text, what the rule says, what it wants done — for
+      # the skills above, into the step summary.
       - name: Scan every skill
-        run: python3 tools/scan_skills.py --json "${RUNNER_TEMP}/skillspector.json"
+        env:
+          TOUCHED: ${{ steps.touched.outputs.skills }}
+          # SARIF costs a second pass over every skill, because the CLI writes one
+          # format per run and this gate reads the score out of the JSON. Only asked
+          # for when there is somewhere to send it: code scanning needs
+          # security-events: write, which the token of a pull request from a fork does
+          # not carry. A fork therefore keeps the one-pass scan, and the step below
+          # says so on the run rather than leaving a gap.
+          SARIF: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+        run: |
+          set -euo pipefail
+          sarif=""
+          if [ "${SARIF}" = "true" ]; then
+            sarif="--sarif ${RUNNER_TEMP}/skillspector.sarif"
+          fi
+          # shellcheck disable=SC2086  # word splitting is how the names become argv
+          python3 tools/scan_skills.py --annotate \
+            --json "${RUNNER_TEMP}/skillspector.json" \
+            ${sarif} \
+            ${TOUCHED:+--detail ${TOUCHED}}
+
+      # Code scanning is what turns a run into something trackable: every finding
+      # becomes an alert on the file and line, the pull request shows the ones its diff
+      # introduced, and the Security tab keeps the history — which finding appeared in
+      # which commit, and which were dismissed. The baseline's suppressions ride along:
+      # SkillSpector writes each accepted finding out with its `reason` as the SARIF
+      # justification, so it arrives as a dismissed alert carrying the sentence that
+      # accepted it. Uploaded even when the scan failed, because the alerts are how a
+      # reviewer sees which finding failed it. Same digest-pinned action the CodeQL
+      # workflow already uses; `category` keeps these alerts from clobbering its own.
+      - name: Send the findings to code scanning
+        if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938
+        with:
+          sarif_file: ${{ runner.temp }}/skillspector.sarif
+          category: skillspector
+
+      - name: Say that code scanning was skipped
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Code scanning upload skipped"
+            echo
+            echo "This pull request comes from a fork, whose token cannot write"
+            echo "security events. The table above and the annotations on the diff carry"
+            echo "the same findings; the alerts appear once the change is on \`main\`."
+          } >> "${GITHUB_STEP_SUMMARY}"
 
       # A pull request that moves an import's pin brings new upstream text with it, and
       # that is the moment to read that skill's findings again rather than to carry over
