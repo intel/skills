@@ -39,9 +39,10 @@ Three ways the result is read, because a log nobody opens is not a report. The t
 the tally go to the step summary always. --annotate puts each finding on its file and
 line as a workflow command, so it renders in Files changed, and --detail names the skills
 a change touched and prints their findings in full. --sarif writes one merged SARIF file
-for GitHub code scanning: an alert per finding with history across commits, and every
-suppressed finding carried along as a dismissed alert holding the baseline reason that
-accepted it.
+for GitHub code scanning: an alert per active finding, with history across commits and a
+diff view of the ones a pull request introduced. A finding the baseline accepts is left
+out of that file rather than uploaded as a dismissed alert, because code scanning ignores
+SARIF suppressions — see merge_sarif.
 
 Unlike the rest of tools/, this needs SkillSpector installed — it is not stdlib-only and
 not part of the offline local gate:
@@ -287,17 +288,22 @@ def render(results: list[Result], max_score: int, max_score_imported: int) -> st
 def merge_sarif(sarif_dir: Path, out: Path) -> int:
     """One SARIF file for the catalog, with paths GitHub can find.
 
-    Two fixes are needed on the per-skill files. SkillSpector reports a path relative to
-    the skill it was pointed at (`SKILL.md`), and code scanning resolves paths from the
-    repository root, so every URI gains its `skills/<name>/` prefix — without it the
-    alert lands on nothing and renders nowhere. And 33 files is more than the 20 SARIF
+    Three fixes are needed on the per-skill files. SkillSpector reports a path relative
+    to the skill it was pointed at (`SKILL.md`), and code scanning resolves paths from
+    the repository root, so every URI gains its `skills/<name>/` prefix — without it the
+    alert lands on nothing and renders nowhere. 33 files is more than the 20 SARIF
     uploads GitHub accepts for one commit, so the runs are merged into one: same tool
     driver, rules unioned by id, results concatenated.
 
-    Suppressed findings are kept. SkillSpector writes them out with the `reason` from
-    .skillspector-baseline.yaml in `suppressions[].justification`, so an accepted finding
-    arrives as a dismissed alert carrying the sentence that accepted it, and the audit
-    trail stays where a reviewer of the alert can read it.
+    And a suppressed finding is dropped rather than carried. SkillSpector writes each one
+    out with the `reason` from .skillspector-baseline.yaml in
+    `suppressions[].justification`, which reads like it should arrive as a dismissed
+    alert holding the sentence that accepted it. Measured against the API, it does not:
+    code scanning ignores `suppressions` on an uploaded SARIF whether the kind is
+    `external` or `inSource`, and every accepted finding becomes an open alert. On this
+    tree that is 197 alerts nobody is going to act on burying the 17 that want reading,
+    which is how a security tab stops being read at all. The reasons stay in the baseline
+    file, and the counts stay in the table — `suppressed` is a column in it.
     """
     driver: dict = {}
     rules: dict[str, dict] = {}
@@ -312,6 +318,8 @@ def merge_sarif(sarif_dir: Path, out: Path) -> int:
         for rule in run.get("tool", {}).get("driver", {}).get("rules", []):
             rules.setdefault(rule.get("id", ""), rule)
         for result in run.get("results", []):
+            if result.get("suppressions"):
+                continue
             for location in result.get("locations", []):
                 artifact = location.get("physicalLocation", {}).get(
                     "artifactLocation", {}
@@ -504,7 +512,8 @@ def main() -> int:
     parser.add_argument(
         "--sarif",
         metavar="PATH",
-        help="also write one merged SARIF file here, for code scanning",
+        help="also write the active findings here as one merged SARIF file, for "
+        "code scanning (costs a second pass over every skill)",
     )
     args = parser.parse_args()
 
@@ -535,8 +544,8 @@ def main() -> int:
         if sarif_dir is not None:
             count = merge_sarif(sarif_dir, Path(args.sarif))
             print(
-                f"Wrote {args.sarif}: {count} result(s), suppressed ones included as "
-                "dismissed alerts carrying their baseline reason."
+                f"Wrote {args.sarif}: {count} active finding(s). Findings the baseline "
+                "accepts are left out — code scanning ignores SARIF suppressions."
             )
 
     table = render(results, args.max_score, imported_limit)

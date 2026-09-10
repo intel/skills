@@ -150,15 +150,16 @@ jobs:
             ${sarif} \
             ${TOUCHED:+--detail ${TOUCHED}}
 
-      # Code scanning is what turns a run into something trackable: every finding
-      # becomes an alert on the file and line, the pull request shows the ones its diff
+      # Code scanning is what turns a run into something trackable: every active finding
+      # becomes an alert on its file and line, the pull request shows the ones its diff
       # introduced, and the Security tab keeps the history — which finding appeared in
-      # which commit, and which were dismissed. The baseline's suppressions ride along:
-      # SkillSpector writes each accepted finding out with its `reason` as the SARIF
-      # justification, so it arrives as a dismissed alert carrying the sentence that
-      # accepted it. Uploaded even when the scan failed, because the alerts are how a
-      # reviewer sees which finding failed it. Same digest-pinned action the CodeQL
-      # workflow already uses; `category` keeps these alerts from clobbering its own.
+      # which commit, and when one went away. Only the active ones: code scanning ignores
+      # a SARIF `suppressions` entry, so uploading what the baseline accepts would put
+      # 197 alerts nobody will act on in front of the 17 that want reading. Those keep
+      # their reasons in .skillspector-baseline.yaml and their counts in the table.
+      # Uploaded even when the scan failed, because the alerts are how a reviewer sees
+      # which finding failed it. Same digest-pinned action the CodeQL workflow already
+      # uses; `category` keeps these alerts from clobbering its own.
       - name: Send the findings to code scanning
         if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938

@@ -253,10 +253,12 @@ only, so it needs no API key and gives a fork the same answer as a branch.
 Where the answer shows up: the table and the tally are in the run's summary, each finding
 in a skill your change touched is printed there in full, and each one is annotated on its
 own file and line so it appears in **Files changed**. On a branch in this repository the
-findings also become code scanning alerts, with the Security tab keeping their history and
-each accepted finding shown as dismissed with the reason from the baseline; a pull request
-from a fork cannot write those, so the summary and the annotations are what it gets, and
-the run says so.
+active findings also become code scanning alerts, with the Security tab keeping their
+history and the pull request showing the ones its diff introduced; a pull request from a
+fork cannot write those, so the summary and the annotations are what it gets, and the run
+says so. A finding the baseline accepts is not uploaded — code scanning ignores the
+suppression a SARIF file carries, so an accepted finding would arrive as an open alert.
+Its reason lives in the baseline file, which is where the audit trail belongs anyway.
 
 A finding is a question, not a verdict — the scanner does not know that `--device /dev/dri`
 is how a container sees a GPU. Read it, then either change the skill or add a rule to
