@@ -109,9 +109,15 @@ jobs:
           set -euo pipefail
           names=$(git diff --name-only "${BASE_SHA}" HEAD -- skills/ \
             | cut -d/ -f2 \
-            | grep -E '^[a-z0-9][a-z0-9-]*$' \
             | sort -u \
             | while read -r name; do
+                # Kebab-case only, and never a leading dash: these names are about to
+                # be a shell's argv. Written as a case rather than a grep because grep
+                # exits 1 when a change touches no skill at all, which under
+                # pipefail would fail the step for the commonest kind of pull request.
+                case "${name}" in
+                  "" | -* | *[!a-z0-9-]*) continue ;;
+                esac
                 if [ -f "skills/${name}/SKILL.md" ]; then echo "${name}"; fi
               done \
             | tr '\n' ' ')
