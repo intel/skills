@@ -223,12 +223,28 @@ one exception, below.
 
 One blocking check reads your text and is the only one that needs something installed: CI
 scans every skill with [NVIDIA SkillSpector](https://github.com/NVIDIA/SkillSpector) and
-fails a skill whose risk score is above 50. Run it on yours before you push:
+fails a skill whose risk score is too high for where the skill came from. Run it on yours
+before you push:
 
 ```bash
 pip install "skillspector @ git+https://github.com/NVIDIA/skillspector.git@<commit>"
 python3 tools/scan_skills.py your-skill-name
 ```
+
+Two thresholds, and the difference is what you can do about a finding. A skill written
+here has to score **20 or below** — SkillSpector's LOW band, where every skill written
+here already sits — because you can fix the text in the same pull request that reports the
+problem. An imported skill has to score **50 or below**, the boundary above which the
+scanner itself says DO_NOT_INSTALL, and its findings under that are printed rather than
+failed: you cannot edit an imported body, `sync_external.py --check` requires it to stay
+byte-for-byte the pinned commit, so the repair has to land upstream and arrive here
+through a moved pin. The same reason the mentions check and the link check warn instead of
+failing in an import.
+
+When you *do* move a pin, CI re-reads that import at the stricter threshold and prints the
+result on the run — new upstream text is the moment to read its findings again. Locally
+that is `python3 tools/scan_skills.py --strict-imports <the-skill>`. Still not blocking,
+for the same reason.
 
 The commit to pin is in [`.github/workflows/skillspector.yml`](.github/workflows/skillspector.yml);
 pin the same one, because the scanner's rule set moves between versions. Static analysis
@@ -291,12 +307,13 @@ Blocking, keyless, and runnable on a fork:
 - no file the skill ships carries content this repository will not publish — a piped
   install script, a destructive delete, an instruction aimed at the agent's operator, a
   route for a secret out, or a way to switch a protection off
-- every skill scores at or below 50 on a static [SkillSpector](https://github.com/NVIDIA/SkillSpector)
-  scan, after the reviewed suppressions in
-  [`.skillspector-baseline.yaml`](.skillspector-baseline.yaml). The check above is this
-  repository's own five content shapes; this one is 71 patterns someone else maintains,
-  plus an AST pass over the scripts a skill ships and an OSV.dev lookup for the
-  dependencies it names
+- every skill clears a static [SkillSpector](https://github.com/NVIDIA/SkillSpector) scan
+  after the reviewed suppressions in
+  [`.skillspector-baseline.yaml`](.skillspector-baseline.yaml) — at or below 20 for a
+  skill written here, at or below 50 for an imported one, whose repair has to land
+  upstream. The check above is this repository's own five content shapes; this one is 71
+  patterns someone else maintains, plus an AST pass over the scripts a skill ships and an
+  OSV.dev lookup for the dependencies it names
 - `skills.yaml` has an entry with a maintainer, and the catalog and the tree agree
 - the workflows themselves lint clean (`actionlint`, `zizmor`)
 - for a new skill: its Harbor task is solvable, oracle reward 1.0

@@ -17,6 +17,12 @@
 #               there is nothing wrong with it.
 #   TRACKED     the finding is real and is not fixed in this pull request. Each one
 #               names what would fix it. These are the entries to delete, not to grow.
+#               For an imported skill the fix is upstream's to make, so the entry says
+#               which upstream change would remove it — an edit here would break
+#               sync_external.py --check, which requires the copy to stay byte-for-byte
+#               the pinned commit. A finding worth a reviewer's eyes at every pin bump
+#               is better left unsuppressed: tools/scan_skills.py reports it and the
+#               import threshold (50) still lets the pull request through.
 #
 # Every rule carries a reason: the file is the audit trail, so a suppression nobody
 # can justify has nowhere to hide.
@@ -44,6 +50,22 @@ rules:
   - id: "PE5"
     message: "*--network host*"
     reason: "POLICY: host networking is how the documented container reaches its own inference port"
+
+  # RP1 — "MCP server referenced without pinned version". Three things are wrong with
+  # it here. Its subject is an MCP server rug-pull and no skill in this catalog declares
+  # an MCP server: what it matched is `docker run`, `docker pull` and `pip install`
+  # lines. Its pin check reads only the matched text and the rest of that one line
+  # (nodes/analyzers/mcp_rug_pull.py), so a `docker run --rm \` whose image tag is on
+  # the next line reads as unpinned, and 34 of the 36 matches were of that kind — plus
+  # a prose table cell, a Python comment and a frontmatter `description:` line. And the
+  # advice it gives is the wrong advice for these images: the current tag of
+  # intel/vllm, intel/sglang-dev and intel/oneapi is the track Intel supports, so a
+  # skill that pinned one in prose would send its reader to an image without the fix
+  # they came for. Where a version does change the answer the skills already say to pin
+  # one — vllm-xpu-run names `intel/vllm:<version>-xpu` — and a measurement that has to
+  # be reproducible records the resolved image in perf/, not in the body.
+  - id: "RP1"
+    reason: "POLICY: MCP rug-pull rule matched docker/pip lines in skills that declare no MCP server; its pin check is single-line, and the current tag is the supported track for these images"
 
   # PE2/TM2 — sudo. Driver install, perf_event_paranoid, and cgroup limits cannot be
   # done without it. The skills do not run it silently: SKILL.md carries a sudo

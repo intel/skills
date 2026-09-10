@@ -62,6 +62,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          # Full history, because the last step diffs against the base commit to find
+          # the imports whose pin this pull request moved. Cheap on a repository of
+          # text files.
+          fetch-depth: 0
 
       # Pin the interpreter rather than take whatever the runner image ships, so a
       # change in the image cannot quietly change what the gate ran on. SkillSpector
@@ -77,9 +81,38 @@ jobs:
             "skillspector @ git+https://github.com/NVIDIA/skillspector.git@${SKILLSPECTOR_COMMIT}"
 
       # The wrapper runs the 33 scans concurrently, applies .skillspector-baseline.yaml,
-      # writes the table to the step summary, and fails on any skill scoring above 50 —
-      # SkillSpector's own DO_NOT_INSTALL boundary. The JSON is kept in the workspace
-      # for a maintainer re-running the job with a debug session; it is not uploaded,
-      # because the table is what a reviewer actually reads.
+      # writes the table to the step summary, and fails a skill above the threshold its
+      # origin is held to: 20 — SkillSpector's LOW band — for a skill written here,
+      # which can be fixed in the pull request that reported the problem, and 50 — the
+      # scanner's own DO_NOT_INSTALL boundary — for an imported body, which cannot,
+      # because sync_external.py --check requires it to stay byte-for-byte the pinned
+      # upstream commit. Same split, and the same reason for it, as the mentions check
+      # and the link check in validate.yml. The JSON is kept in the workspace for a
+      # maintainer re-running the job with a debug session; it is not uploaded, because
+      # the table is what a reviewer actually reads.
       - name: Scan every skill
         run: python3 tools/scan_skills.py --json "${RUNNER_TEMP}/skillspector.json"
+
+      # A pull request that moves an import's pin brings new upstream text with it, and
+      # that is the moment to read that skill's findings again rather than to carry over
+      # the answer from the commit before. This step holds the imports whose pin moved
+      # to the stricter threshold, so the reviewer of the bump sees what a skill written
+      # here would have had to fix. Reported, not blocking: the repair for an import
+      # lands upstream, so failing the bump would block the pull request on work that
+      # cannot be done in it — the same argument that makes the link check a warning in
+      # an imported body.
+      - name: Re-read the imports whose pin moved
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          moved=$(git diff --name-only "${BASE_SHA}" HEAD -- 'skills/*/.source.json' \
+            | cut -d/ -f2 | sort -u)
+          if [ -z "${moved}" ]; then
+            echo "No import pin moved in this pull request."
+            exit 0
+          fi
+          # shellcheck disable=SC2086  # word splitting is how the names become argv
+          python3 tools/scan_skills.py --strict-imports --report-only \
+            --summary-title "Imports whose pin moved, read strictly" ${moved}
