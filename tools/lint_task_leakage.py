@@ -60,6 +60,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TASKS_DIR = REPO_ROOT / "evaluation" / "harbor" / "tasks"
 SKILLS_DIR = REPO_ROOT / "skills"
+# --self-test reads the gate's budget out of the workflow rather than carrying a second
+# copy of the number, so the two cannot drift apart.
+WORKFLOW = REPO_ROOT / ".github" / "workflows" / "validate.yml"
+GATE_BUDGET = re.compile(r"--fail-on-leak\s+(\d+)")
 
 # A task must be able to name the library it is about, so a bare module or a common
 # alias is premise rather than answer. Anything dotted onto them is the answer.
@@ -218,6 +222,121 @@ def audit(task_dir: Path, allow: set[str]) -> dict | None:
     }
 
 
+def _score(taught: set[str], taught_lines: set[str], instruction: str) -> int:
+    """audit()'s score, for an instruction held in memory rather than read from disk."""
+    return len(taught & symbols(instruction)) + 3 * len(taught_lines & code_lines(instruction))
+
+
+def self_test() -> int:
+    """Assert the detector still detects, against the skills and tasks in this tree.
+
+    Every way this check can break is silent. A regex that stops matching, a PREMISE
+    entry that swallows a real symbol, an alias map that resolves the wrong way: each of
+    them prints a clean zero for every task and a green gate, which reads exactly like a
+    repository whose tasks are all sound. A leakage budget is worth what the detector
+    behind it is worth, so the properties it rests on are asserted rather than assumed —
+    the same reason validate.yml asserts that `verify` refuses an installed skill that
+    was altered.
+
+    Real content, because a fixture proves the fixture: the assertions below run against
+    `skills/` and `evaluation/harbor/tasks/` as committed. Nothing is written — the two
+    injections are made to a copy of the instruction text in memory.
+    """
+    failures: list[str] = []
+
+    def check(name: str, ok: bool, detail: str) -> None:
+        print(f"{'ok  ' if ok else 'FAIL'} {name} - {detail}")
+        if not ok:
+            failures.append(name)
+
+    python_skill, cxx_skill = skill_text("dpnp-quickstart"), skill_text("onetbb-quickstart")
+    if python_skill is None or cxx_skill is None:
+        sys.exit("FAIL --self-test needs skills/dpnp-quickstart and skills/onetbb-quickstart")
+
+    taught = symbols(python_skill)
+    check("a Python skill teaches a dotted symbol", "dpnp.std" in taught,
+          f"dpnp-quickstart teaches {len(taught)} symbols")
+
+    qualified = {symbol for symbol in symbols(cxx_skill) if "::" in symbol}
+    check("a C++ skill teaches a :: symbol", "tbb::parallel_for" in qualified,
+          f"onetbb-quickstart teaches {len(qualified)} of them")
+
+    check("a keyword argument is taught, not only a call", "device=" in taught,
+          "dpnp-quickstart teaches `device=`, which is what dpnp-device-fallback gives away")
+
+    check("an alias bound twice keeps both meanings", aliases(python_skill).get("np") == {"dpnp", "numpy"},
+          "dpnp-quickstart writes `import dpnp as np` and `import numpy as np` in one document")
+
+    reports = [
+        report
+        for report in (audit(path, set()) for path in sorted(TASKS_DIR.iterdir()) if path.is_dir())
+        if report is not None and "error" not in report
+    ]
+    scored = [report for report in reports if report["score"] > 0]
+    worst_score = max(report["score"] for report in reports)
+
+    # The budget is only a ratchet if it tracks the tree. Read it out of the workflow and
+    # require it to be the worst task's score exactly: too high and the gate has slack
+    # nobody voted for, too low and CI is red on content that was already merged. Cleaning
+    # up the worst task therefore turns this red, which is the check asking for the number
+    # to come down with it.
+    budgets = (
+        {int(found) for found in GATE_BUDGET.findall(WORKFLOW.read_text(encoding="utf-8"))}
+        if WORKFLOW.is_file()
+        else set()
+    )
+    check("the CI budget is the worst task in the tree", budgets == {worst_score},
+          f"validate.yml runs --fail-on-leak {sorted(budgets) or 'nothing'}, worst of "
+          f"{len(scored)} leaking tasks scores {worst_score}"
+          + ("" if budgets == {worst_score} else " - move the budget in validate.yml to match"))
+
+    given_away = {symbol for report in reports for symbol in report["leaked_symbols"]}
+    unqualified = sorted(s for s in given_away if not SEPARATOR.search(s) and not s.endswith("="))
+    check("no bare module is reported as an answer", not unqualified,
+          ", ".join(unqualified) or f"all {len(given_away)} are qualified calls or keyword arguments")
+
+    # The bite, on the task that is already worst: the budget is only a budget if one
+    # more given-away symbol crosses it.
+    worst = max(reports, key=lambda report: report["score"])
+    instruction = (TASKS_DIR / worst["task"] / "instruction.md").read_text(encoding="utf-8")
+    skill = skill_text(worst["skill"]) or ""
+    taught, taught_lines = symbols(skill), code_lines(skill)
+    base = _score(taught, taught_lines, instruction)
+    check(f"{worst['task']} scores the same in memory", base == worst["score"],
+          f"on disk {worst['score']}, in memory {base}")
+
+    untold = sorted(taught - symbols(instruction))
+    unshared = sorted(taught_lines - code_lines(instruction))
+    if not untold or not unshared:
+        sys.exit(f"FAIL --self-test needs a symbol and a line {worst['task']} does not already give away")
+
+    # A library call rather than whatever sorts first: the regex also matches a filename
+    # like `SKILL.md`, and injecting one of those would assert the arithmetic while
+    # proving nothing about the thing being detected.
+    call = next((s for s in untold if SEPARATOR.split(s)[0] in PREMISE), untold[0])
+    with_symbol = _score(taught, taught_lines, f"{instruction}\n\nUse `{call}` for this.\n")
+    check("one more given-away symbol costs one point", with_symbol == base + 1,
+          f"`{call}` added to {worst['task']}: {base} -> {with_symbol}, so a budget of {base} fails")
+
+    pasted = f"{instruction}\n\n```python\n{unshared[0]}\n```\n"
+    shared_before, shared_after = (
+        len(taught_lines & code_lines(instruction)),
+        len(taught_lines & code_lines(pasted)),
+    )
+    with_line = _score(taught, taught_lines, pasted)
+    check("a copyable line is caught and costs at least three",
+          shared_after == shared_before + 1 and with_line >= base + 3,
+          f"one line of the skill pasted into {worst['task']}: score {base} -> {with_line}, "
+          f"shared lines {shared_before} -> {shared_after}")
+
+    if failures:
+        print(f"\nFAIL {len(failures)} self-test(s): " + ", ".join(failures), file=sys.stderr)
+        return 1
+    print("\nOK the detector detects. A regex that stopped matching would fail here rather")
+    print("than report a clean zero for every task and leave the budget passing anything.")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--task", action="append", default=[], help="limit to these task names")
@@ -234,14 +353,25 @@ def main() -> int:
         type=int,
         default=None,
         metavar="N",
-        help="exit nonzero for any task scoring above N. Omit to report only, which is "
-        "the default because the fifteen tasks in this repository all leak today.",
+        help="exit nonzero for any task scoring above N. Omit to report only. CI runs "
+        "with 5, the score of the worst task here today, so the gate is a ratchet: it "
+        "stops a task arriving worse than the worst one already in the tree.",
     )
     parser.add_argument("--json", action="store_true", help="machine-readable output")
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help="assert the detector still detects, against the skills and tasks in this "
+        "tree. Writes nothing. Run it before the gate: a broken detector reports a clean "
+        "zero for every task, which is indistinguishable from a clean repository.",
+    )
     args = parser.parse_args()
 
     if not TASKS_DIR.is_dir():
         sys.exit(f"FAIL no {TASKS_DIR.relative_to(REPO_ROOT).as_posix()}")
+
+    if args.self_test:
+        return self_test()
 
     wanted = set(args.task)
     reports = []

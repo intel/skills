@@ -212,11 +212,13 @@ install:
 python3 tools/validate_skills.py                 # every offline check CI blocks on
 python3 tools/validate_skills.py --check-links   # also checks external URLs; needs network
 python3 tools/run_evals.py --validate            # only if you wrote evals/evals.json
+python3 tools/lint_task_leakage.py --fail-on-leak 5   # only if you wrote a Harbor task
 python3 tools/sync_external.py --check           # only if you imported a skill
 ```
 
-The first and third need no network. If they pass, the blocking checks left are about the
-repository rather than your text: the workflow linters and the installer round trip.
+Everything but the second and the last needs no network. If they pass, the blocking checks
+left are about the repository rather than your text: the workflow linters and the installer
+round trip.
 
 ## 5. If you are writing a new skill, add a Harbor task
 
@@ -245,6 +247,13 @@ task whose `instruction.md` contains the answer is passed with or without the sk
 measures nothing, at the same price as one that measures something. Keyless and offline,
 like the rest of the local gate.
 
+CI fails a task scoring above 5, which is what the worst task already here scores — so the
+budget stops a new task being worse than the worst one, and is not a number to aim at. Aim
+at zero: name the library, state the result you want, and leave the call to the agent. If
+you improve an existing instruction and the worst score in the tree drops, CI asks you to
+lower the budget in `.github/workflows/validate.yml` in the same pull request; the number is
+meant to ratchet down.
+
 If your skill cannot be exercised without an Intel GPU, say so in the pull request and a
 maintainer will decide — a task only that team's hardware can run is not a gate, it is a
 favour someone does.
@@ -271,6 +280,9 @@ Blocking, keyless, and runnable on a fork:
 - `skills.yaml` has an entry with a maintainer, and the catalog and the tree agree
 - the workflows themselves lint clean (`actionlint`, `zizmor`)
 - for a new skill: its Harbor task is solvable, oracle reward 1.0
+- no Harbor task's instruction gives away more than 5 points of its own skill's answer —
+  a point per API symbol the skill teaches, three per line of code copyable straight out
+  of the prompt
 - for an imported skill: `skills.yaml`, `.source.json` and `NOTICE` agree, and the copy is
   still byte-for-byte the pinned upstream commit
 - `npx … install` writes every skill in the catalog, and `verify` accepts each one and

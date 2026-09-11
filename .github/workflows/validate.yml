@@ -46,6 +46,32 @@ jobs:
       - name: Eval schema
         run: python3 tools/run_evals.py --validate
 
+      # First, because a gate is worth what the detector behind it is worth and every way
+      # this one can break is silent: a regex that stops matching reports a clean zero for
+      # every task, which reads exactly like a repository whose tasks are all sound. So it
+      # asserts itself against the skills and tasks in this tree — that a dotted call, a
+      # `::` call and a keyword argument are all still seen, that an alias bound twice
+      # keeps both meanings, that one more given-away symbol costs one point and a pasted
+      # line costs three, and that the budget below is still the worst task's score. Same
+      # reason the install job asserts that `verify` refuses a skill that was altered.
+      - name: Task leakage detector still detects
+        run: python3 tools/lint_task_leakage.py --self-test
+
+      # Static, stdlib, no container and no credential, so it belongs with the level 1
+      # gate rather than with the harbor jobs it reasons about. It fails a task whose
+      # instruction hands over the API symbols its own skill teaches: both arms of the
+      # differential then read the answer out of the prompt, so the task cannot
+      # discriminate — at the same price as one that can.
+      #
+      # 5 is the score of the worst task in the tree today. The budget is a ratchet
+      # rather than a target: it blocks a task worse than the worst one already here,
+      # grandfathers the twelve that leak, and comes down as those are rewritten — the
+      # self-test above fails if it does not. Because the score is an intersection, a
+      # pull request that only adds to a skill can turn one of them red; that is the
+      # check working, since a task stops discriminating when the skill grows into it.
+      - name: Task leakage
+        run: python3 tools/lint_task_leakage.py --fail-on-leak 5
+
       # Its own step because it is the one check that depends on someone else's
       # server. A 404 or 410 fails it — that is a pointer an agent would follow
       # into nothing — unless the link came from an imported body, where it warns
