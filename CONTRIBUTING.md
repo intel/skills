@@ -221,11 +221,11 @@ one exception, below.
 
 ### The security scan
 
-One blocking check reads your text, and it is the only one that needs something installed:
 CI scans every skill with [NVIDIA SkillSpector](https://github.com/NVIDIA/SkillSpector) and
-fails a skill scoring too high for where the skill came from. Static analysis only, so it
-needs no API key and a fork gets the same answer as a branch. Run it on yours before you
-push, pinning the commit CI pins — the rule set moves between versions:
+fails a skill scoring too high for where it came from. It is the one blocking check that
+needs something installed; static analysis only, so no API key, and a fork gets the same
+answer as a branch. Run it before you push, on the commit CI pins — the rule set moves
+between versions:
 
 ```bash
 commit=$(sed -n 's/.*SKILLSPECTOR_COMMIT: \([0-9a-f]\{40\}\).*/\1/p' \
@@ -234,23 +234,26 @@ pip install "skillspector @ git+https://github.com/NVIDIA/skillspector.git@${com
 python3 tools/scan_skills.py your-skill-name
 ```
 
-A skill written here has to score **20 or below** — SkillSpector's LOW band, where all of
-them already sit — because you can fix the text in the pull request that reports the
-problem. An imported skill has to score **50 or below**, the scanner's own DO_NOT_INSTALL
-boundary, and its findings under that are printed rather than failed: `sync_external.py
---check` requires the copy to stay byte-for-byte the pinned commit, so the repair lands
-upstream and arrives here through a moved pin. Same reason the mentions check and the link
-check warn instead of failing in an import. When you move a pin, read that import strictly
-— `python3 tools/scan_skills.py --strict-imports <the-skill>`, which is what CI does on the
+Two thresholds, because the two kinds of skill can do different things about a finding:
+
+- **a skill written here: 20 or below** — SkillSpector's LOW band, where all of them
+  already sit. You can fix the text in the pull request that reports the problem.
+- **an imported skill: 50 or below** — the scanner's own DO_NOT_INSTALL boundary. Findings
+  under it are printed rather than failed, because `sync_external.py --check` requires the
+  copy to stay byte-for-byte the pinned commit: the repair lands upstream and arrives here
+  through a moved pin. Same reason the mentions check and the link check warn instead of
+  failing in an import.
+
+When you move a pin, read that import strictly —
+`python3 tools/scan_skills.py --strict-imports <the-skill>`, which is what CI does on the
 run, still reporting rather than blocking.
 
-Where the answer shows up: the run summary carries the table and, in full, every finding in
-a skill your change touched; each is annotated on its own file and line so it renders in
-**Files changed**; and on a branch in this repository the active ones also become code
-scanning alerts. A fork's token cannot write those, and the run says so. A finding the
-baseline accepts is not uploaded at all — code scanning ignores the suppression a SARIF file
-carries, so it would arrive as an open alert. Its reason stays in the baseline file, which
-is where the audit trail belongs.
+Where the answer shows up: the run summary (the table, plus every finding in a skill your
+change touched, in full), an annotation on each finding's own file and line in **Files
+changed**, and — on a branch in this repository, not a fork, whose token cannot write them —
+code scanning alerts. A finding the baseline accepts is not uploaded: code scanning ignores
+SARIF suppressions, so it would arrive as an open alert, and its reason belongs in the
+baseline file anyway.
 
 A finding is a question, not a verdict — the scanner does not know that `--device /dev/dri`
 is how a container sees a GPU. Read it, then either change the skill or add a rule to
@@ -258,7 +261,9 @@ is how a container sees a GPU. Read it, then either change the skill or add a ru
 here, with a `skills:` list naming the skills it covers so it cannot silently accept the
 same pattern in a skill nobody has written yet. Rules, never generated fingerprints: a
 fingerprint is bound to the bytes it was made from, so it would reactivate on your next
-edit. The reason is the whole value of the entry.
+edit. The other side of that is on you — a rule is not pinned to a version of the skill, so
+when you change a skill, re-read the entries scoped to it and delete the ones its new text
+no longer earns. The reason is the whole value of the entry.
 
 ## 5. If you are writing a new skill, add a Harbor task
 
