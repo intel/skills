@@ -33,7 +33,9 @@ with: the moment upstream's text changes here is the moment to read its findings
 A scan that could not complete fails whichever kind it was. Findings this catalog has
 reviewed and accepted are suppressed by .skillspector-baseline.yaml, which carries a
 reason per rule; anything not in that file is either new or untriaged, and both are worth
-a human's attention.
+a human's attention. A rule there may name the skills it applies to, which SkillSpector's
+own format cannot express — this script is what enforces that, and baselines() is where
+the reason it has to lives.
 
 Three ways the result is read, because a log nobody opens is not a report. The table and
 the tally go to the step summary always. --annotate puts each finding on its file and
@@ -45,10 +47,18 @@ out of that file rather than uploaded as a dismissed alert, because code scannin
 SARIF suppressions — see merge_sarif.
 
 Unlike the rest of tools/, this needs SkillSpector installed — it is not stdlib-only and
-not part of the offline local gate:
+not part of the offline local gate. It reads YAML through pyyaml, which is the scanner's
+own dependency rather than a new one:
 
-    pip install "skillspector @ git+https://github.com/NVIDIA/skillspector.git@<commit>"
+    commit=$(sed -n 's/.*SKILLSPECTOR_COMMIT: \\([0-9a-f]\\{40\\}\\).*/\\1/p' \\
+      .github/workflows/skillspector.yml)
+    pip install "skillspector @ git+https://github.com/NVIDIA/skillspector.git@${commit}"
     python3 tools/scan_skills.py
+
+Run the scan through this script rather than the CLI directly. The baseline's `skills:`
+scoping is enforced here, and SkillSpector ignores fields it does not know, so pointing
+the CLI at the shared file applies every rule to whatever is scanned — suppressing more
+than CI does, which is the wrong direction for a check to be wrong in.
 
 The commit CI pins lives in .github/workflows/skillspector.yml. Pin the same one
 locally: the baseline suppresses findings by rule id, so a different scanner version can
@@ -61,6 +71,7 @@ from __future__ import annotations
 import argparse
 import collections
 import concurrent.futures
+import fnmatch
 import json
 import os
 import shutil
@@ -70,6 +81,8 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import yaml  # from the scanner's own dependencies (pyyaml), see the module docstring
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO_ROOT / "skills"
 DEFAULT_BASELINE = REPO_ROOT / ".skillspector-baseline.yaml"
@@ -77,6 +90,11 @@ DEFAULT_BASELINE = REPO_ROOT / ".skillspector-baseline.yaml"
 # Written beside SKILL.md by tools/sync_external.py, and the same marker the mentions
 # check and the link check use to decide that a body belongs to another team.
 IMPORT_MARKER = ".source.json"
+
+# The one field in the baseline that SkillSpector does not define. A rule carrying it is
+# applied only to the skills it names, and this script is what enforces that — see
+# baselines() for why the scoping has to live here rather than in the scanner.
+SCOPE_FIELD = "skills"
 
 # Both thresholds are SkillSpector's own band edges rather than numbers picked here:
 # 0-20 LOW/SAFE, 21-50 MEDIUM/CAUTION, 51-80 HIGH, 81+ CRITICAL, and HIGH upwards is
@@ -114,8 +132,17 @@ class Result:
     name: str
     imported: bool = False
     score: int = 0
+    # Two different questions, and the table shows both. `severity` is the band the score
+    # falls in, so it says how close this skill is to its threshold. `worst` is
+    # max_issue_severity, which the scanner computes over the findings that survived the
+    # baseline, so it says how bad the worst thing still on the table is. They disagree,
+    # and the disagreement is the point: xpu-profile-unitrace scores 20 (LOW band) while
+    # carrying an unsuppressed HIGH. Printing only the band reads as reassurance the scan
+    # did not give. `recommendation` is deliberately not read — it is CAUTION for all 33
+    # skills, including ones with a score of 0 and nothing active, because the reference
+    # resolver counts prose filenames as unresolved and fails it closed from SAFE.
     severity: str = ""
-    recommendation: str = ""
+    worst: str = ""
     active: list[dict] = field(default_factory=list)
     suppressed: int = 0
     scanner_version: str = ""
@@ -129,6 +156,66 @@ class Result:
     @property
     def origin(self) -> str:
         return "imported" if self.imported else "authored"
+
+
+def in_scope(rule: dict, skill: str) -> bool:
+    """Does this rule apply to this skill? A rule naming no skills applies to all."""
+    scope = rule.get(SCOPE_FIELD)
+    if scope is None:
+        return True
+    return any(fnmatch.fnmatch(skill, pattern) for pattern in scope)
+
+
+def baselines(path: Path, targets: list[Path], work: Path) -> dict[str, Path]:
+    """One baseline file per skill, holding only the rules that name it.
+
+    SkillSpector's rule schema is `id`, `path`, `message` and `reason` (suppression.py),
+    and `path` is matched against a finding's file *relative to the skill* — `SKILL.md`,
+    `scripts/foo.py`. There is no field for the skill, so every rule in one shared file
+    reaches all 33 of them: an entry accepting `exec()` in xpu-port's verifier would also
+    accept it in a skill nobody has written yet. Measured on this tree, that is not
+    hypothetical — a new skill shipping one `subprocess` call scores 0 with nothing active
+    under a blanket AST4 entry, and 9 with the finding active once the entry names the two
+    skills it was written for.
+
+    So the scoping is done here, with a `skills:` list the scanner does not define, and
+    each skill is scanned against a file holding only its own rules. Two alternatives were
+    tried and neither works: the scanner refuses a shared baseline for a recursive
+    multi-skill scan ("scan each sub-skill with its own baseline"), and a per-skill file
+    inside skills/<name>/ fails sync_external.py --check on any imported skill, which is
+    where nearly every finding is — "not part of the pinned upstream skill".
+
+    One caveat this cannot fix: SkillSpector ignores fields it does not know, so running
+    the CLI directly against the shared file applies every rule to whatever is scanned,
+    which suppresses *more* than CI does. That is why CONTRIBUTING.md documents this
+    script as the way to run the scan, and why the baseline says so at the top.
+    """
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    rules = data.get("rules") or []
+
+    # A scope naming a skill that does not exist silences nothing and will keep silencing
+    # nothing after the typo is forgotten, so it fails here rather than reading as cover.
+    known = {p.name for p in SKILLS_DIR.iterdir() if (p / "SKILL.md").is_file()}
+    for position, rule in enumerate(rules, start=1):
+        for pattern in rule.get(SCOPE_FIELD) or []:
+            if not any(fnmatch.fnmatch(name, pattern) for name in sorted(known)):
+                sys.exit(
+                    f"FAIL {path.name}: rule {position} ({rule.get('id', '?')}) is scoped "
+                    f"to {pattern!r}, which matches no skill under {SKILLS_DIR}"
+                )
+
+    out: dict[str, Path] = {}
+    for target in targets:
+        scoped = {key: value for key, value in data.items() if key != "rules"}
+        scoped["rules"] = [
+            {key: value for key, value in rule.items() if key != SCOPE_FIELD}
+            for rule in rules
+            if in_scope(rule, target.name)
+        ]
+        written = work / f"{target.name}.baseline.yaml"
+        written.write_text(yaml.safe_dump(scoped, sort_keys=False), encoding="utf-8")
+        out[target.name] = written
+    return out
 
 
 def skill_dirs(names: list[str]) -> list[Path]:
@@ -196,7 +283,7 @@ def scan(
         imported=imported,
         score=risk.get("score", 0),
         severity=risk.get("severity", ""),
-        recommendation=risk.get("recommendation", ""),
+        worst=risk.get("max_issue_severity", ""),
         active=report.get("issues", []),
         suppressed=report.get("suppressed_count", 0),
         scanner_version=metadata.get("skillspector_version", ""),
@@ -216,14 +303,21 @@ def scan(
         sarif_cmd = [
             arg if arg != "json" else "sarif" for arg in cmd
         ] + ["--output", str(sarif_dir / f"{path.name}.sarif")]
-        subprocess.run(
-            sarif_cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env=env,
-            check=False,
-        )
+        try:
+            subprocess.run(
+                sarif_cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                env=env,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            # Caught for the reason stated above: without this the exception leaves
+            # scan(), passes through the thread pool, and takes all 33 results with it —
+            # a slow second pass would lose the answer the first pass already had. The
+            # missing file is reported by the merge instead.
+            pass
     return result
 
 
@@ -247,15 +341,22 @@ def render(results: list[Result], max_score: int, max_score_imported: int) -> st
         f"{len(results)} skill(s), scan mode: {mode}, {bar}"
     )
     lines.append("")
-    lines.append("| skill | origin | score | severity | active | suppressed | limit |")
-    lines.append("| --- | --- | --- | --- | --- | --- | --- |")
+    # `worst active` is the severity of the worst finding the baseline did not accept, and
+    # it is in the table because the score's band cannot answer that question: a skill can
+    # sit in the LOW band and still carry an unsuppressed HIGH, and reading LOW as safety
+    # is exactly the mistake a gate should not invite.
+    lines.append(
+        "| skill | origin | score | band | worst active | active | suppressed | limit |"
+    )
+    lines.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
     for r in sorted(results, key=lambda r: (-r.score, r.name)):
         if not r.ok:
-            lines.append(f"| {r.name} | {r.origin} | — | ERROR | {r.error} | | |")
+            lines.append(f"| {r.name} | {r.origin} | — | ERROR | — | {r.error} | | |")
             continue
         lines.append(
-            f"| {r.name} | {r.origin} | {r.score} | {r.severity} | {len(r.active)} | "
-            f"{r.suppressed} | {limit_for(r, max_score, max_score_imported)} |"
+            f"| {r.name} | {r.origin} | {r.score} | {r.severity} | {r.worst or '—'} | "
+            f"{len(r.active)} | {r.suppressed} | "
+            f"{limit_for(r, max_score, max_score_imported)} |"
         )
 
     tally: collections.Counter = collections.Counter()
@@ -285,7 +386,7 @@ def render(results: list[Result], max_score: int, max_score_imported: int) -> st
     return "\n".join(lines)
 
 
-def merge_sarif(sarif_dir: Path, out: Path) -> int:
+def merge_sarif(sarif_dir: Path, out: Path) -> tuple[int, set[str]]:
     """One SARIF file for the catalog, with paths GitHub can find.
 
     Three fixes are needed on the per-skill files. SkillSpector reports a path relative
@@ -304,16 +405,25 @@ def merge_sarif(sarif_dir: Path, out: Path) -> int:
     tree that is 197 alerts nobody is going to act on burying the 17 that want reading,
     which is how a security tab stops being read at all. The reasons stay in the baseline
     file, and the counts stay in the table — `suppressed` is a column in it.
+
+    Returns the number of findings written and the skills they were read from. The caller
+    checks that second value against the skills that were scanned, because the count of
+    findings cannot: dropping the suppressed ones means a skill whose findings were all
+    accepted contributes nothing either way, so a missing or truncated per-skill file
+    looks exactly like a clean skill. Silently uploading fewer alerts than the table
+    reports is the one failure this stage must not have.
     """
     driver: dict = {}
     rules: dict[str, dict] = {}
     results: list[dict] = []
+    parsed: set[str] = set()
     for path in sorted(sarif_dir.glob("*.sarif")):
         skill = path.stem
         try:
             run = json.loads(path.read_text(encoding="utf-8"))["runs"][0]
         except (json.JSONDecodeError, KeyError, IndexError, OSError):
             continue
+        parsed.add(skill)
         driver = driver or run.get("tool", {}).get("driver", {})
         for rule in run.get("tool", {}).get("driver", {}).get("rules", []):
             rules.setdefault(rule.get("id", ""), rule)
@@ -345,7 +455,7 @@ def merge_sarif(sarif_dir: Path, out: Path) -> int:
         + "\n",
         encoding="utf-8",
     )
-    return len(results)
+    return len(results), parsed
 
 
 def detail(results: list[Result], names: set[str]) -> str:
@@ -535,17 +645,31 @@ def main() -> int:
     )
 
     targets = skill_dirs(args.skills)
+    incomplete: list[str] = []
     with tempfile.TemporaryDirectory() as tmp:
-        sarif_dir = Path(tmp) if args.sarif else None
+        work = Path(tmp)
+        sarif_dir = work / "sarif" if args.sarif else None
+        if sarif_dir is not None:
+            sarif_dir.mkdir()
+        # Each skill is scanned against a baseline holding only the rules that name it.
+        scoped = baselines(baseline, targets, work) if baseline is not None else {}
         with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
             results = list(
-                pool.map(lambda p: scan(p, baseline, args.timeout, sarif_dir), targets)
+                pool.map(
+                    lambda p: scan(
+                        p, scoped.get(p.name, baseline), args.timeout, sarif_dir
+                    ),
+                    targets,
+                )
             )
         if sarif_dir is not None:
-            count = merge_sarif(sarif_dir, Path(args.sarif))
+            count, parsed = merge_sarif(sarif_dir, Path(args.sarif))
+            expected = {p.name for p, r in zip(targets, results) if r.ok}
+            incomplete = sorted(expected - parsed)
             print(
-                f"Wrote {args.sarif}: {count} active finding(s). Findings the baseline "
-                "accepts are left out — code scanning ignores SARIF suppressions."
+                f"Wrote {args.sarif}: {count} active finding(s) from {len(parsed)} of "
+                f"{len(expected)} scanned skill(s). Findings the baseline accepts are "
+                "left out — code scanning ignores SARIF suppressions."
             )
 
     table = render(results, args.max_score, imported_limit)
@@ -566,7 +690,7 @@ def main() -> int:
                         "limit": limit_for(r, args.max_score, imported_limit),
                         "score": r.score,
                         "severity": r.severity,
-                        "recommendation": r.recommendation,
+                        "max_issue_severity": r.worst,
                         "active": r.active,
                         "suppressed_count": r.suppressed,
                         "scanner_version": r.scanner_version,
@@ -598,7 +722,8 @@ def main() -> int:
             limit = limit_for(r, args.max_score, imported_limit)
             where = "an imported skill" if r.imported else "a skill written here"
             reason = r.error or (
-                f"score {r.score} > {limit} for {where} ({r.recommendation})"
+                f"score {r.score} > {limit} for {where}, worst active finding "
+                f"{r.worst or 'unknown'}"
             )
             print(f"FAIL {r.name}: {reason}", file=sys.stderr)
         print(
@@ -615,6 +740,21 @@ def main() -> int:
                 "upstream change that would remove it.",
                 file=sys.stderr,
             )
+
+    # A skill that was scanned but produced no readable SARIF would arrive at code
+    # scanning as a skill with nothing to say, and a green run would then claim a coverage
+    # it does not have. Failing is the only honest answer, and it is separate from the
+    # threshold failures above: the table is right and the alerts are not.
+    if incomplete:
+        print("", file=sys.stderr)
+        print(
+            f"FAIL the merged SARIF is missing {len(incomplete)} scanned skill(s): "
+            f"{', '.join(incomplete)}. Code scanning would show fewer alerts than the "
+            "table reports. Re-run, or drop --sarif to gate on the table alone.",
+            file=sys.stderr,
+        )
+
+    if failed or incomplete:
         # --report-only says what it found and leaves the decision to the reader, so
         # the FAIL lines above are printed either way and only the exit code differs.
         return 0 if args.report_only else 1

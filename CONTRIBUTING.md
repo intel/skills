@@ -221,51 +221,44 @@ one exception, below.
 
 ### The security scan
 
-One blocking check reads your text and is the only one that needs something installed: CI
-scans every skill with [NVIDIA SkillSpector](https://github.com/NVIDIA/SkillSpector) and
-fails a skill whose risk score is too high for where the skill came from. Run it on yours
-before you push:
+One blocking check reads your text, and it is the only one that needs something installed:
+CI scans every skill with [NVIDIA SkillSpector](https://github.com/NVIDIA/SkillSpector) and
+fails a skill scoring too high for where the skill came from. Static analysis only, so it
+needs no API key and a fork gets the same answer as a branch. Run it on yours before you
+push, pinning the commit CI pins — the rule set moves between versions:
 
 ```bash
-pip install "skillspector @ git+https://github.com/NVIDIA/skillspector.git@<commit>"
+commit=$(sed -n 's/.*SKILLSPECTOR_COMMIT: \([0-9a-f]\{40\}\).*/\1/p' \
+  .github/workflows/skillspector.yml)
+pip install "skillspector @ git+https://github.com/NVIDIA/skillspector.git@${commit}"
 python3 tools/scan_skills.py your-skill-name
 ```
 
-Two thresholds, and the difference is what you can do about a finding. A skill written
-here has to score **20 or below** — SkillSpector's LOW band, where every skill written
-here already sits — because you can fix the text in the same pull request that reports the
-problem. An imported skill has to score **50 or below**, the boundary above which the
-scanner itself says DO_NOT_INSTALL, and its findings under that are printed rather than
-failed: you cannot edit an imported body, `sync_external.py --check` requires it to stay
-byte-for-byte the pinned commit, so the repair has to land upstream and arrive here
-through a moved pin. The same reason the mentions check and the link check warn instead of
-failing in an import.
+A skill written here has to score **20 or below** — SkillSpector's LOW band, where all of
+them already sit — because you can fix the text in the pull request that reports the
+problem. An imported skill has to score **50 or below**, the scanner's own DO_NOT_INSTALL
+boundary, and its findings under that are printed rather than failed: `sync_external.py
+--check` requires the copy to stay byte-for-byte the pinned commit, so the repair lands
+upstream and arrives here through a moved pin. Same reason the mentions check and the link
+check warn instead of failing in an import. When you move a pin, read that import strictly
+— `python3 tools/scan_skills.py --strict-imports <the-skill>`, which is what CI does on the
+run, still reporting rather than blocking.
 
-When you *do* move a pin, CI re-reads that import at the stricter threshold and prints the
-result on the run — new upstream text is the moment to read its findings again. Locally
-that is `python3 tools/scan_skills.py --strict-imports <the-skill>`. Still not blocking,
-for the same reason.
-
-The commit to pin is in [`.github/workflows/skillspector.yml`](.github/workflows/skillspector.yml);
-pin the same one, because the scanner's rule set moves between versions. Static analysis
-only, so it needs no API key and gives a fork the same answer as a branch.
-
-Where the answer shows up: the table and the tally are in the run's summary, each finding
-in a skill your change touched is printed there in full, and each one is annotated on its
-own file and line so it appears in **Files changed**. On a branch in this repository the
-active findings also become code scanning alerts, with the Security tab keeping their
-history and the pull request showing the ones its diff introduced; a pull request from a
-fork cannot write those, so the summary and the annotations are what it gets, and the run
-says so. A finding the baseline accepts is not uploaded — code scanning ignores the
-suppression a SARIF file carries, so an accepted finding would arrive as an open alert.
-Its reason lives in the baseline file, which is where the audit trail belongs anyway.
+Where the answer shows up: the run summary carries the table and, in full, every finding in
+a skill your change touched; each is annotated on its own file and line so it renders in
+**Files changed**; and on a branch in this repository the active ones also become code
+scanning alerts. A fork's token cannot write those, and the run says so. A finding the
+baseline accepts is not uploaded at all — code scanning ignores the suppression a SARIF file
+carries, so it would arrive as an open alert. Its reason stays in the baseline file, which
+is where the audit trail belongs.
 
 A finding is a question, not a verdict — the scanner does not know that `--device /dev/dri`
 is how a container sees a GPU. Read it, then either change the skill or add a rule to
 [`.skillspector-baseline.yaml`](.skillspector-baseline.yaml) saying why the pattern is right
-for this catalog. Rules, never generated fingerprints: a fingerprint is bound to the bytes
-it was made from, so it would reactivate on your next edit. Say what it is you are
-accepting — the reason is the whole value of the entry.
+here, with a `skills:` list naming the skills it covers so it cannot silently accept the
+same pattern in a skill nobody has written yet. Rules, never generated fingerprints: a
+fingerprint is bound to the bytes it was made from, so it would reactivate on your next
+edit. The reason is the whole value of the entry.
 
 ## 5. If you are writing a new skill, add a Harbor task
 

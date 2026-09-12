@@ -1,7 +1,22 @@
 # SkillSpector suppression baseline for github.com/intel/skills
 #
-# Read with:  skillspector scan skills/<name> --baseline .skillspector-baseline.yaml
+# Read with:  python3 tools/scan_skills.py <name>
 # See tools/scan_skills.py and .github/workflows/skillspector.yml.
+#
+# Run it through that script, not `skillspector scan --baseline` directly. Most entries
+# here carry a `skills:` list naming the skills they apply to, which is a field this
+# repository added and the scanner does not define: SkillSpector's rule schema is id,
+# path, message and reason, and its `path` matches a finding's file *within* a skill
+# (SKILL.md, scripts/foo.py), so nothing in the format can say which skill an entry is
+# for. tools/scan_skills.py enforces the scope by writing each skill a baseline holding
+# only its own rules. The CLI silently ignores the field, so pointing it at this file
+# applies every rule everywhere and suppresses more than CI will.
+#
+# Scoping matters because an unscoped entry also covers skills nobody has written yet.
+# Measured: a new skill shipping a single subprocess call scores 0 with nothing active
+# against a blanket AST4 entry, and 9 with the finding active once AST4 names the two
+# skills it was written for. An entry with no `skills:` is a deliberate statement that the
+# rule is inapplicable to this catalog as a whole — RP1, PE5 and LP3 are the three.
 #
 # Only drift-tolerant `rules` are used, never generated `fingerprints`. A fingerprint
 # is bound to the exact bytes it was generated from, so every edit to a skill would
@@ -68,32 +83,48 @@ rules:
     reason: "POLICY: MCP rug-pull rule matched docker/pip lines in skills that declare no MCP server; its pin check is single-line, and the current tag is the supported track for these images"
 
   # PE2/TM2 — sudo. Driver install, perf_event_paranoid, and cgroup limits cannot be
-  # done without it. The skills do not run it silently: SKILL.md carries a sudo
-  # protocol that makes the agent present the command and wait for the user, and
-  # tools/validate_skills.py already fails a skill whose text tells the agent to
-  # elevate without asking.
+  # done without it, and the elevation is the subject of these skills rather than a side
+  # effect of them. Nothing enforces that mechanically: validate_skills.py checks five
+  # content shapes and none of them is a sudo protocol, and the protocol itself is
+  # written out in one skill (linux-perf/SKILL.md) while the skill that actually installs
+  # drivers offers `--auto` — "install all without prompts". A new skill that elevated
+  # silently would therefore land accepted; the `skills:` list below is what keeps that
+  # to the six skills whose subject this already is, so a seventh has to be looked at.
   - id: "PE2"
-    reason: "POLICY: privileged setup is the subject of these skills; a sudo protocol gates it and validate_skills.py enforces the protocol"
+    skills:
+      - "linux-perf"
+      - "performance-patterns"
+      - "sglang-xpu-run"
+      - "xpu-deploy-plan"
+      - "xpu-runtime-preflight"
+      - "xpu-system-setup"
+    reason: "POLICY: elevation is the subject of these skills - driver install, perf_event_paranoid, cgroup limits - and each documents that it needs sudo"
   - id: "TM2"
+    skills: ["linux-perf", "xpu-system-setup"]
     message: "*sudo*"
-    reason: "POLICY: same sudo protocol, reached through a pipe or a && chain"
+    reason: "POLICY: same sudo, reached through a pipe or a && chain"
 
   # E1/SC2/SSRF2 — loopback. A run skill starts an inference server and then proves it
   # answers. The request never leaves the machine, so it is neither exfiltration nor
   # remote code execution; the pattern is what a health check looks like.
   - id: "E1"
+    skills: ["llamacpp-xpu-run", "sglang-xpu-run", "vllm-xpu-profile", "vllm-xpu-run", "xpu-deploy-plan"]
     message: "*localhost*"
     reason: "POLICY: health/completion probe against the server this skill just started"
   - id: "E1"
+    skills: ["llamacpp-xpu-run", "sglang-xpu-run", "vllm-xpu-profile", "vllm-xpu-run", "xpu-deploy-plan"]
     message: "*127.0.0.1*"
     reason: "POLICY: health/completion probe against the server this skill just started"
   - id: "SC2"
+    skills: ["sglang-xpu-bench", "sglang-xpu-run", "vllm-xpu-bench"]
     message: "*localhost*"
     reason: "POLICY: curl to a loopback inference endpoint fetches a JSON response, not a script"
   - id: "SC2"
+    skills: ["sglang-xpu-bench", "sglang-xpu-run", "vllm-xpu-bench"]
     message: "*127.0.0.1*"
     reason: "POLICY: curl to a loopback inference endpoint fetches a JSON response, not a script"
   - id: "SSRF2"
+    skills: ["model-config-recommend"]
     message: "*127.0.0.1*"
     reason: "POLICY: the loopback address is the target on purpose — the server under test runs there"
 
@@ -101,11 +132,14 @@ rules:
   # These call perf, addr2line, docker and torch with list argv and no shell, which is
   # the safe form; the alternative to shelling out to perf is not having a perf skill.
   - id: "AST4"
+    skills: ["linux-perf", "model-config-recommend"]
     reason: "POLICY: first-party tools invoke perf/addr2line/docker with list argv, never shell=True"
   - id: "AST3"
+    skills: ["mkl-extension-advisor"]
     message: "*__import__(module)*"
     reason: "POLICY: availability probe for an optional dependency, module name from a literal table"
   - id: "AST7"
+    skills: ["torch-xpu-bench", "xpu-port"]
     message: "*getattr(torch,*"
     reason: "POLICY: dtype lookup on torch from a validated --dtype choice"
 
@@ -113,6 +147,7 @@ rules:
   # enable` is NOT suppressed: xpu-system-setup really does enable a unit, and that is
   # worth seeing every time it changes.
   - id: "RA2"
+    skills: ["phoronix-test-suite", "xpu-deploy-plan"]
     message: "*mkdir -p*"
     reason: "POLICY: creating an output directory is not cross-session persistence"
 
@@ -125,24 +160,31 @@ rules:
   # English prose that reads as an instruction to a regex. Each of these matched a
   # sentence about SIMD, output formatting, or a licence header.
   - id: "MP3"
+    skills: ["performance-patterns"]
     message: "*swap*"
     reason: "POLICY: 'swap instructions' / 'Swap rules' are SIMD instruction names, not agent memory writes"
   - id: "P6"
+    skills: ["linux-perf"]
     message: "*display rules*"
     reason: "POLICY: 'display rules' is about how to render a perf table, not about revealing a system prompt"
   - id: "OH3"
+    skills: ["linux-perf"]
     message: "*no truncation*"
     reason: "POLICY: 'no truncation' describes report output, not unescaped rendering of untrusted content"
   - id: "P2"
+    skills: ["linux-perf"]
     message: "*Intel Corporation, MIT license*"
     reason: "POLICY: the match is the copyright comment an imported file is required to keep"
   - id: "EA2"
+    skills: ["xpu-system-setup"]
     message: "*auto*Run*"
     reason: "POLICY: the match is the word 'auto' in a table of --mode values"
   - id: "TM1"
+    skills: ["sglang-xpu-run"]
     message: "*rm intel/sglang-dev*"
     reason: "POLICY: a documented `docker rmi` cleanup step for an image this skill pulled"
   - id: "PE3"
+    skills: ["xpu-runtime-preflight"]
     message: "*.env*"
     reason: "POLICY: `--env-file .env` hands a container its own configuration; no credential file is read"
 
@@ -151,12 +193,15 @@ rules:
   # anything the skill does to evade analysis. Scoped to the three artifacts it is
   # true of, so a new partially-inspected reference still surfaces.
   - id: "AE1"
+    skills: ["xpu-deploy-plan"]
     message: "*build_plan.sh (partial)*"
     reason: "POLICY: nested-artifact inspection bound on a 385-line first-party script, not evasion"
   - id: "AE1"
+    skills: ["xpu-system-setup"]
     message: "*check_battlemage_prerequisites.sh (partial)*"
     reason: "POLICY: nested-artifact inspection bound on a 402-line first-party script, not evasion"
   - id: "AE1"
+    skills: ["vllm-xpu-run"]
     message: "*remote-deploy.md (partial)*"
     reason: "POLICY: nested-artifact inspection bound on a reference document, not evasion"
 
@@ -166,11 +211,14 @@ rules:
   # carries a Bandit justification at the call site; it is listed here rather than as
   # POLICY because exec of caller-supplied text is worth a maintainer's eyes.
   - id: "AST1"
+    skills: ["xpu-port"]
     path: "scripts/xpu_port_verify.py"
     reason: "TRACKED: exec of the --builder snippet is the tool's documented purpose (nosec B102 at the call site) — confirm before this becomes POLICY"
   - id: "AST6"
+    skills: ["xpu-port"]
     path: "scripts/xpu_port_verify.py"
     reason: "TRACKED: same call site as AST1"
   - id: "AST8"
+    skills: ["xpu-port"]
     path: "scripts/xpu_port_verify.py"
     reason: "TRACKED: same call site as AST1 — reported CRITICAL because exec is chained with compile"
