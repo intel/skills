@@ -1,0 +1,40 @@
+# This workflow file is copied from [https://github.com/amd/skills] 
+# and is licensed under the MIT License. 
+# See LICENSE-THIRD-PARTY.md in the root directory for the full text.
+#
+# SkillSpector false-positive allowlist.
+#
+# SkillSpector's static scan is high-recall / moderate-precision and has no
+# native per-finding suppression. This file is the auditable place to record
+# findings that are genuinely false positives so the CI gate
+# (.github/scripts/skillspector_gate.py) does not fail on them. Everything not listed
+# here still fails the build at HIGH/CRITICAL.
+#
+# Each entry suppresses ONE rule for ONE file within ONE skill:
+#   skill:  skill directory name under skills/
+#   rule:   SkillSpector rule id (e.g. YR1)
+#   file:   path as it appears in the report, relative to the skill dir
+#   match:  (optional) substring that must appear in the finding message, so
+#           the suppression stays scoped to the specific signature
+#   reason: why this is a false positive (keep it accurate and specific)
+#
+# Add entries sparingly and only when the finding is demonstrably benign.
+
+suppressions:
+  - skill: xpu-system-setup
+    rule: P2
+    file: SKILL.md
+    match: Hidden Instructions
+    reason: >-
+      False positive. The rule
+      `r"<!--.*?(?:system|instructions?|ignore|POST|GET|send|transmit).*?-->"`
+      matches the provenance banner that tools/sync_external.py generates for
+      every external-ref pointer (lines 18-23). The keyword hit is `system`,
+      which appears only because the banner's `path` line reads
+      `.../skills/xpu-system-setup` — the skill's own directory name, not an
+      instruction. All 23 external-ref pointers carry the byte-identical
+      banner, and this regex matches exactly one file in the whole catalog:
+      this skill, solely because its name contains one of the pattern's
+      keywords. The banner is not optional: `check_external_refs` in
+      validate_skills.py fails with "not generated" without it, and it is
+      omitted entirely once pointers are vendored with `.source.json`.
