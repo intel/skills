@@ -1,212 +1,252 @@
 #!/usr/bin/env -S uv run --quiet
 #
-# This workflow file is copied from [https://github.com/amd/skills] 
-# and is licensed under the MIT License. 
-# See LICENSE-THIRD-PARTY.md in the root directory for the full text.
+# This file is derived from a workflow copied from [https://github.com/amd/skills]
+# and is licensed under the MIT License.
+# See THIRD-PARTY-PROGRAMS.txt in the root directory for the full text.
 #
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["pyyaml>=6.0"]
+# dependencies = []
 # ///
 
-"""Gate a SkillSpector markdown report against a documented allowlist.
+"""Gate one skill's SkillSpector JSON report against the threshold its origin is held to.
 
-SkillSpector's static scan is high-recall / moderate-precision, so it emits
-the occasional false positive that no amount of legitimate code can avoid
-(for example, a YARA `backdoor_persistence` hit on the standard
-`echo 'export PATH=...' >> ~/.bashrc` install step). SkillSpector has no
-native per-finding suppression, so this script provides one at the CI gate:
+Suppression is not done here. `skillspector scan --baseline` applies
+`.skillspector-baseline.yaml` itself (scoped to this skill by
+`.github/scripts/skillspector_baseline.py`), drops the findings its rules match, keeps
+each rule's `reason` with them, and recomputes the risk score over what is left. So this
+script reads a report in which `issues` is already the active set and `suppressed_count`
+is the accepted one, and it decides two things: whether the score clears the limit, and
+what to say about the findings that remain.
 
-  * Parse the markdown report SkillSpector produced for a single skill.
-  * Drop any HIGH/CRITICAL finding that matches an entry in the allowlist
-    (keyed by skill + rule id + file, with an optional message substring so a
-    suppression stays narrowly scoped).
-  * Fail (exit 1) only if a HIGH/CRITICAL finding remains after that filter.
+Reading the JSON rather than the markdown report is deliberate, and not a style choice.
+The markdown per-finding block carries `**Message:**`, which is the *pattern name*
+("Privileged Container / Container Escape"), and no matched text at all. Every `PE5`
+finding in this catalog therefore has an identical message, while the four shapes this
+repository accepts (`--device /dev/*`, `--ipc=host`, `--net=host`, `--network host`) and
+the two it will not (`--privileged`, `nsenter`) sit in the same rule, the same file and
+often the same paragraph -- measured, in `sglang-xpu-run/SKILL.md` (6 accepted, 6 active)
+and `xpu-container-run/SKILL.md` (14 accepted, 4 active). Nothing keyed on the markdown
+message can tell those apart. The JSON carries `finding` (the matched text) and
+`location.start_line`, which is what makes the distinction expressible.
 
-This keeps the "fail on any HIGH/CRITICAL" policy intact for everything that
-isn't an explicitly justified exception, and it never requires editing the
-scanned skill just to dodge a regex.
+Two thresholds, because the two kinds of skill can act on a finding differently. A skill
+written in this repository can be fixed in the pull request that reports the problem, so
+it is held to 20 -- SkillSpector's own LOW/`SAFE` band. An imported skill is upstream's
+text, kept byte-for-byte by `tools/sync_external.py --check`, so editing it here would
+break the thing that makes an import worth having; its repair lands upstream and arrives
+through a moved pin. It is held to 50, the boundary above which the scanner itself says
+`DO_NOT_INSTALL`. Neither number was picked here; both are band edges from the scanner's
+own report code. `.source.json`, written beside `SKILL.md` by `tools/sync_external.py`, is
+the origin marker -- the same one the mentions check and the link check already use to
+decide that a body belongs to another team.
+
+An active HIGH or CRITICAL finding under the threshold is reported, not failed: it is
+worth a reviewer's eyes every time it moves, which is why the baseline leaves it active,
+but blocking on it would make "bump an import's pin" mean "bump the pin and then wait for
+upstream". The score is the gate; the findings are the reading material.
+
+`risk_assessment.recommendation` is deliberately not read. It is `CAUTION` for all 33
+skills in this catalog, including ones scoring 0 with nothing active, because the
+reference resolver counts filenames mentioned in prose as unresolved.
+`risk_assessment.max_issue_severity` is computed over the active findings only and is the
+signal that field looks like it should be.
 
 Usage:
 
     uv run .github/scripts/skillspector_gate.py \
-        --report reports/rocm-doctor.md \
-        --skill rocm-doctor \
-        --allowlist .github/skillspector-allow.yml
+        --report reports/linux-perf.json \
+        --skill linux-perf
 
-Exits 0 when no un-allowlisted HIGH/CRITICAL findings remain, 1 otherwise.
+Exits 0 when the scan ran and the score is within the limit, 1 otherwise.
 """
 
 from __future__ import annotations
 
 import argparse
-import re
+import json
+import os
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+DEFAULT_SKILLS_DIR = REPO_ROOT / "skills"
 
-BLOCKING_SEVERITIES = {"HIGH", "CRITICAL"}
+# Written beside SKILL.md by tools/sync_external.py for a skill copied from another
+# repository. Its absence is what "authored here" means.
+IMPORT_MARKER = ".source.json"
 
-# Matches a finding header such as "### 🔴 HIGH: YR1". The severity and rule id
-# are the only stable parts; the emoji between "###" and the severity varies.
-_HEADER_RE = re.compile(r"^###\s+.*?\b(LOW|MEDIUM|HIGH|CRITICAL):\s*(\S+)\s*$")
-# Matches "**Location:** `scripts/apply_fix.py:673`" (line/range suffix optional).
-_LOCATION_RE = re.compile(r"^\*\*Location:\*\*\s*`(?P<loc>[^`]+)`")
-# Matches "**Message:** ...".
-_MESSAGE_RE = re.compile(r"^\*\*Message:\*\*\s*(?P<msg>.*)$")
+# SkillSpector's own band edges (0-20 LOW, 21-50 MEDIUM, 51-80 HIGH, 81+ CRITICAL); see
+# the module docstring for which origin is held to which and why.
+DEFAULT_MAX_SCORE = 20
+DEFAULT_MAX_SCORE_IMPORTED = 50
 
+# Findings worth an annotation on the diff. Everything active is listed in the log and
+# the step summary regardless.
+NOTABLE_SEVERITIES = ("CRITICAL", "HIGH")
 
-@dataclass
-class Finding:
-    severity: str
-    rule: str
-    file: str
-    message: str
-
-
-@dataclass
-class Suppression:
-    skill: str
-    rule: str
-    file: str
-    reason: str
-    match: str | None = None
-
-    def covers(self, finding: Finding, skill: str) -> bool:
-        if self.skill != skill or self.rule != finding.rule:
-            return False
-        if _normalize(self.file) != _normalize(finding.file):
-            return False
-        if self.match and self.match.lower() not in finding.message.lower():
-            return False
-        return True
+# GitHub renders at most ten annotations of each level per step and silently discards the
+# rest, so the count that did not fit is printed instead of left to be inferred.
+ANNOTATION_LIMIT = 10
 
 
-def _normalize(path: str) -> str:
-    """Normalize a report path for comparison (slash direction, surrounding space)."""
-    return path.strip().replace("\\", "/")
+def _data(text: str) -> str:
+    """Escape a workflow command's message. GitHub's own encoding, not a guess."""
+    return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
-def _strip_line_suffix(location: str) -> str:
-    """Turn 'scripts/apply_fix.py:673' or '...:88-90' into just the file path."""
-    return re.sub(r":\d+(?:[\u2013-]\d+)?\s*$", "", location.strip())
+def _prop(text: str) -> str:
+    """Escape a workflow command property, where a comma or colon would end it."""
+    return _data(text).replace(":", "%3A").replace(",", "%2C")
 
 
-def parse_report(text: str) -> list[Finding]:
-    """Extract findings from a SkillSpector markdown report."""
-    findings: list[Finding] = []
-    severity = rule = file = message = None
-
-    def flush() -> None:
-        nonlocal severity, rule, file, message
-        if severity and rule:
-            findings.append(
-                Finding(
-                    severity=severity,
-                    rule=rule,
-                    file=_strip_line_suffix(file or ""),
-                    message=message or "",
-                )
-            )
-        severity = rule = file = message = None
-
-    for line in text.splitlines():
-        header = _HEADER_RE.match(line)
-        if header:
-            flush()
-            severity, rule = header.group(1), header.group(2)
-            continue
-        if severity is None:
-            continue
-        loc = _LOCATION_RE.match(line)
-        if loc:
-            file = loc.group("loc")
-            continue
-        msg = _MESSAGE_RE.match(line)
-        if msg:
-            message = msg.group("msg")
-    flush()
-    return findings
+def _one_line(text: str, width: int = 120) -> str:
+    """Collapse a matched snippet to something that fits on one line."""
+    flat = " ".join((text or "").split())
+    return flat if len(flat) <= width else flat[: width - 1] + "…"
 
 
-def load_suppressions(path: Path) -> list[Suppression]:
-    if not path.exists():
-        return []
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    raw = data.get("suppressions") or []
-    suppressions: list[Suppression] = []
-    for i, entry in enumerate(raw):
-        try:
-            suppressions.append(
-                Suppression(
-                    skill=entry["skill"],
-                    rule=entry["rule"],
-                    file=entry["file"],
-                    reason=entry["reason"],
-                    match=entry.get("match"),
-                )
-            )
-        except (KeyError, TypeError) as exc:
-            raise SystemExit(
-                f"{path}: suppression #{i} is missing a required field ({exc})."
-            )
-    return suppressions
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--report", required=True, type=Path, help="Markdown report path.")
-    parser.add_argument("--skill", required=True, help="Skill name the report is for.")
-    parser.add_argument(
-        "--allowlist",
-        type=Path,
-        default=Path(__file__).resolve().parent.parent / "skillspector-allow.yml",
-        help="Path to the suppression allowlist (YAML).",
+def summarize(issue: dict) -> tuple[str, str, str, int, str]:
+    """(severity, rule, file, line, matched text) for one active finding."""
+    location = issue.get("location") or {}
+    return (
+        str(issue.get("severity", "")).upper(),
+        str(issue.get("id", "?")),
+        str(location.get("file", "")),
+        int(location.get("start_line") or 0),
+        _one_line(issue.get("finding", "")),
     )
-    args = parser.parse_args()
 
-    if not args.report.exists():
+
+def write_summary(lines: list[str]) -> None:
+    """Append to the job summary when running in Actions; a no-op locally."""
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write("\n".join(lines) + "\n")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("--report", required=True, type=Path, help="JSON report path.")
+    parser.add_argument("--skill", required=True, help="Skill the report is for.")
+    parser.add_argument(
+        "--skills-dir",
+        type=Path,
+        default=DEFAULT_SKILLS_DIR,
+        help=f"Directory containing skill folders (default: {DEFAULT_SKILLS_DIR}).",
+    )
+    parser.add_argument(
+        "--max-score",
+        type=int,
+        default=DEFAULT_MAX_SCORE,
+        help=f"Threshold for a skill authored here (default: {DEFAULT_MAX_SCORE}).",
+    )
+    parser.add_argument(
+        "--max-score-imported",
+        type=int,
+        default=DEFAULT_MAX_SCORE_IMPORTED,
+        help="Threshold for an imported skill "
+        f"(default: {DEFAULT_MAX_SCORE_IMPORTED}).",
+    )
+    parser.add_argument(
+        "--annotate",
+        action="store_true",
+        help="Emit ::error/::warning annotations so findings render on the diff.",
+    )
+    args = parser.parse_args(argv)
+
+    skill_dir = args.skills_dir / args.skill
+    if not (skill_dir / "SKILL.md").is_file():
+        print(f"No skill named {args.skill!r} under {args.skills_dir}", file=sys.stderr)
+        return 1
+
+    if not args.report.is_file():
         print(f"Report not found: {args.report}", file=sys.stderr)
         return 1
-
-    findings = parse_report(args.report.read_text(encoding="utf-8"))
-    suppressions = [s for s in load_suppressions(args.allowlist) if s.skill == args.skill]
-
-    blocking: list[Finding] = []
-    suppressed: list[tuple[Finding, Suppression]] = []
-    for finding in findings:
-        if finding.severity.upper() not in BLOCKING_SEVERITIES:
-            continue
-        match = next((s for s in suppressions if s.covers(finding, args.skill)), None)
-        if match:
-            suppressed.append((finding, match))
-        else:
-            blocking.append(finding)
-
-    for finding, supp in suppressed:
-        print(
-            f"ALLOWLISTED {finding.severity} {finding.rule} {finding.file}: {supp.reason}"
-        )
-
-    if blocking:
-        print(
-            f"\n{len(blocking)} un-allowlisted HIGH/CRITICAL finding(s) for "
-            f"'{args.skill}'; failing.",
-            file=sys.stderr,
-        )
-        for finding in blocking:
-            print(
-                f"  {finding.severity} {finding.rule} {finding.file}: {finding.message}",
-                file=sys.stderr,
-            )
+    try:
+        report = json.loads(args.report.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        print(f"{args.report}: report was not JSON ({exc})", file=sys.stderr)
         return 1
 
-    print(
-        f"No un-allowlisted HIGH/CRITICAL findings for '{args.skill}' "
-        f"({len(suppressed)} allowlisted); passing."
+    imported = (skill_dir / IMPORT_MARKER).is_file()
+    origin = "imported" if imported else "authored"
+    limit = args.max_score_imported if imported else args.max_score
+
+    risk = report.get("risk_assessment") or {}
+    score = int(risk.get("score") or 0)
+    band = str(risk.get("severity") or "")
+    worst = str(risk.get("max_issue_severity") or "NONE")
+    active = [issue for issue in (report.get("issues") or []) if isinstance(issue, dict)]
+    suppressed = int(report.get("suppressed_count") or 0)
+
+    # The scanner saying its own pipeline did not finish. A partial report must not be
+    # scored as if it were complete, however low the score it managed to compute.
+    incomplete = report.get("execution_successful") is False
+
+    headline = (
+        f"{args.skill}: score {score}/{limit} ({origin}, band {band}), "
+        f"worst active {worst}, {len(active)} active, {suppressed} suppressed"
     )
+    print(headline)
+
+    notable: list[tuple[str, str, str, int, str]] = []
+    for issue in active:
+        severity, rule, file, line, finding = summarize(issue)
+        where = f"{file}:{line}" if line else file
+        print(f"  {severity:8} {rule:6} {where}  {finding}")
+        if severity in NOTABLE_SEVERITIES:
+            notable.append((severity, rule, file, line, finding))
+
+    failures: list[str] = []
+    if incomplete:
+        failures.append("the scan did not complete (execution_successful=false)")
+    if score > limit:
+        failures.append(
+            f"score {score} is above the limit of {limit} for an {origin} skill"
+        )
+
+    if args.annotate:
+        level = "error" if failures else "warning"
+        # Over-threshold findings are the ones a reader has to act on, so they get the
+        # ten slots GitHub will render; under-threshold notables follow.
+        for severity, rule, file, line, finding in notable[:ANNOTATION_LIMIT]:
+            location = f"file=skills/{args.skill}/{file}"
+            if line:
+                location += f",line={line}"
+            print(
+                f"::{level} {location},title="
+                f"{_prop(f'SkillSpector {rule} ({severity})')}::"
+                f"{_data(f'{args.skill}: {finding}')}"
+            )
+        dropped = len(notable) - ANNOTATION_LIMIT
+        if dropped > 0:
+            print(
+                f"::notice::{_data(f'{dropped} further {level} annotation(s) for {args.skill} were not rendered; GitHub shows {ANNOTATION_LIMIT} per level per step. The full list is in the step log and the job summary.')}"
+            )
+
+    detail = [f"  - `{s}` `{r}` `{f}{f':{line}' if line else ''}` {t}" for s, r, f, line, t in notable]
+    if failures:
+        reason = "; ".join(failures)
+        print(f"FAIL {args.skill}: {reason}", file=sys.stderr)
+        write_summary(
+            [f"### :x: {args.skill}: {reason}", "", f"- {headline}", *detail]
+        )
+        return 1
+
+    mark = ":warning:" if notable else ":white_check_mark:"
+    note = (
+        f"{len(notable)} active HIGH/CRITICAL finding(s) below the {origin} limit "
+        "of " + str(limit) + " -- reported, not blocking"
+        if notable
+        else f"within the {origin} limit of {limit}"
+    )
+    write_summary([f"### {mark} {args.skill}: {note}", "", f"- {headline}", *detail])
+    print(f"PASS {args.skill}: {note}")
     return 0
 
 

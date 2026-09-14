@@ -2,7 +2,7 @@
 # 
 # This workflow file is copied from [https://github.com/amd/skills] 
 # and is licensed under the MIT License. 
-# See LICENSE-THIRD-PARTY.md in the root directory for the full text.
+# See THIRD-PARTY-PROGRAMS.txt in the root directory for the full text.
 # 
 # /// script
 # requires-python = ">=3.10"
@@ -19,8 +19,8 @@ Behaviour:
 
   * Diff the working tree against ``--base`` and collect the changed paths.
   * If any *infra* path changed (this script, the SkillSpector workflow, the
-    gate, or the allowlist), scan EVERY skill -- a change to the scanning
-    machinery can affect the result for all skills.
+    gate, the baseline or the SARIF merge), scan EVERY skill -- a change to the
+    scanning machinery can affect the result for all skills.
   * Otherwise, scan only the skills with changes under ``skills/<name>/``.
   * Print the selected skill names as a compact JSON array (for a CI matrix).
     The array may be empty, in which case there is nothing to scan.
@@ -50,18 +50,27 @@ DEFAULT_SKILLS_DIR = REPO_ROOT / "skills"
 # change the scanning machinery itself rather than a single skill's content.
 INFRA_PATHS = (
     ".github/workflows/skillspector.yml",
+    ".github/scripts/skillspector_baseline.py",
     ".github/scripts/skillspector_gate.py",
+    ".github/scripts/skillspector_sarif.py",
     ".github/scripts/changed_skills.py",
-    ".github/skillspector-allow.yml",
+    ".skillspector-baseline.yaml",
 )
 
 
 def discover_skills(root: Path) -> list[str]:
-    """List skill directory names under `root`, ignoring dotfiles."""
+    """List skill directory names under `root`.
+
+    A directory without a SKILL.md is not a skill, so it is not scannable either:
+    including it would fan out a matrix job that can only fail on a skill that
+    does not exist.
+    """
     if not root.exists():
         return []
     return sorted(
-        p.name for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")
+        p.name
+        for p in root.iterdir()
+        if p.is_dir() and not p.name.startswith(".") and (p / "SKILL.md").is_file()
     )
 
 
