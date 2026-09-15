@@ -63,10 +63,18 @@ rules:
   - id: "PE5"
     message: "*--ipc=host*"
     reason: "POLICY: host IPC namespace is required for multi-process inference server shared memory"
+  # Host networking is scoped and the two above are not, because the two above are
+  # universal to an XPU container (every one of them passes a render node through and
+  # every multi-process server needs host IPC), while host networking is how *these*
+  # two skills reach a server they started themselves: 5 findings in xpu-container-run
+  # and 1 in sglang-xpu-run, measured. A new skill wanting the host network stack is
+  # worth one line in this file and a reviewer's eye.
   - id: "PE5"
+    skills: ["xpu-container-run"]
     message: "*--net=host*"
     reason: "POLICY: host networking is how the documented container reaches its own inference port"
   - id: "PE5"
+    skills: ["sglang-xpu-run"]
     message: "*--network host*"
     reason: "POLICY: host networking is how the documented container reaches its own inference port"
 
