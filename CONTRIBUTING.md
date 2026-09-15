@@ -237,21 +237,21 @@ uv run .github/scripts/skillspector_gate.py --report report.json --skill your-sk
 
 The commit is read out of the workflow so the version you run is the version CI runs.
 
-Two thresholds, because the two kinds of skill can act on a finding differently. A skill
-written here fails above a score of **20** — SkillSpector's own `SAFE` band — because a
-finding in it can be fixed in the pull request that reports it. An imported skill fails
-above **50**, the boundary above which the scanner itself says `DO_NOT_INSTALL`, because
-its body is kept byte-for-byte the pinned upstream commit and the repair has to land
-upstream. Active HIGH/CRITICAL findings below the threshold are reported, not failed.
+Two thresholds, because the two kinds of skill can act on a finding differently:
+
+- **A skill written here fails above 20** — SkillSpector's `SAFE` band. A finding in it can
+  be fixed in the pull request that reports it.
+- **An imported skill fails above 50** — where the scanner itself says `DO_NOT_INSTALL`. Its
+  body stays byte-for-byte the pinned upstream commit, so the repair lands upstream.
+
+Active HIGH/CRITICAL findings below the threshold are reported, not failed.
 
 If the finding is real, fix it. If it is a false positive or a pattern this catalog
 documents on purpose, add a rule to [`.skillspector-baseline.yaml`](.skillspector-baseline.yaml)
-with a `reason` — and list your skill under `skills:`, because a rule that names no skill
-also accepts the same pattern in a skill nobody has written yet. The file is the audit
-trail, so a suppression that cannot be justified in a sentence has nowhere to hide, and a
-rule is not pinned to a version of your text: it keeps applying after the surrounding
-paragraph is reworded, which is why the baseline uses drift-tolerant rules rather than
-generated fingerprints.
+with a `reason`, and list your skill under `skills:` — a rule without it applies to every
+skill in the catalog. The file is the audit trail, so each suppression must be justified.
+Rules are not pinned to a specific version of your skill: they keep applying after the
+surrounding text is reworded.
 
 ## 5. If you are writing a new skill, add a Harbor task
 
