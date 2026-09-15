@@ -216,9 +216,9 @@ python3 tools/lint_task_leakage.py --fail-on-leak 5   # only if you wrote a Harb
 python3 tools/sync_external.py --check           # only if you imported a skill
 ```
 
-Everything but the second and the last needs no network. If they pass, the blocking checks
-left are about the repository rather than your text: the workflow linters and the installer
-round trip.
+Only `--check-links` and `sync_external.py --check` reach the network. If the offline ones
+pass, the blocking checks left are about the repository rather than your text: the workflow
+linters and the installer round trip.
 
 ## 5. If you are writing a new skill, add a Harbor task
 
