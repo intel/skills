@@ -98,7 +98,10 @@ can reproduce is not evidence.
 are at the ceiling and cannot show a delta in either direction. Such tasks are marked
 `calibration: "ceiling"` in `suites.json` and no skill may cite an improvement from that
 run. `tools/lint_task_leakage.py` ranks how much of a task's answer its own instruction
-leaks, which is the usual cause.
+leaks, which is the usual cause, and `validate.yml` blocks above 5 — the score of the worst
+task in the tree, so the gate holds the line rather than clearing it. A task under the
+budget can still sit at a ceiling: leakage is necessary, not sufficient, and only the
+no-skill arm settles it.
 
 Before trusting a suite, run it against a deliberately falsified copy of the skill as one
 arm. A suite that scores a lying skill as highly as the real one is inert. Two cautions
@@ -220,7 +223,7 @@ the fix, the pin is the wrong pin.
 
 | Workflow | Job | Runs on | Blocks? |
 |---|---|---|---|
-| `validate.yml` | `validate` — `validate_skills.py`, `run_evals.py --validate`, link check | every PR | yes |
+| `validate.yml` | `validate` — `validate_skills.py`, `run_evals.py --validate`, task leakage and its self-test, link check | every PR | yes |
 | `validate.yml` | `install` — the installer resolves, lists, and installs from the catalog | every PR | yes |
 | `harbor-smoke.yml` | the oracle arm over every task in `tasks/` | PRs touching tasks or skills | yes |
 | `security.yml` | `actionlint`, `zizmor` | every PR | yes |
@@ -260,7 +263,7 @@ network and both say so when they cannot: `validate_skills.py --check-links` and
 | `run_evals.py` | validates eval files against their schema; scores recorded answers |
 | `compare_harbor_skill.py` | runs and reports the three-arm differential, with cost and time |
 | `check_harbor_job.py` | asserts a harbor run's trial count and reward floor |
-| `lint_task_leakage.py` | ranks how much of its own answer each task's instruction leaks |
+| `lint_task_leakage.py` | ranks how much of its own answer each task's instruction leaks; blocks above 5 in CI, and `--self-test` asserts against this tree that the detector behind that number still detects |
 | `behavior_digest.py` | digests the skill bytes a measurement was taken against, so a later edit to `SKILL.md` cannot leave `perf/` describing text that no longer exists |
 
 Two more exist for the imported skills: `sync_external.py` regenerates a copy from its pin
