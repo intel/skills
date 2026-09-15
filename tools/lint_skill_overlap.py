@@ -48,6 +48,7 @@ import re
 import sys
 from itertools import combinations
 from pathlib import Path
+from types import SimpleNamespace
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO_ROOT / "skills"
@@ -68,7 +69,7 @@ GENERIC_CMD = {
     "nproc", "lscpu", "date", "hostname", "whoami", "id", "apt", "apt-get", "yum",
     "dnf", "zypper", "brew", "make", "cmake", "ninja", "gcc", "g++", "cc", "ld",
     "pkg-config", "python", "python3", "pip", "pip3", "uv", "uvx", "pipx", "conda",
-    "mamba", "bash", "sh", "zsh", "npm", "npx", "node", "pytest", "tee", "seq",
+    "mamba", "bash", "sh", "zsh", "npm", "npx", "node", "pytest", "seq",
     "true", "false", "exit", "set", "unset", "test", "eval", "exec", "trap", "wait",
     "mktemp", "basename", "dirname", "realpath", "readlink", "stat", "md5sum",
     "sha256sum", "base64", "openssl", "systemctl", "journalctl", "dmesg", "lsmod",
@@ -144,7 +145,7 @@ CONTAINER_PLUMBING = {
     "flag:--tag", "flag:--file", "flag:--no-cache", "flag:--quiet", "flag:--help",
     "flag:--version", "flag:--verbose", "flag:--output", "flag:--input", "flag:--force",
     "flag:--yes", "flag:--dry-run", "flag:--all", "flag:--upgrade", "flag:--index-url",
-    "flag:--extra-index-url", "flag:--pre", "flag:--user", "flag:--editable",
+    "flag:--extra-index-url", "flag:--pre", "flag:--editable",
     "flag:--no-deps", "flag:--requirement",
 }
 
@@ -167,12 +168,9 @@ IDENTITY = {
 }
 
 
-class Broken:
-    """Which deliberate break --mutate is running, readable from every extractor without
-    threading a test-only argument through eight signatures. See MUTATIONS below."""
-
-    which: str | None = None
-
+# Which deliberate break --mutate is running, readable from every extractor without
+# threading a test-only argument through eight signatures. See MUTATIONS below.
+BROKEN = SimpleNamespace(which=None)
 
 SHELL_LANGS = {"sh", "bash", "shell", "console", "zsh", "dockerfile", "docker", ""}
 PYTHON_LANGS = {"python", "py", "python3"}
@@ -202,7 +200,7 @@ TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9+#.-]{3,}")
 
 
 def flags(text: str) -> set[str]:
-    if Broken.which == "M3":
+    if BROKEN.which == "M3":
         return set()
     return {f"flag:--{match.group(1).rstrip('.,')}" for match in FLAG.finditer(text)}
 
@@ -306,7 +304,7 @@ def document_elements(text: str) -> set[str]:
     """A markdown document's actions: every fenced block by its language, plus prose spans."""
     found = inline_elements(text)
     for language, block in code_blocks(text):
-        python = language in PYTHON_LANGS and Broken.which != "M2"
+        python = language in PYTHON_LANGS and BROKEN.which != "M2"
         found |= python_elements(block) if python else shell_elements(block)
     return found
 
@@ -322,11 +320,11 @@ def signature(body: str, bundled: dict[str, str]) -> set[str]:
     for name, text in bundled.items():
         if name.endswith(".md"):
             found |= document_elements(text)
-        elif name.endswith(".py") and Broken.which != "M2":
+        elif name.endswith(".py") and BROKEN.which != "M2":
             found |= python_elements(text)
         elif name.endswith((".sh", ".bash")):
             found |= shell_elements(text)
-    return found - (set() if Broken.which == "M1" else PLATFORM)
+    return found - (set() if BROKEN.which == "M1" else PLATFORM)
 
 
 def load(directory: Path, report: Report) -> dict | None:
@@ -349,9 +347,9 @@ def load(directory: Path, report: Report) -> dict | None:
                 prose.append(content)
 
     reference_text = HTML_COMMENT.sub("", "\n".join(prose))
-    if Broken.which == "M6" and directory.name == "torch-xpu-profile":
+    if BROKEN.which == "M6" and directory.name == "torch-xpu-profile":
         reference_text += "\n\nTo run inference rather than profile it, see torch-xpu-run.\n"
-    if Broken.which == "M7" and directory.name == "vllm-xpu-run":
+    if BROKEN.which == "M7" and directory.name == "vllm-xpu-run":
         reference_text = re.sub(r"(?<![\w-])vllm-xpu-profile(?![\w-])", "", reference_text)
 
     return {
@@ -394,7 +392,7 @@ def handoff_index(skills: list[dict]) -> dict[str, set[str]]:
     return {
         skill["name"]: set(pattern.findall(
             skill["reference_text"][: len(skill["reference_text"]) // 2]
-            if Broken.which == "M10" else skill["reference_text"]))
+            if BROKEN.which == "M10" else skill["reference_text"]))
         for skill in skills
     }
 
@@ -436,7 +434,7 @@ def pairs(skills: list[dict], min_shared: int,
     vocab = vocabulary(skills)
     out = []
     for left, right in combinations(skills, 2):
-        if Broken.which == "M9" and not (
+        if BROKEN.which == "M9" and not (
             vocab[left["name"]][0] & vocab[right["name"]][0]
         ):
             continue
@@ -538,7 +536,7 @@ def verdict(pair: dict, max_overlap: float, min_shared: int) -> str:
     """
     if pair["containment"] <= max_overlap or len(pair["shared"]) < min_shared:
         return "ok"
-    if pair["handoff"] and (pair["containment"] < 1.0 or Broken.which == "M8"):
+    if pair["handoff"] and (pair["containment"] < 1.0 or BROKEN.which == "M8"):
         return "ok"
     return "REVIEW" if pair["authored"] else "WARN"
 
@@ -725,7 +723,7 @@ def self_test(max_overlap: float | None, min_shared: int) -> int:
     )
     check("no unclassified high-frequency element", not unclassified,
           ", ".join(unclassified) or
-          f"every element at document frequency >= 10 is in PLATFORM or IDENTITY")
+          "every element at document frequency >= 10 is in PLATFORM or IDENTITY")
 
     scored = pairs(skills, min_shared=min_shared)
     worst = worst_no_edge(scored, min_shared)
@@ -911,14 +909,14 @@ def main() -> int:
     if not SKILLS_DIR.is_dir():
         sys.exit(f"FAIL no {SKILLS_DIR.relative_to(REPO_ROOT).as_posix()}")
 
-    Broken.which = args.mutate
+    BROKEN.which = args.mutate
     max_overlap = args.max_overlap
-    if Broken.which == "M4":
+    if BROKEN.which == "M4":
         max_overlap = 0.30
-    elif Broken.which == "M5":
+    elif BROKEN.which == "M5":
         max_overlap = 0.95
-    if Broken.which:
-        print(f"# mutation {Broken.which}: {MUTATIONS[Broken.which]}")
+    if BROKEN.which:
+        print(f"# mutation {BROKEN.which}: {MUTATIONS[BROKEN.which]}")
 
     if args.self_test:
         return self_test(max_overlap, args.min_shared)
