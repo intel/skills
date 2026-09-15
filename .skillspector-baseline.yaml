@@ -83,7 +83,22 @@ rules:
   # they came for. Where a version does change the answer the skills already say to pin
   # one — vllm-xpu-run names `intel/vllm:<version>-xpu` — and a measurement that has to
   # be reproducible records the resolved image in perf/, not in the body.
+  #
+  # Scoped to the ten skills the 36 findings were measured in, because the reason above
+  # is conditional on there being no MCP server to rug-pull: a skill that does declare
+  # one has a genuine RP1 finding, and an unscoped entry would accept it silently.
   - id: "RP1"
+    skills:
+      - "llamacpp-xpu-run"
+      - "model-config-recommend"
+      - "sglang-xpu-run"
+      - "torch-xpu-run"
+      - "vllm-xpu-bench"
+      - "vllm-xpu-profile"
+      - "vllm-xpu-run"
+      - "xpu-container-run"
+      - "xpu-deploy-plan"
+      - "xpu-port"
     reason: "POLICY: MCP rug-pull rule matched docker/pip lines in skills that declare no MCP server; its pin check is single-line, and the current tag is the supported track for these images"
 
   # PE2/TM2 — sudo. Driver install, perf_event_paranoid, and cgroup limits cannot be
@@ -158,6 +173,10 @@ rules:
   # LP3 — no declared permission manifest. There is no permissions field to declare:
   # the agentskills.io frontmatter spec has name and description, and this repository
   # deliberately keeps everything else in skills.yaml so SKILL.md stays portable.
+  # Deliberately unscoped, unlike RP1 above: the reason is a property of the spec rather
+  # than of any skill's text, so it holds for every skill in the catalog and for every
+  # skill nobody has written yet. It stops holding when the spec grows the field, which
+  # is a pin bump away and reads as a new rule id, not as a wider suppression.
   - id: "LP3"
     reason: "POLICY: the agentskills.io skill spec has no permissions field; catalog metadata lives in skills.yaml"
 

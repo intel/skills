@@ -212,9 +212,22 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.annotate:
         level = "error" if failures else "warning"
+        budget = ANNOTATION_LIMIT
+        # A failure has to be visible on the diff even when nothing below is annotated:
+        # the per-finding annotations cover HIGH/CRITICAL only, so a skill that crosses
+        # its limit on MEDIUM findings alone would otherwise be a red check whose reason
+        # lives in the step summary. Anchored on SKILL.md because the score is the
+        # skill's, not one finding's, and it takes one of the level's ten slots.
+        if failures:
+            print(
+                f"::error file=skills/{args.skill}/SKILL.md,title="
+                f"{_prop('SkillSpector gate')}::"
+                f"{_data(headline + ' -- ' + '; '.join(failures))}"
+            )
+            budget -= 1
         # Over-threshold findings are the ones a reader has to act on, so they get the
-        # ten slots GitHub will render; under-threshold notables follow.
-        for severity, rule, file, line, finding in notable[:ANNOTATION_LIMIT]:
+        # slots GitHub will render; under-threshold notables follow.
+        for severity, rule, file, line, finding in notable[:budget]:
             location = f"file=skills/{args.skill}/{file}"
             if line:
                 location += f",line={line}"
@@ -223,7 +236,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"{_prop(f'SkillSpector {rule} ({severity})')}::"
                 f"{_data(f'{args.skill}: {finding}')}"
             )
-        dropped = len(notable) - ANNOTATION_LIMIT
+        dropped = len(notable) - budget
         if dropped > 0:
             print(
                 f"::notice::{_data(f'{dropped} further {level} annotation(s) for {args.skill} were not rendered; GitHub shows {ANNOTATION_LIMIT} per level per step. The full list is in the step log and the job summary.')}"

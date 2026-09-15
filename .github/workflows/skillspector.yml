@@ -35,8 +35,7 @@ name: skillspector
 
 on:
   push:
-    # Test it on the dev branch before we merge to main
-    branches: [main, mzweilin/ci_skill_spector]
+    branches: [main]
   pull_request:
     # Keep this in sync with INFRA_PATHS in changed_skills.py: any path here
     # that isn't a skill forces a full re-scan of every skill when it changes.
