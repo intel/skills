@@ -65,6 +65,34 @@ benchmark result from an API constant. And it does not check a description's voc
 unless the skill's catalog entry fills in `intel-products`; without it, the check reports
 that it did not run rather than passing silently.
 
+### Undeclared adjacency
+
+`tools/lint_skill_overlap.py` answers a narrower question than "are these two skills
+duplicates": do they drive the same commands, flags, environment variables, API calls and
+endpoint paths, and does neither description name the other? Two skills sharing a tool is
+normal here and most of the catalog does it; two skills competing silently for the same
+request is what leaves an agent nothing to route on. `--advisory` in CI, because which of
+two overlapping skills should win is a judgement about the catalog. Its `--self-test` does
+block, and `--mutate M1`…`M10` exist so that each way of breaking the detector can be shown
+to turn it red.
+
+What it cannot do, measured rather than assumed:
+
+- **A restatement in different words is out of reach.** A prose-only skill has no actions
+  to compare. Embeddings do not close this: on this catalog `potion-base-8M` scored a
+  legitimate pair 0.9000 and a near-verbatim copy 0.8877, ranking the legitimate pair
+  higher. The instrument that would work is a model reading both, which no keyless gate can
+  have.
+- **Name and description cannot screen a duplicate.** They are read, but only to order a
+  queue of the pairs the action axis cannot judge. A near-verbatim copy shares 0.05 of its
+  description with the skill it copies while sharing 1.0000 of its actions, and a
+  shared-name precondition would drop 4 of the 14 judgeable pairs in this tree — so the
+  cheap signal is a reading order, never a filter and never a verdict.
+- **The threshold is not a constant to defend.** 0.65 is one step above the
+  highest-scoring pair in the tree today, and that ceiling was measured to rise with the
+  catalog — 0.36 at 12 skills, 0.56 at 20, 0.62 at 33. The self-test bounds it to 1.0–1.5×
+  that ceiling and fails when the catalog grows into it, which is the signal to raise it.
+
 ## Level 2 — the differential
 
 The three-arm run in `evaluation/harbor/`. An agent attempts real containerized tasks in
@@ -223,7 +251,8 @@ the fix, the pin is the wrong pin.
 
 | Workflow | Job | Runs on | Blocks? |
 |---|---|---|---|
-| `validate.yml` | `validate` — `validate_skills.py`, `run_evals.py --validate`, task leakage and its self-test, link check | every PR | yes |
+| `validate.yml` | `validate` — `validate_skills.py`, `run_evals.py --validate`, task leakage and its self-test, the overlap self-test, link check | every PR | yes |
+| `validate.yml` | `validate` — skill overlap, `--advisory` | every PR | no, annotates |
 | `validate.yml` | `install` — the installer resolves, lists, and installs from the catalog | every PR | yes |
 | `harbor-smoke.yml` | the oracle arm over every task in `tasks/` | PRs touching tasks or skills | yes |
 | `security.yml` | `actionlint`, `zizmor` | every PR | yes |
@@ -264,6 +293,7 @@ network and both say so when they cannot: `validate_skills.py --check-links` and
 | `compare_harbor_skill.py` | runs and reports the three-arm differential, with cost and time |
 | `check_harbor_job.py` | asserts a harbor run's trial count and reward floor |
 | `lint_task_leakage.py` | ranks how much of its own answer each task's instruction leaks; blocks above 5 in CI, and `--self-test` asserts against this tree that the detector behind that number still detects |
+| `lint_skill_overlap.py` | reports skill pairs that drive the same actions with no hand-off written between them; advisory in CI, while `--self-test` blocks and `--mutate` proves it fails when broken |
 | `behavior_digest.py` | digests the skill bytes a measurement was taken against, so a later edit to `SKILL.md` cannot leave `perf/` describing text that no longer exists |
 
 Two more exist for the imported skills: `sync_external.py` regenerates a copy from its pin
