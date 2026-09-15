@@ -166,7 +166,13 @@ IDENTITY = {
     "path:/v1/chat/completions", "path:/v1/completions", "path:/v1/models",
 }
 
-MUTATION: str | None = None  # --mutate; see MUTATIONS below
+
+class Broken:
+    """Which deliberate break --mutate is running, readable from every extractor without
+    threading a test-only argument through eight signatures. See MUTATIONS below."""
+
+    which: str | None = None
+
 
 SHELL_LANGS = {"sh", "bash", "shell", "console", "zsh", "dockerfile", "docker", ""}
 PYTHON_LANGS = {"python", "py", "python3"}
@@ -196,7 +202,7 @@ TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9+#.-]{3,}")
 
 
 def flags(text: str) -> set[str]:
-    if MUTATION == "M3":
+    if Broken.which == "M3":
         return set()
     return {f"flag:--{match.group(1).rstrip('.,')}" for match in FLAG.finditer(text)}
 
@@ -300,7 +306,7 @@ def document_elements(text: str) -> set[str]:
     """A markdown document's actions: every fenced block by its language, plus prose spans."""
     found = inline_elements(text)
     for language, block in code_blocks(text):
-        python = language in PYTHON_LANGS and MUTATION != "M2"
+        python = language in PYTHON_LANGS and Broken.which != "M2"
         found |= python_elements(block) if python else shell_elements(block)
     return found
 
@@ -316,11 +322,11 @@ def signature(body: str, bundled: dict[str, str]) -> set[str]:
     for name, text in bundled.items():
         if name.endswith(".md"):
             found |= document_elements(text)
-        elif name.endswith(".py") and MUTATION != "M2":
+        elif name.endswith(".py") and Broken.which != "M2":
             found |= python_elements(text)
         elif name.endswith((".sh", ".bash")):
             found |= shell_elements(text)
-    return found - (set() if MUTATION == "M1" else PLATFORM)
+    return found - (set() if Broken.which == "M1" else PLATFORM)
 
 
 def load(directory: Path, report: Report) -> dict | None:
@@ -343,9 +349,9 @@ def load(directory: Path, report: Report) -> dict | None:
                 prose.append(content)
 
     reference_text = HTML_COMMENT.sub("", "\n".join(prose))
-    if MUTATION == "M6" and directory.name == "torch-xpu-profile":
+    if Broken.which == "M6" and directory.name == "torch-xpu-profile":
         reference_text += "\n\nTo run inference rather than profile it, see torch-xpu-run.\n"
-    if MUTATION == "M7" and directory.name == "vllm-xpu-run":
+    if Broken.which == "M7" and directory.name == "vllm-xpu-run":
         reference_text = re.sub(r"(?<![\w-])vllm-xpu-profile(?![\w-])", "", reference_text)
 
     return {
@@ -388,7 +394,7 @@ def handoff_index(skills: list[dict]) -> dict[str, set[str]]:
     return {
         skill["name"]: set(pattern.findall(
             skill["reference_text"][: len(skill["reference_text"]) // 2]
-            if MUTATION == "M10" else skill["reference_text"]))
+            if Broken.which == "M10" else skill["reference_text"]))
         for skill in skills
     }
 
@@ -404,6 +410,17 @@ def name_tokens(name: str) -> set[str]:
     return {part for part in name.split("-") if len(part) > 1}
 
 
+def vocabulary(skills: list[dict]) -> dict[str, tuple[set[str], set[str]]]:
+    """Name parts and description words per skill, hoisted out of the pair loop.
+
+    Recomputing words() inside the loop costs 1.10s at 300 skills against 0.04s hoisted.
+    """
+    return {
+        skill["name"]: (name_tokens(skill["name"]), words(skill["description"]))
+        for skill in skills
+    }
+
+
 def pairs(skills: list[dict], min_shared: int,
           index: dict[str, set[str]] | None = None) -> list[dict]:
     """Score every pair. Under five actions on the smaller side there is too little
@@ -416,21 +433,18 @@ def pairs(skills: list[dict], min_shared: int,
     """
     if index is None:
         index = handoff_index(skills)
-    vocabulary = {
-        skill["name"]: (name_tokens(skill["name"]), words(skill["description"]))
-        for skill in skills
-    }
+    vocab = vocabulary(skills)
     out = []
     for left, right in combinations(skills, 2):
-        if MUTATION == "M9" and not (
-            vocabulary[left["name"]][0] & vocabulary[right["name"]][0]
+        if Broken.which == "M9" and not (
+            vocab[left["name"]][0] & vocab[right["name"]][0]
         ):
             continue
         shared = left["signature"] & right["signature"]
         smaller = min(len(left["signature"]), len(right["signature"]))
         if smaller < 5:
             continue
-        left_words, right_words = vocabulary[left["name"]][1], vocabulary[right["name"]][1]
+        left_words, right_words = vocab[left["name"]][1], vocab[right["name"]][1]
         union = left_words | right_words
         out.append({
             "left": left["name"],
@@ -443,7 +457,7 @@ def pairs(skills: list[dict], min_shared: int,
             ),
             "authored": not (left["imported"] and right["imported"]),
             "jaccard": len(left_words & right_words) / len(union) if union else 0.0,
-            "name_shared": len(vocabulary[left["name"]][0] & vocabulary[right["name"]][0]),
+            "name_shared": len(vocab[left["name"]][0] & vocab[right["name"]][0]),
             "reach": len(shared) >= min_shared,
         })
     out.sort(key=lambda pair: (-pair["containment"], -len(pair["shared"])))
@@ -467,10 +481,7 @@ def lexical(skills: list[dict], min_shared: int,
     """
     if index is None:
         index = handoff_index(skills)
-    vocabulary = {
-        skill["name"]: (name_tokens(skill["name"]), words(skill["description"]))
-        for skill in skills
-    }
+    vocab = vocabulary(skills)
     out = []
     for left, right in combinations(skills, 2):
         shared = left["signature"] & right["signature"]
@@ -480,8 +491,8 @@ def lexical(skills: list[dict], min_shared: int,
         if right["name"] in index.get(left["name"], ()) or \
                 left["name"] in index.get(right["name"], ()):
             continue
-        left_names, left_words = vocabulary[left["name"]]
-        right_names, right_words = vocabulary[right["name"]]
+        left_names, left_words = vocab[left["name"]]
+        right_names, right_words = vocab[right["name"]]
         union = left_words | right_words
         out.append({
             "left": left["name"],
@@ -527,7 +538,7 @@ def verdict(pair: dict, max_overlap: float, min_shared: int) -> str:
     """
     if pair["containment"] <= max_overlap or len(pair["shared"]) < min_shared:
         return "ok"
-    if pair["handoff"] and (pair["containment"] < 1.0 or MUTATION == "M8"):
+    if pair["handoff"] and (pair["containment"] < 1.0 or Broken.which == "M8"):
         return "ok"
     return "REVIEW" if pair["authored"] else "WARN"
 
@@ -869,7 +880,6 @@ MUTATIONS = {
 
 
 def main() -> int:
-    global MUTATION
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--max-overlap", type=float, default=None, metavar="F",
                         help="the line above which an undeclared pair is worth a reviewer's "
@@ -901,14 +911,14 @@ def main() -> int:
     if not SKILLS_DIR.is_dir():
         sys.exit(f"FAIL no {SKILLS_DIR.relative_to(REPO_ROOT).as_posix()}")
 
-    MUTATION = args.mutate
+    Broken.which = args.mutate
     max_overlap = args.max_overlap
-    if MUTATION == "M4":
+    if Broken.which == "M4":
         max_overlap = 0.30
-    elif MUTATION == "M5":
+    elif Broken.which == "M5":
         max_overlap = 0.95
-    if MUTATION:
-        print(f"# mutation {MUTATION}: {MUTATIONS[MUTATION]}")
+    if Broken.which:
+        print(f"# mutation {Broken.which}: {MUTATIONS[Broken.which]}")
 
     if args.self_test:
         return self_test(max_overlap, args.min_shared)
