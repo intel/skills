@@ -641,6 +641,20 @@ def against(fixture: dict, skills: list[dict], min_shared: int) -> list[dict]:
     return pairs(skills + [as_skill(fixture)], min_shared=min_shared)
 
 
+def strongest(scored: list[dict], fixture: dict) -> dict:
+    """The fixture's highest-scoring pair, or a named failure when it has none.
+
+    Not inlined as max(): M3 and M9 leave nothing for the fixture to be scored against, and
+    a bare max() would end those mutations in a traceback rather than in the assertion that
+    is supposed to catch them.
+    """
+    ranked = [pair for pair in scored if fixture["name"] in (pair["left"], pair["right"])]
+    if not ranked:
+        sys.exit(f"FAIL --self-test scored {fixture['name']} against nothing: it shares no "
+                 f"action with any skill, so the assertion about it could not run")
+    return max(ranked, key=lambda pair: pair["containment"])
+
+
 def queued(fixture: dict, skills: list[dict], min_shared: int) -> list[dict]:
     """Where a candidate lands in the name/description queue, catalog included."""
     ranked = lexical(skills + [as_skill(fixture)], min_shared=min_shared)
@@ -789,11 +803,7 @@ def self_test(max_overlap: float | None, min_shared: int) -> int:
                                            or pair["right"] in unreachable
                                            for pair in queue) else ""))
 
-    duplicate = [
-        pair for pair in against(DUPLICATE, skills, min_shared)
-        if DUPLICATE["name"] in (pair["left"], pair["right"])
-    ]
-    top = max(duplicate, key=lambda pair: pair["containment"])
+    top = strongest(against(DUPLICATE, skills, min_shared), DUPLICATE)
     check("a paraphrased duplicate is caught and put in front of a reviewer",
           verdict(top, budget, min_shared) == "REVIEW",
           f"scores {top['containment']:.4f} with {len(top['shared'])} shared actions "
@@ -801,11 +811,7 @@ def self_test(max_overlap: float | None, min_shared: int) -> int:
           f"while its description shares {top['jaccard']:.2f} Jaccard - the prose is not "
           f"what caught it")
 
-    copied = [
-        pair for pair in against(DECLARED_COPY, skills, min_shared)
-        if DECLARED_COPY["name"] in (pair["left"], pair["right"])
-    ]
-    top_copy = max(copied, key=lambda pair: pair["containment"])
+    top_copy = strongest(against(DECLARED_COPY, skills, min_shared), DECLARED_COPY)
     check("a copy cannot excuse itself with the hand-off it inherited",
           verdict(top_copy, budget, min_shared) == "REVIEW" and bool(top_copy["handoff"]),
           f"scores {top_copy['containment']:.4f} against vllm-xpu-run and names it "
@@ -877,7 +883,8 @@ MUTATIONS = {
 }
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """Every flag, kept out of main() so what main() does is legible in one screen."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--max-overlap", type=float, default=None, metavar="F",
                         help="the line above which an undeclared pair is worth a reviewer's "
@@ -904,58 +911,46 @@ def main() -> int:
                              "committed. Writes nothing. Run it before the gate.")
     parser.add_argument("--mutate", choices=sorted(MUTATIONS),
                         help="break the detector on purpose and prove --self-test notices")
-    args = parser.parse_args()
+    return parser
 
-    if not SKILLS_DIR.is_dir():
-        sys.exit(f"FAIL no {SKILLS_DIR.relative_to(REPO_ROOT).as_posix()}")
 
-    BROKEN.which = args.mutate
-    max_overlap = args.max_overlap
+def mutated_threshold(max_overlap: float | None) -> float | None:
+    """M4 and M5 move the gate rather than the detector.
+
+    A threshold low enough to report the catalog, or high enough to report nothing, both
+    leave a self-test that only counts findings looking green.
+    """
     if BROKEN.which == "M4":
-        max_overlap = 0.30
-    elif BROKEN.which == "M5":
-        max_overlap = 0.95
-    if BROKEN.which:
-        print(f"# mutation {BROKEN.which}: {MUTATIONS[BROKEN.which]}")
+        return 0.30
+    if BROKEN.which == "M5":
+        return 0.95
+    return max_overlap
 
-    if args.self_test:
-        return self_test(max_overlap, args.min_shared)
 
-    report = Report()
-    skills = load_all(report)
-    for error in report.errors:
-        print(f"ERR  {error}", file=sys.stderr)
+def show_signature(skills: list[dict], name: str) -> int:
+    """--show: the actions extracted from one skill, for arguing with the extractor."""
+    match = next((skill for skill in skills if skill["name"] == name), None)
+    if match is None:
+        sys.exit(f"FAIL no skills/{name}")
+    print(f"{match['name']} - {len(match['signature'])} action(s), "
+          f"{'imported' if match['imported'] else 'authored here'}")
+    for element in sorted(match["signature"]):
+        print(f"    {element}")
+    return 0
 
-    if args.show:
-        match = next((s for s in skills if s["name"] == args.show), None)
-        if match is None:
-            sys.exit(f"FAIL no skills/{args.show}")
-        print(f"{match['name']} - {len(match['signature'])} action(s), "
-              f"{'imported' if match['imported'] else 'authored here'}")
-        for element in sorted(match["signature"]):
-            print(f"    {element}")
-        return 0
 
-    handoffs = handoff_index(skills)
-    scored = pairs(skills, min_shared=args.min_shared, index=handoffs)
-    queue = spread(lexical(skills, min_shared=args.min_shared, index=handoffs), args.queue)
-    if args.json:
-        print(json.dumps({"scored": scored, "queue": queue}, indent=2))
-        return 0
+def print_ranked(scored: list[dict], queue: list[dict], top: int) -> None:
+    """The table, then the pairs the action axis cannot judge.
 
-    budget = max_overlap if max_overlap is not None else 1.01
-    needs_review = [p for p in scored if verdict(p, budget, args.min_shared) == "REVIEW"]
-
+    The second block is a reading order and not a finding: a pair whose smaller side
+    carries too little code to compare still shares a name and a description, but the
+    near-verbatim fixture scores 0.05 on description while its actions score 1.0000.
+    """
     print(f"{'containment':>11} {'shared':>6} {'name':>4} {'jaccard':>7} {'hand-off':>8}  pair")
-    for pair in scored[: args.top]:
+    for pair in scored[:top]:
         edge = pair["handoff"] or "-"
         print(f"{pair['containment']:11.4f} {len(pair['shared']):6} {pair['name_shared']:4} "
               f"{pair['jaccard']:7.2f} {edge:>8}  {pair['left']} | {pair['right']}")
-
-    # What the action axis cannot see: a pair whose smaller side carries too little code to
-    # compare still shares a name and a description. Printed as a reading order, because
-    # neither number is strong enough to be a finding - the near-verbatim fixture scores
-    # 0.05 on description while its actions score 1.0000.
     if queue:
         print(f"\nwhere actions cannot judge, closest by description then name "
               f"(top {len(queue)}, least code first):")
@@ -964,15 +959,21 @@ def main() -> int:
                   f"({pair['actions']} action(s) on the smaller side)  "
                   f"{pair['left']} | {pair['right']}")
 
-    # No second threshold: the report is every pair with enough shared material to judge and
-    # nothing written down to separate them - no hand-off, or a hand-off that cannot be true
-    # because one skill does everything the other does. REVIEW is that finding with a skill
-    # authored here on one side, ranked first because someone here can fix it.
-    undeclared = [
+
+def undeclared_pairs(scored: list[dict], min_shared: int) -> list[dict]:
+    """Every pair with enough shared material to judge and nothing written down to separate
+    them - no hand-off, or a hand-off that cannot be true because one skill does everything
+    the other does. No second threshold: the threshold only decides WARN from REVIEW.
+    """
+    return [
         pair for pair in scored
-        if len(pair["shared"]) >= args.min_shared
+        if len(pair["shared"]) >= min_shared
         and (not pair["handoff"] or pair["containment"] >= 1.0)
     ]
+
+
+def report_undeclared(undeclared: list[dict], budget: float, args: argparse.Namespace) -> None:
+    """One block per finding, on stderr only when the gate is enforcing it as a failure."""
     for pair in undeclared:
         over = verdict(pair, budget, args.min_shared) == "REVIEW"
         stream = sys.stderr if over and not args.advisory else sys.stdout
@@ -997,6 +998,11 @@ def main() -> int:
                   f"Say in this pull request which one a request should route to, and why "
                   f"both belong.")
 
+
+def summarize(skills: list[dict], scored: list[dict], undeclared: list[dict],
+              budget: float, args: argparse.Namespace) -> int:
+    """The last line and the exit code. REVIEW names the pairs someone here can fix."""
+    needs_review = [p for p in scored if verdict(p, budget, args.min_shared) == "REVIEW"]
     print()
     sys.stdout.flush()
     if needs_review and not args.advisory:
@@ -1018,6 +1024,42 @@ def main() -> int:
     else:
         print(f"OK {summary}, none over {budget:.2f}.")
     return 1 if args.strict and undeclared else 0
+
+
+def main() -> int:
+    args = build_parser().parse_args()
+
+    if not SKILLS_DIR.is_dir():
+        sys.exit(f"FAIL no {SKILLS_DIR.relative_to(REPO_ROOT).as_posix()}")
+
+    BROKEN.which = args.mutate
+    max_overlap = mutated_threshold(args.max_overlap)
+    if BROKEN.which:
+        print(f"# mutation {BROKEN.which}: {MUTATIONS[BROKEN.which]}")
+
+    if args.self_test:
+        return self_test(max_overlap, args.min_shared)
+
+    report = Report()
+    skills = load_all(report)
+    for error in report.errors:
+        print(f"ERR  {error}", file=sys.stderr)
+
+    if args.show:
+        return show_signature(skills, args.show)
+
+    handoffs = handoff_index(skills)
+    scored = pairs(skills, min_shared=args.min_shared, index=handoffs)
+    queue = spread(lexical(skills, min_shared=args.min_shared, index=handoffs), args.queue)
+    if args.json:
+        print(json.dumps({"scored": scored, "queue": queue}, indent=2))
+        return 0
+
+    budget = max_overlap if max_overlap is not None else 1.01
+    print_ranked(scored, queue, args.top)
+    undeclared = undeclared_pairs(scored, args.min_shared)
+    report_undeclared(undeclared, budget, args)
+    return summarize(skills, scored, undeclared, budget, args)
 
 
 if __name__ == "__main__":
