@@ -220,6 +220,41 @@ Only `--check-links` and `sync_external.py --check` reach the network. If the of
 pass, the blocking checks left are about the repository rather than your text: the workflow
 linters and the installer round trip.
 
+### The security scan
+
+Every skill is also scanned by [NVIDIA SkillSpector](https://github.com/NVIDIA/skillspector)
+— static patterns, an AST pass over shipped scripts, YARA signatures, and an OSV.dev lookup
+for named dependencies. It needs the scanner, so it is not part of the offline gate above,
+but it is one command with [`uv`](https://docs.astral.sh/uv/) installed:
+
+```bash
+commit=$(sed -n 's/.*SKILLSPECTOR_COMMIT: \([0-9a-f]\{40\}\).*/\1/p' \
+  .github/workflows/skillspector.yml)
+uv run .github/scripts/skillspector_baseline.py --skill your-skill-name --output base.yaml
+uvx --python 3.12 --from "git+https://github.com/NVIDIA/skillspector.git@${commit}" \
+  skillspector scan skills/your-skill-name --no-llm --format json \
+  --baseline base.yaml --output report.json
+uv run .github/scripts/skillspector_gate.py --report report.json --skill your-skill-name
+```
+
+The commit is read out of the workflow so the version you run is the version CI runs.
+
+Two thresholds, because the two kinds of skill can act on a finding differently:
+
+- **A skill written here fails above 20** — SkillSpector's `SAFE` band. A finding in it can
+  be fixed in the pull request that reports it.
+- **An imported skill fails above 50** — where the scanner itself says `DO_NOT_INSTALL`. Its
+  body stays byte-for-byte the pinned upstream commit, so the repair lands upstream.
+
+Active HIGH/CRITICAL findings below the threshold are reported, not failed.
+
+If the finding is real, fix it. If it is a false positive or a pattern this catalog
+documents on purpose, add a rule to [`.skillspector-baseline.yaml`](.skillspector-baseline.yaml)
+with a `reason`, and list your skill under `skills:` — a rule without it applies to every
+skill in the catalog. The file is the audit trail, so each suppression must be justified.
+Rules are not pinned to a specific version of your skill: they keep applying after the
+surrounding text is reworded.
+
 ## 5. If you are writing a new skill, add a Harbor task
 
 One task under [`evaluation/harbor/tasks/`](evaluation/harbor/tasks): a `task.toml` naming
@@ -279,6 +314,9 @@ Blocking, keyless, and runnable on a fork:
   route for a secret out, or a way to switch a protection off
 - `skills.yaml` has an entry with a maintainer, and the catalog and the tree agree
 - the workflows themselves lint clean (`actionlint`, `zizmor`)
+- SkillSpector scores the skill within the threshold its origin is held to — 20 for a skill
+  written here, 50 for an imported body — with suppressions and their reasons in
+  `.skillspector-baseline.yaml`
 - for a new skill: its Harbor task is solvable, oracle reward 1.0
 - no Harbor task's instruction gives away more than 5 points of its own skill's answer —
   a point per API symbol the skill teaches, three per line of code copyable straight out
@@ -293,7 +331,8 @@ Blocking, keyless, and runnable on a fork:
   5xx or rate limiting only warns, so an outage elsewhere cannot hold up a pull request
 
 Reported but not blocking: the coverage gaps between what a suite claims and what it
-implements, and a dead link in a body this repository copied rather than wrote.
+implements, a dead link in a body this repository copied rather than wrote, and a
+SkillSpector HIGH/CRITICAL finding in a skill whose score is still within its threshold.
 
 ## Evaluation levels
 

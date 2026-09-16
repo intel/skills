@@ -1,0 +1,335 @@
+# This workflow file is copied from [https://github.com/amd/skills]
+# and is licensed under the MIT License.
+# See THIRD-PARTY-PROGRAMS.txt in the root directory for the full text.
+
+name: skillspector
+
+# Statically scan skills under skills/ with SkillSpector to catch malicious
+# patterns and security risks before they land on main. LLM semantic analysis
+# is intentionally disabled (--no-llm): the scan is fully static, needs no API
+# key, and runs in an isolated environment via uvx.
+#
+# To avoid re-scanning the entire catalog on every change, the discovery job
+# only selects the skills that actually changed in the diff. When the scanning
+# machinery itself changes (this workflow, the scripts, or the baseline) we scan
+# every skill instead -- see .github/scripts/changed_skills.py. The weekly cron
+# is the counterpart to that narrowing: the scanner's rules and its OSV data
+# move without anything in this repository changing, and dependabot will not
+# bump the pin below because it watches github-actions and this repository has
+# no Python manifest. Nothing else re-reads a skill nobody is editing.
+#
+# Mirrors the discover-matrix-aggregate shape of validate.yml so each skill is
+# scanned independently and a single aggregate check (the `skillspector` job)
+# rolls them up.
+#
+# Suppressions live in .skillspector-baseline.yaml in SkillSpector's own
+# baseline format, scoped per skill by .github/scripts/skillspector_baseline.py;
+# the scanner applies them itself and recomputes the score over what is left.
+#
+# What fails: a skill scoring above the threshold its origin is held to (20 for
+# a skill authored here, 50 for an imported body -- see skillspector_gate.py for
+# why the two differ), or a scan that did not complete. An active HIGH/CRITICAL
+# finding below the threshold is reported as a ::warning:: annotation and in the
+# job summary, because blocking on it would make "bump an import's pin" mean
+# "bump the pin and then wait for upstream".
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    # Keep this in sync with INFRA_PATHS in changed_skills.py: any path here
+    # that isn't a skill forces a full re-scan of every skill when it changes.
+    paths:
+      - "skills/**"
+      - ".github/workflows/skillspector.yml"
+      - ".github/scripts/changed_skills.py"
+      - ".github/scripts/skillspector_baseline.py"
+      - ".github/scripts/skillspector_gate.py"
+      - ".github/scripts/skillspector_sarif.py"
+      - ".skillspector-baseline.yaml"
+  schedule:
+    # Monday morning, offset from the CodeQL cron so the two do not contend.
+    - cron: "47 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One run per ref, and a superseded run is cancelled rather than queued behind the
+# one that replaced it: a contributor pushing a fixup should not wait for the CI of
+# the commit they just replaced. Keyed on head_ref for a pull request and on ref
+# otherwise, so a pull request and the branch it targets never cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Run SkillSpector pinned to a specific commit for reproducibility and
+  # supply-chain safety. To bump it, update the SHA below to the desired
+  # skillspector commit (e.g. `git ls-remote https://github.com/NVIDIA/skillspector.git main`).
+  # Bump it in its own pull request: the baseline suppresses by rule id, so a
+  # new version can report rules nobody in this repository has triaged yet.
+  #
+  # 69dcdfb7 is v2.11.2 (2026-09-09). The rules this catalog most needs arrived
+  # after the version this workflow first pinned: 939da7d4 (v2.1.1, 2026-06-04)
+  # has no PE5 rule and no YARA stage at all, which is 96 findings across the
+  # catalog against 214, and torch-xpu-run reading `SAFE 0/100` rather than a
+  # HIGH YARA match on `pip install git+https://.../transformers.git`.
+  SKILLSPECTOR_COMMIT: 69dcdfb74487d361ba4c811d088cfdea2ff3a9dc
+
+jobs:
+  # Enumerate the skills the scan job should fan out over. Instead of always
+  # listing every skill, select only the ones that changed relative to the
+  # diff base (or all skills when the scanning machinery itself changed). The
+  # resulting JSON array may be empty, in which case scan-skill is skipped.
+  discover-skills:
+    name: Discover skills
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      skills: ${{ steps.discover.outputs.skills }}
+      sarif: ${{ steps.mode.outputs.sarif }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Need history so we can diff against the base ref below.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          # Nothing to cache: the scripts declare their dependencies inline and
+          # skillspector comes from a pinned git ref, so uv's dependency-glob
+          # matches no manifest and every job warns about it. Off, not noisy.
+          enable-cache: false
+
+      # On pull_request, diff against the PR base; on push, diff against the
+      # commit we pushed over; otherwise (cron or manual run) leave it empty so
+      # the script falls back to scanning every skill.
+      - name: Determine diff base
+        id: base
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            echo "ref=$PR_BASE_SHA" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT_NAME" = "push" ]; then
+            echo "ref=$PUSH_BEFORE" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Select changed skills
+        id: discover
+        env:
+          BASE_REF: ${{ steps.base.outputs.ref }}
+        run: echo "skills=$(uv run .github/scripts/changed_skills.py --base "$BASE_REF")" >> "$GITHUB_OUTPUT"
+
+      # Whether the run can upload to code scanning at all. A fork's token is
+      # read-only for security-events, and the upload needs GitHub Advanced
+      # Security, which a public repository has and a private one does not --
+      # the same guard codeql.yml carries. When this is false the scan skips its
+      # SARIF pass entirely rather than producing a file with nowhere to go, and
+      # the annotations plus the job summary are what carries the findings.
+      - name: Decide whether SARIF can be uploaded
+        id: mode
+        env:
+          VISIBILITY: ${{ github.event.repository.visibility }}
+          IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
+        run: |
+          if [ "$VISIBILITY" = "public" ] && [ "$IS_FORK" != "true" ]; then
+            echo "sarif=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "sarif=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  scan-skill:
+    name: Scan skill
+    needs: discover-skills
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      # Don't cancel the other skills when one fails; we want to see every
+      # skill's scan result in a single run.
+      fail-fast: false
+      matrix:
+        skill: ${{ fromJson(needs.discover-skills.outputs.skills) }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          # Nothing to cache: the scripts declare their dependencies inline and
+          # skillspector comes from a pinned git ref, so uv's dependency-glob
+          # matches no manifest and every job warns about it. Off, not noisy.
+          enable-cache: false
+
+      # The scanner's rule schema has no field for the skill a rule belongs to,
+      # so the shared baseline is filtered down to this skill's rules here and
+      # the CLI is handed the result. A `skills:` scope naming nothing on disk
+      # fails this step rather than silently suppressing nothing.
+      - name: Materialize this skill's baseline
+        env:
+          SKILL: ${{ matrix.skill }}
+        run: |
+          uv run .github/scripts/skillspector_baseline.py \
+            --skill "$SKILL" --output "baseline.yaml"
+
+      - name: Scan skill with SkillSpector
+        env:
+          SKILL: ${{ matrix.skill }}
+          WANT_SARIF: ${{ needs.discover-skills.outputs.sarif }}
+        run: |
+          set -uo pipefail
+          mkdir -p reports sarif
+
+          uvx --python 3.12 \
+            --from "git+https://github.com/NVIDIA/skillspector.git@${SKILLSPECTOR_COMMIT}" \
+            skillspector scan "skills/${SKILL}" \
+              --no-llm --format json --baseline baseline.yaml \
+              --output "reports/${SKILL}.json"
+          scan_code=$?
+
+          # The CLI exits 1 when the aggregate score lands in a band it calls
+          # DO_NOT_INSTALL; that verdict is the gate's to make against this
+          # repository's thresholds, so only exit 2 and above -- the tool itself
+          # failing -- is treated as no answer.
+          if [ "$scan_code" -ge 2 ]; then
+            echo "::error title=SkillSpector error::SkillSpector exited ${scan_code} while scanning '${SKILL}'; no result to gate on."
+            {
+              echo "### :x: ${SKILL}: SkillSpector errored"
+              echo "SkillSpector exited ${scan_code} (tool error). Re-run the workflow or investigate the step log."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          # A second pass, because the CLI writes one format per run: the score
+          # the gate needs is in the JSON and the shape code scanning reads is in
+          # the SARIF. Only paid for when there is somewhere to send it. A
+          # failure here does not fail the scan -- the gate already has its
+          # answer, and the merge job reports the missing file.
+          if [ "$WANT_SARIF" = "true" ]; then
+            uvx --python 3.12 \
+              --from "git+https://github.com/NVIDIA/skillspector.git@${SKILLSPECTOR_COMMIT}" \
+              skillspector scan "skills/${SKILL}" \
+                --no-llm --format sarif --baseline baseline.yaml \
+                --output "sarif/${SKILL}.sarif" \
+              || echo "::warning title=SkillSpector SARIF::The SARIF pass for '${SKILL}' did not produce a file."
+          fi
+
+      # Compares the score against the threshold this skill's origin is held to,
+      # prints every active finding, annotates the HIGH/CRITICAL ones on the diff
+      # and writes the job-summary entry. Exits non-zero only for an
+      # over-threshold score or a scan that did not complete.
+      - name: Gate on score for this skill's origin
+        env:
+          SKILL: ${{ matrix.skill }}
+        run: |
+          uv run .github/scripts/skillspector_gate.py \
+            --report "reports/${SKILL}.json" --skill "$SKILL" --annotate
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: skillspector-report-${{ matrix.skill }}
+          path: |
+            reports/${{ matrix.skill }}.json
+            sarif/${{ matrix.skill }}.sarif
+          if-no-files-found: warn
+
+  # One alert per active finding in the Security tab, and on a pull request the
+  # ones its own diff introduced. Suppressed findings are deliberately not
+  # uploaded: code scanning ignores SARIF `suppressions` (measured -- 214 results
+  # uploaded, 197 carrying a justification from the baseline, all 214 came back
+  # open), so uploading them would put 197 alerts nobody will act on in front of
+  # the ones that want reading. The reasons stay in .skillspector-baseline.yaml.
+  upload-sarif:
+    name: Upload to code scanning
+    needs: [discover-skills, scan-skill]
+    if: always() && needs.discover-skills.outputs.sarif == 'true' && needs.discover-skills.outputs.skills != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          # Nothing to cache: the scripts declare their dependencies inline and
+          # skillspector comes from a pinned git ref, so uv's dependency-glob
+          # matches no manifest and every job warns about it. Off, not noisy.
+          enable-cache: false
+
+      - name: Download per-skill reports
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: skillspector-report-*
+          path: downloads
+
+      # GitHub accepts a bounded number of SARIF uploads per commit and the
+      # matrix can be the whole catalog, so the runs are merged into one file
+      # with repository-root paths. --expect makes a missing per-skill file fail
+      # here rather than pass as a skill with nothing to report.
+      - name: Merge SARIF
+        env:
+          SKILLS_JSON: ${{ needs.discover-skills.outputs.skills }}
+        run: |
+          expect="$(printf '%s' "$SKILLS_JSON" | jq -r 'join(",")')"
+          uv run .github/scripts/skillspector_sarif.py \
+            --input-dir downloads --output skillspector.sarif --expect "$expect"
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938
+        with:
+          sarif_file: skillspector.sarif
+          # Its own category, so this upload and CodeQL's do not overwrite each
+          # other's alerts on the same commit.
+          category: skillspector
+
+  # Single check that aggregates the per-skill matrix, so branch protection has
+  # one name to require rather than one per skill. It goes red when a scan job
+  # did not complete or when the gate failed a skill; findings below a skill's
+  # threshold are warnings on the matrix jobs and do not reach here.
+  #
+  # Because matrix jobs run independently under `fail-fast: false`, we inspect
+  # the job result explicitly rather than relying on `needs` short-circuiting.
+  skillspector:
+    name: SkillSpector security scan
+    needs: [scan-skill, upload-sarif]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Summarize scan results
+        env:
+          SCAN_RESULT: ${{ needs.scan-skill.result }}
+          UPLOAD_RESULT: ${{ needs.upload-sarif.result }}
+        run: |
+          echo "scan-skill result: $SCAN_RESULT"
+          echo "upload-sarif result: $UPLOAD_RESULT"
+          # "skipped" means the matrix was empty -- no changed skills to scan.
+          if [ "$SCAN_RESULT" != "success" ] && [ "$SCAN_RESULT" != "skipped" ]; then
+            echo "One or more skills failed the SkillSpector gate, or a scan job did not complete (result: $SCAN_RESULT). See the job summary." >&2
+            exit 1
+          fi
+          # A failed upload is a coverage gap in the Security tab, not a finding,
+          # but it is not allowed to pass unremarked either.
+          if [ "$UPLOAD_RESULT" = "failure" ]; then
+            echo "::warning title=SkillSpector SARIF upload failed::The scans passed but the code-scanning upload did not; alerts for this commit may be incomplete."
+          fi
+          echo "SkillSpector scans completed."
