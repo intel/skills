@@ -81,6 +81,16 @@ jobs:
       - name: Link check
         run: python3 tools/validate_skills.py --check-links
 
+      # The staleness detector behind the weekly upstream-sync job, asserted here rather
+      # than only there: that workflow runs on a schedule, so a pull request that breaks
+      # the detector would otherwise be merged and only found out about on a Monday. It is
+      # offline and reads this tree's own catalog, so it belongs with the level 1 gate.
+      # Every way it can break reports that nothing upstream moved, which is
+      # indistinguishable from an upstream nobody touched; --mutate M1..M7 is how each of
+      # those breaks was shown to turn this red.
+      - name: Staleness detector still detects
+        run: python3 tools/check_upstream.py --self-test
+
       # The other check that needs someone else's server, and the counterpart to the
       # offline half in validate_skills.py: that one compares a vendored copy against
       # the pin in skills.yaml, this one re-fetches the pinned commit and compares the
