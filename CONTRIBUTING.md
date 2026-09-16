@@ -214,11 +214,20 @@ python3 tools/validate_skills.py --check-links   # also checks external URLs; ne
 python3 tools/run_evals.py --validate            # only if you wrote evals/evals.json
 python3 tools/lint_task_leakage.py --fail-on-leak 5   # only if you wrote a Harbor task
 python3 tools/sync_external.py --check           # only if you imported a skill
+python3 tools/lint_skill_overlap.py --max-overlap 0.65 --min-shared 8 --advisory
 ```
 
 Only `--check-links` and `sync_external.py --check` reach the network. If the offline ones
 pass, the blocking checks left are about the repository rather than your text: the workflow
 linters and the installer round trip.
+
+The last one does not block and is worth running anyway: it lists the skills that drive the
+same commands, flags and API calls as yours without either description saying which one a
+request should route to. Answer it in the pull request rather than by editing a number —
+two skills sharing a tool is normal here, two skills competing silently for the same
+request is not. It also prints a short queue ranked by name and description alone, which is
+all that reaches a skill with too little code to compare; that queue is a reading order and
+settles nothing.
 
 ## 5. If you are writing a new skill, add a Harbor task
 
@@ -293,7 +302,12 @@ Blocking, keyless, and runnable on a fork:
   5xx or rate limiting only warns, so an outage elsewhere cannot hold up a pull request
 
 Reported but not blocking: the coverage gaps between what a suite claims and what it
-implements, and a dead link in a body this repository copied rather than wrote.
+implements, a dead link in a body this repository copied rather than wrote, and a pair of
+skills that drive the same actions with no hand-off written between them. The last is
+annotated on the pull request and left to the reviewer, because which of two overlapping
+skills should win is a judgement about the catalog rather than about the bytes. What does
+block is that check's own self-test: a detector that has stopped detecting reports a clean
+zero for every pair, which reads exactly like a catalog with no duplication.
 
 ## Evaluation levels
 

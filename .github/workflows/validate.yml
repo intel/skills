@@ -72,6 +72,39 @@ jobs:
       - name: Task leakage
         run: python3 tools/lint_task_leakage.py --fail-on-leak 5
 
+      # Same argument as above, and the failure is even quieter: a fence regex that stops
+      # matching scores every pair 0, which reads exactly like a catalog with no
+      # duplication.
+      - name: Overlap detector still detects
+        run: python3 tools/lint_skill_overlap.py --self-test
+
+      # Two skills driving the same tool with the same flags compete for the same request.
+      # That is fine and this catalog is full of such pairs — as long as one of them says
+      # which is which. This reports a pair with no hand-off written either way, ranking
+      # first the ones over the threshold with a skill authored here, since an import can
+      # only be repaired upstream.
+      #
+      # --advisory, so it annotates the pull request and exits 0: whether two overlapping
+      # skills should be merged, split, or left alone is a judgement about the catalog that a
+      # reviewer makes with the contributor. A threshold that made it for them would be
+      # wrong in both directions — blocking a legitimate composition pair, and passing the
+      # restatement in prose it cannot see at all. The step above does block, because a
+      # detector that has stopped detecting is not a judgement call.
+      #
+      # It also prints a short queue ranked by name and description overlap alone, covering
+      # the pairs with too little code to compare — a reading order only, since on this tree
+      # that ranking agrees with the action score on 2 pairs of 14 and would drop 4 of them
+      # if it were used to decide what gets compared.
+      #
+      # 0.65 is the next 0.05 step above the highest-scoring judgeable pair in the tree
+      # (dpnp-quickstart | dpnp-troubleshooting, 0.6154), so nothing already merged is
+      # reported. It is not a constant to be defended: that ceiling was measured to rise
+      # with the catalog — 0.36 at 12 skills, 0.56 at 20, 0.62 at 33 — so the self-test
+      # bounds the threshold to 1.0-1.5x of it and asks for this number to move up when
+      # the catalog grows into it. A verbatim copy scores 1.0 and is reported regardless.
+      - name: Skill overlap
+        run: python3 tools/lint_skill_overlap.py --max-overlap 0.65 --min-shared 8 --advisory
+
       # Its own step because it is the one check that depends on someone else's
       # server. A 404 or 410 fails it — that is a pointer an agent would follow
       # into nothing — unless the link came from an imported body, where it warns
