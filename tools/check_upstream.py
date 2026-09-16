@@ -30,6 +30,12 @@ somebody made there and may be one this catalog does not want.
     python3 tools/check_upstream.py --update         # move the pins and re-vendor, no git
     python3 tools/check_upstream.py --open-pr        # branch, commit, push, open the pull request
     python3 tools/check_upstream.py --open-pr --dry-run   # print what that would run
+    python3 tools/check_upstream.py --open-pr --remote fork --against intel   # from a fork
+
+The workflow pushes to the repository it runs in, where the branch and the pull request
+live in the same place. A maintainer running this by hand pushes to their fork and opens
+against this repository, so the two are separate: `--remote` is pushed to, `--against`
+is opened against, and it defaults to `--remote`.
 
 Exit status is about this repository, not about upstream: a pin that no longer resolves,
 or a pinned path that is no longer a directory upstream, fails. An upstream that has
@@ -86,6 +92,7 @@ MUTATIONS = {
     "M6": "parse_symref reads the commit off the symbolic-ref line",
     "M7": "branch_name leaves the target commit out of the branch",
     "M8": "parse_remote_url accepts a remote that is not a github repository",
+    "M9": "head_ref leaves the fork's owner off a branch pushed somewhere else",
 }
 
 
@@ -347,6 +354,18 @@ def remote_slug(remote: str) -> str:
     return parse_remote_url(git("remote", "get-url", remote), remote)
 
 
+def head_ref(push_slug: str, target_slug: str, branch: str) -> str:
+    """How the branch is named to the repository the pull request is opened against.
+
+    A branch pushed to a fork is not a ref of the target repository, so `gh` has to be
+    told whose it is. Without the owner the request either names a branch of the target
+    that does not exist, or -- worse -- one that does and was never part of this move.
+    """
+    if push_slug == target_slug or BROKEN.which == "M9":
+        return branch
+    return f"{push_slug.split('/')[0]}:{branch}"
+
+
 def already_proposed(branch: str, slug: str) -> str | None:
     """Whether this move, or an earlier one for the same upstream, is already open."""
     listed = gh(
@@ -372,15 +391,17 @@ def already_proposed(branch: str, slug: str) -> str | None:
     return None
 
 
-def dry_run(record: dict, remote: str, base: str) -> None:
+def dry_run(record: dict, remote: str, against: str, base: str) -> None:
     """Print the run without doing any of it, including the body a reviewer would read."""
     branch = record["branch"]
+    target = remote_slug(against)
+    head = head_ref(remote_slug(remote), target, branch)
     for line in (
-        f"git switch --create {branch} {remote}/{base}",
+        f"git switch --create {branch} {against}/{base}",
         f"{TOOL} --update {upstream_slug(record['repo'])}",
         f"git add -- skills skills.yaml NOTICE && git commit -m {commit_subject(record)!r}",
         f"git push {remote} HEAD:refs/heads/{branch}",
-        f"gh pr create --repo {remote_slug(remote)} --base {base} --head {branch} "
+        f"gh pr create --repo {target} --base {base} --head {head} "
         f"--title {commit_subject(record)!r}",
     ):
         print(f"     would run: {line}")
@@ -388,7 +409,7 @@ def dry_run(record: dict, remote: str, base: str) -> None:
     print("".join(f"     | {line}\n" for line in pr_body(record).splitlines()), end="")
 
 
-def propose(record: dict, remote: str) -> None:
+def propose(record: dict, remote: str, against: str) -> None:
     """Branch, re-vendor, commit, push, and open the pull request for one moved upstream."""
     branch = record["branch"]
     if dirty := git("status", "--porcelain"):
@@ -396,15 +417,17 @@ def propose(record: dict, remote: str) -> None:
             "FAIL the working tree has uncommitted changes, and a pull request from it would "
             f"carry them: {dirty.splitlines()[0]}"
         )
-    slug = remote_slug(remote)
-    if existing := already_proposed(branch, slug):
+    target = remote_slug(against)
+    if existing := already_proposed(branch, target):
         print(f"SKIP {upstream_slug(record['repo'])}: {existing}")
         return
 
-    base = base_branch(remote)
-    git("fetch", "--quiet", remote)
-    git("switch", "--quiet", "--create", branch, f"{remote}/{base}")
-    print(f"     branched {branch} off {remote}/{base}")
+    # Off the target's default branch, not the fork's: a fork can be behind, and a pull
+    # request branched off a stale base carries whatever it is missing as a deletion.
+    base = base_branch(against)
+    git("fetch", "--quiet", against)
+    git("switch", "--quiet", "--create", branch, f"{against}/{base}")
+    print(f"     branched {branch} off {against}/{base}")
     bump(record)
     git("add", "--", "skills", "skills.yaml", "NOTICE")
     git(
@@ -419,9 +442,9 @@ def propose(record: dict, remote: str) -> None:
     git("push", "--quiet", remote, f"HEAD:refs/heads/{branch}")
     url = gh(
         "pr", "create",
-        "--repo", slug,
+        "--repo", target,
         "--base", base,
-        "--head", branch,
+        "--head", head_ref(remote_slug(remote), target, branch),
         "--title", commit_subject(record),
         "--body-file", "-",
         stdin=pr_body(record),
@@ -459,7 +482,7 @@ def self_test() -> int:
 
     Every number below is a property of the catalog as it stands rather than a fixture,
     so a pin moved by hand or a rewrite that reaches too far shows up here. --mutate
-    M1..M8 breaks one thing each, and each of them must turn one of these lines red.
+    M1..M9 breaks one thing each, and each of them must turn one of these lines red.
     """
     failures: list[str] = []
 
@@ -581,6 +604,15 @@ def self_test() -> int:
         check(False, "a remote that is not a github repository fails rather than being guessed")
     except SystemExit:
         check(True, "a remote that is not a github repository fails rather than being guessed")
+    check(
+        head_ref("intel/skills", "intel/skills", "sync/x-1") == "sync/x-1",
+        "a branch pushed to the repository it is proposed to is named by itself",
+    )
+    check(
+        head_ref("someone/skills", "intel/skills", "sync/x-1") == "someone:sync/x-1",
+        "and one pushed to a fork carries the fork's owner, or it names a branch of this "
+        "repository instead",
+    )
 
     body = pr_body(
         {**subject, "head": head, "default-branch": "main", "changed": [subject["skills"][one]]}
@@ -615,8 +647,10 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="with --open-pr: print the commands and the body, change nothing",
     )
+    parser.add_argument("--remote", default="origin", help="the remote to push to (origin)")
     parser.add_argument(
-        "--remote", default="origin", help="the remote to push to and open against (origin)"
+        "--against",
+        help="the remote whose repository the pull request is opened against (--remote)",
     )
     parser.add_argument("repos", nargs="*", help="limit to these upstreams (default: all)")
     parser.add_argument("--mutate", choices=sorted(MUTATIONS), help=argparse.SUPPRESS)
@@ -663,14 +697,15 @@ def main() -> int:
         return 0
 
     render(records)
+    against = args.against or args.remote
     stale = [record for record in records if record["state"] == "stale"]
     for record in stale:
         if args.update:
             bump(record)
         elif args.open_pr and args.dry_run:
-            dry_run(record, args.remote, base_branch(args.remote))
+            dry_run(record, args.remote, against, base_branch(against))
         elif args.open_pr:
-            propose(record, args.remote)
+            propose(record, args.remote, against)
     return 1 if any(record["state"] == "broken" for record in records) else 0
 
 

@@ -86,7 +86,7 @@ jobs:
       # the detector would otherwise be merged and only found out about on a Monday. It is
       # offline and reads this tree's own catalog, so it belongs with the level 1 gate.
       # Every way it can break reports that nothing upstream moved, which is
-      # indistinguishable from an upstream nobody touched; --mutate M1..M8 is how each of
+      # indistinguishable from an upstream nobody touched; --mutate M1..M9 is how each of
       # those breaks was shown to turn this red.
       - name: Staleness detector still detects
         run: python3 tools/check_upstream.py --self-test

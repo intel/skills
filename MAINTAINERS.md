@@ -232,7 +232,10 @@ What that pull request is *not* is a decision. It says only that upstream's byte
 whether they should be published here is what its checks and its reviewer are for. The
 diff to read is the skill text, not the pin. Run it by hand with
 `python3 tools/check_upstream.py` for the survey, `--json` for the same thing as data, and
-`--update` to move a pin locally without opening anything.
+`--update` to move a pin locally without opening anything. To open the same pull request by
+hand from a fork, `--open-pr --remote <your fork> --against <this repository>`: the branch
+goes to the fork, the pull request is opened here and branched off this repository's default
+branch rather than the fork's, and `--dry-run` prints all of it without doing any of it.
 
 ## CI
 

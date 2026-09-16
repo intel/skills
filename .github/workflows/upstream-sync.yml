@@ -65,7 +65,7 @@ jobs:
       # First, and for the same reason the other two self-tests run before the gates they
       # stand behind: every way this detector can break leaves it reporting that nothing
       # upstream has moved, which is indistinguishable from an upstream nobody has touched.
-      # --mutate M1..M8 is how each of those breaks was shown to turn this red.
+      # --mutate M1..M9 is how each of those breaks was shown to turn this red.
       - name: Staleness detector still detects
         run: python3 tools/check_upstream.py --self-test
 
