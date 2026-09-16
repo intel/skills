@@ -462,7 +462,7 @@ def render(records: list[dict]) -> None:
         elif record["state"] == "identical":
             print(
                 f"OK   {where}: {record['default-branch']} moved to {record['head'][:12]} and "
-                f"none of the {count} pinned directories changed — nothing to update"
+                f"none of the {count} pinned directories changed, nothing to update"
             )
         elif record["state"] == "stale":
             print(
