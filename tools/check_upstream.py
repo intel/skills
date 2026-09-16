@@ -599,11 +599,13 @@ def self_test() -> int:
         ),
         "the remote a pull request is opened against is read off its url, in both spellings",
     )
-    try:
-        parse_remote_url("/tmp/somewhere.git", "r")
-        check(False, "a remote that is not a github repository fails rather than being guessed")
-    except SystemExit:
-        check(True, "a remote that is not a github repository fails rather than being guessed")
+    for url in ("../skills.git", "git@example.com:someone/skills.git"):
+        try:
+            parse_remote_url(url, "r")
+            caught = False
+        except SystemExit:
+            caught = True
+        check(caught, f"{url} is not a github repository and fails rather than being guessed")
     check(
         head_ref("intel/skills", "intel/skills", "sync/x-1") == "sync/x-1",
         "a branch pushed to the repository it is proposed to is named by itself",
