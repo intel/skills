@@ -85,6 +85,7 @@ MUTATIONS = {
     "M5": "groups keys by skill instead of by upstream repository",
     "M6": "parse_symref reads the commit off the symbolic-ref line",
     "M7": "branch_name leaves the target commit out of the branch",
+    "M8": "parse_remote_url accepts a remote that is not a github repository",
 }
 
 
@@ -319,13 +320,45 @@ def base_branch(remote: str) -> str:
     return ref.split("/", 1)[1] if done.returncode == 0 and "/" in ref else "main"
 
 
-def already_proposed(branch: str) -> str | None:
+def parse_remote_url(url: str, remote: str) -> str:
+    """`owner/name` for a github remote, in either the https or the ssh spelling."""
+    trimmed = url.strip().removesuffix("/").removesuffix(".git")
+    for prefix in ("https://github.com/", "git@github.com:", "ssh://git@github.com/"):
+        if trimmed.startswith(prefix):
+            slug = trimmed[len(prefix) :]
+            if slug.count("/") == 1 and all(slug.split("/")):
+                return slug
+    if BROKEN.which == "M8":
+        return "intel/skills"
+    raise SystemExit(
+        f"FAIL remote {remote!r} is {url.strip()!r}, which is not a github repository. The "
+        "pull request is opened against the repository that remote names, so it has to be "
+        "one"
+    )
+
+
+def remote_slug(remote: str) -> str:
+    """Which repository `gh` is to act on, taken from the remote rather than guessed.
+
+    `gh` resolves a bare `pr list` from whatever remotes the checkout has, which is one
+    repository in CI and several in a maintainer's clone -- there it can answer about, or
+    open against, a repository nobody asked for.
+    """
+    return parse_remote_url(git("remote", "get-url", remote), remote)
+
+
+def already_proposed(branch: str, slug: str) -> str | None:
     """Whether this move, or an earlier one for the same upstream, is already open."""
-    listed = gh("pr", "list", "--state", "all", "--head", branch, "--json", "number,state")
+    listed = gh(
+        "pr", "list", "--repo", slug, "--state", "all", "--head", branch,
+        "--json", "number,state",
+    )
     if same := json.loads(listed):
         return f"#{same[0]['number']} ({same[0]['state'].lower()}) already proposes {branch}"
     prefix = f"{branch.rsplit('-', 1)[0]}-"
-    open_prs = json.loads(gh("pr", "list", "--state", "open", "--json", "number,headRefName"))
+    open_prs = json.loads(
+        gh("pr", "list", "--repo", slug, "--state", "open", "--json", "number,headRefName")
+    )
     others = [
         pull
         for pull in open_prs
@@ -347,7 +380,8 @@ def dry_run(record: dict, remote: str, base: str) -> None:
         f"{TOOL} --update {upstream_slug(record['repo'])}",
         f"git add -- skills skills.yaml NOTICE && git commit -m {commit_subject(record)!r}",
         f"git push {remote} HEAD:refs/heads/{branch}",
-        f"gh pr create --base {base} --head {branch} --title {commit_subject(record)!r}",
+        f"gh pr create --repo {remote_slug(remote)} --base {base} --head {branch} "
+        f"--title {commit_subject(record)!r}",
     ):
         print(f"     would run: {line}")
     print("     not asked here: whether that pull request already exists, which is a gh call")
@@ -362,7 +396,8 @@ def propose(record: dict, remote: str) -> None:
             "FAIL the working tree has uncommitted changes, and a pull request from it would "
             f"carry them: {dirty.splitlines()[0]}"
         )
-    if existing := already_proposed(branch):
+    slug = remote_slug(remote)
+    if existing := already_proposed(branch, slug):
         print(f"SKIP {upstream_slug(record['repo'])}: {existing}")
         return
 
@@ -384,6 +419,7 @@ def propose(record: dict, remote: str) -> None:
     git("push", "--quiet", remote, f"HEAD:refs/heads/{branch}")
     url = gh(
         "pr", "create",
+        "--repo", slug,
         "--base", base,
         "--head", branch,
         "--title", commit_subject(record),
@@ -423,7 +459,7 @@ def self_test() -> int:
 
     Every number below is a property of the catalog as it stands rather than a fixture,
     so a pin moved by hand or a rewrite that reaches too far shows up here. --mutate
-    M1..M7 breaks one thing each, and each of them must turn one of these lines red.
+    M1..M8 breaks one thing each, and each of them must turn one of these lines red.
     """
     failures: list[str] = []
 
@@ -528,6 +564,23 @@ def self_test() -> int:
         check(False, "a listing with no symbolic ref for HEAD fails")
     except SyncError:
         check(True, "a listing with no symbolic ref for HEAD fails")
+
+    check(
+        all(
+            parse_remote_url(url, "r") == "intel/skills"
+            for url in (
+                "https://github.com/intel/skills",
+                "https://github.com/intel/skills.git",
+                "git@github.com:intel/skills.git",
+            )
+        ),
+        "the remote a pull request is opened against is read off its url, in both spellings",
+    )
+    try:
+        parse_remote_url("/tmp/somewhere.git", "r")
+        check(False, "a remote that is not a github repository fails rather than being guessed")
+    except SystemExit:
+        check(True, "a remote that is not a github repository fails rather than being guessed")
 
     body = pr_body(
         {**subject, "head": head, "default-branch": "main", "changed": [subject["skills"][one]]}
