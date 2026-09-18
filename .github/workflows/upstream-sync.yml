@@ -1,0 +1,97 @@
+name: Upstream sync
+
+# Twenty-three of this repository's skills are copies of two upstream repositories at a
+# pinned commit. `sync_external.py --check` proves the copy still is that commit, on every
+# pull request. Nothing proved the pin is still the commit upstream maintains — and that
+# failure is silent, because a stale pin keeps every check green while what this catalog
+# publishes falls behind what its authors ship.
+#
+# So this asks the other half weekly: has the pinned directory changed at the tip of
+# upstream's default branch, and if so, here is the pull request that moves it. What the
+# tool compares, and why a moved pin with unchanged bytes is deliberately not reported,
+# is in tools/check_upstream.py.
+#
+# Whether the new text should be merged is not decided here. It is decided by the checks
+# on that pull request and by whoever reviews it — an import is somebody else's document,
+# so a change in it is a change somebody made there.
+
+on:
+  schedule:
+    # Weekly, an hour before the security scan, so a Monday morning has one place to look.
+    - cron: "43 8 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Report what would be proposed, and open nothing"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    # Only in the repository this catalog is published from. A fork running this on its
+    # own schedule would push branches and open pull requests against itself, which is
+    # noise nobody asked for, and the fork's pins move when it merges from here.
+    if: github.repository == 'intel/skills'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      # Read once here rather than in a step condition: the secrets context is not
+      # available everywhere an expression is, and its value is a yes or a no.
+      SYNC_TOKEN_SET: ${{ secrets.UPSTREAM_SYNC_TOKEN != '' }}
+    steps:
+      # Full history and persisted credentials, both because this job commits and pushes:
+      # a push from a shallow clone is refused, and the push needs the token that checkout
+      # stores. Every other workflow here checks out read-only and shallow.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # zizmor: ignore[artipacked]
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          token: ${{ secrets.UPSTREAM_SYNC_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+
+      # First, and for the same reason the other two self-tests run before the gates they
+      # stand behind: every way this detector can break leaves it reporting that nothing
+      # upstream has moved, which is indistinguishable from an upstream nobody has touched.
+      # --mutate M1..M9 is how each of those breaks was shown to turn this red.
+      - name: Staleness detector still detects
+        run: python3 tools/check_upstream.py --self-test
+
+      # A token belonging to an account or an app is what makes the pull request run its
+      # own checks: GitHub starts no workflow run for anything GITHUB_TOKEN does. Without
+      # UPSTREAM_SYNC_TOKEN the pull request is still opened and still correct, it just
+      # arrives with no checks until somebody pushes to it or closes and reopens it, and
+      # its body says so. Warned rather than failed, because a catalog that finds out its
+      # pins are stale is better off than one that does not.
+      - name: Note which token the pull request will be opened with
+        if: env.SYNC_TOKEN_SET != 'true'
+        run: |
+          echo "::warning::UPSTREAM_SYNC_TOKEN is not set, so any pull request from this" \
+               "run is opened by GITHUB_TOKEN and will carry no checks until somebody" \
+               "pushes to its branch."
+
+      - name: Survey the pins, and propose what moved
+        env:
+          GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN || secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ "${DRY_RUN}" = "true" ]; then
+            python3 tools/check_upstream.py --open-pr --dry-run
+          else
+            python3 tools/check_upstream.py --open-pr
+          fi
