@@ -1,0 +1,181 @@
+---
+import type { BundleIconVariant } from '../lib/bundle-visuals';
+
+interface Props {
+  variant: BundleIconVariant;
+  class?: string;
+}
+
+const { variant, class: className } = Astro.props;
+---
+
+<svg class:list={['bundle-icon', className]} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+  {
+    variant === 'gpu-host' && (
+      <>
+        <rect x="4" y="5" width="16" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <path d="M8 19h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+        <rect x="9" y="8.5" width="6" height="4" rx="0.75" fill="none" stroke="currentColor" stroke-width="1.5" />
+      </>
+    )
+  }
+  {
+    variant === 'migration' && (
+      <>
+        <path
+          d="M5 8h11M13 5l3 3-3 3"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+        <path
+          d="M19 16H8M11 13l-3 3 3 3"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </>
+    )
+  }
+  {
+    variant === 'deploy' && (
+      <>
+        <path
+          d="M6 10l6-4 6 4v8l-6 4-6-4v-8z"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linejoin="round"
+        />
+        <path d="M12 6v16M6 10l12 8M18 10 6 18" stroke="currentColor" stroke-width="1.5" />
+      </>
+    )
+  }
+  {
+    variant === 'vllm' && (
+      <path
+        d="M13 3L5 14h6l-1 7 8-11h-6l1-7z"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linejoin="round"
+      />
+    )
+  }
+  {
+    variant === 'pytorch' && (
+      <>
+        <circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <path
+          d="M12 4.5c2.5 2.5 2.5 12.5 0 15M12 4.5c-2.5 2.5-2.5 12.5 0 15M5.5 9h13M5.5 15h13"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+        />
+      </>
+    )
+  }
+  {
+    variant === 'sglang' && (
+      <>
+        <path
+          d="M6 7h12a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-4 3v-3H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linejoin="round"
+        />
+        <path d="M8.5 11h7M8.5 14h4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      </>
+    )
+  }
+  {
+    variant === 'llamacpp' && (
+      <>
+        <path
+          d="M8 4h8l2 3v13H6V7l2-3z"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linejoin="round"
+        />
+        <path d="M9 11h6M9 14h6M9 17h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      </>
+    )
+  }
+  {
+    variant === 'profile' && (
+      <>
+        <path d="M4 18V6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+        <path
+          d="M4 14l4.5-4 3.5 2.5L16 7l4 3"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </>
+    )
+  }
+  {
+    variant === 'dpnp' && (
+      <>
+        <rect x="5" y="5" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <rect x="14" y="5" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <rect x="5" y="14" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <rect x="14" y="14" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5" />
+      </>
+    )
+  }
+  {
+    variant === 'cpu-python' && (
+      <>
+        <rect x="6" y="6" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <path d="M9 6V4.5M15 6V4.5M9 18v1.5M15 18v1.5M6 9H4.5M6 15H4.5M18 9h1.5M18 15h1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+        <rect x="10" y="10" width="4" height="4" rx="0.5" fill="none" stroke="currentColor" stroke-width="1.5" />
+      </>
+    )
+  }
+  {
+    variant === 'perf' && (
+      <>
+        <path
+          d="M12 4a8 8 0 1 1-5.3 14"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+        />
+        <path d="M12 12V7M12 12l3.5 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      </>
+    )
+  }
+  {
+    variant === 'bundle' && (
+      <>
+        <path d="M5 8h14v10H5V8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+        <path
+          d="M5 11h14M9 8V6.5A1.5 1.5 0 0 1 10.5 5h3A1.5 1.5 0 0 1 15 6.5V8"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+        />
+      </>
+    )
+  }
+</svg>
+
+<style>
+  .bundle-icon {
+    width: 1.375rem;
+    height: 1.375rem;
+    flex: none;
+  }
+</style>

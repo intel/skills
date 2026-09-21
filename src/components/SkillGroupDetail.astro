@@ -1,0 +1,161 @@
+---
+import BundleSkillRow from './BundleSkillRow.astro';
+import InstallCommand from './InstallCommand.astro';
+import type { SkillGroup } from '../lib/groups';
+import { renderInline } from '../lib/markdown';
+
+interface Props {
+  group: SkillGroup;
+}
+
+const { group } = Astro.props;
+const skillLabel = group.skills.length === 1 ? 'skill' : 'skills';
+---
+
+<section class="group-detail" data-group-detail={group.id} hidden>
+  <div class="group-detail__nav">
+    <button type="button" class="group-detail__back" data-group-back>
+      <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <path
+          d="M12 4l-6 6 6 6"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.75"
+          stroke-linecap="round"
+          stroke-linejoin="round"></path>
+      </svg>
+      All bundles
+    </button>
+  </div>
+
+  <header class="group-detail__header">
+    <h2 class="group-detail__title">{group.title}</h2>
+    {
+      group.description ? (
+        <p class="group-detail__description" set:html={renderInline(group.description)} />
+      ) : null
+    }
+  </header>
+
+  <section class="group-detail__install">
+    <h3 class="group-detail__heading">
+      Install this bundle ({group.skills.length} {skillLabel})
+    </h3>
+    <InstallCommand command={group.installCommand} />
+  </section>
+
+  <section class="group-detail__skills" aria-labelledby={`bundle-skills-${group.id}`}>
+    <h3 class="group-detail__heading" id={`bundle-skills-${group.id}`}>
+      Skills in this bundle
+    </h3>
+    <div class="group-detail__skill-list">
+      {group.skills.map((skill) => <BundleSkillRow skill={skill} />)}
+    </div>
+  </section>
+</section>
+
+<style>
+  .group-detail__nav {
+    margin-bottom: 1rem;
+  }
+
+  .group-detail__back {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem 0.375rem 0.5rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+      border-color 0.15s ease,
+      color 0.15s ease;
+  }
+
+  .group-detail__back svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .group-detail__back:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .group-detail__back:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  .group-detail__header {
+    margin-bottom: 1.5rem;
+  }
+
+  .group-detail__title {
+    margin: 0 0 0.75rem;
+    font-family: var(--font-display);
+    font-size: clamp(1.5rem, 1.1rem + 1.2vw, 2.125rem);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+  }
+
+  .group-detail__description {
+    max-width: 46rem;
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+
+  .group-detail__description :global(code) {
+    padding: 0.05em 0.25em;
+    border-radius: 4px;
+    background: var(--badge-neutral-bg);
+  }
+
+  .group-detail__install {
+    margin-bottom: 2rem;
+    padding: 1.125rem 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
+  .group-detail__heading {
+    margin: 0 0 0.5rem;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .group-detail__install :global(.install) {
+    max-width: 100%;
+  }
+
+  .group-detail__install :global(.install__command) {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .group-detail__install .group-detail__heading {
+    margin-bottom: 0.875rem;
+  }
+
+  .group-detail__skills {
+    margin: 0;
+  }
+
+  .group-detail__skill-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+</style>
