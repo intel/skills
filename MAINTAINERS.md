@@ -221,7 +221,7 @@ the fix, the pin is the wrong pin.
 
 Moving the pin is proposed for you. `check_upstream.py` compares the tree object id of each
 pinned directory against the same path at the tip of upstream's default branch, and
-`upstream-sync.yml` runs it weekly: when a pinned directory has changed, it opens one pull
+`upstream-sync.yml` runs it twice a week: when a pinned directory has changed, it opens one pull
 request per upstream that moves `external-commit` everywhere it is written down — every
 entry of that upstream, the twelve characters the catalog comment quotes, and `NOTICE` — and
 re-runs `--write`. A moved upstream whose pinned directories are untouched is deliberately
@@ -246,7 +246,7 @@ branch rather than the fork's, and `--dry-run` prints all of it without doing an
 | `harbor-smoke.yml` | the oracle arm over every task in `tasks/` | PRs touching tasks or skills | yes |
 | `security.yml` | `actionlint`, `zizmor` | every PR | yes |
 | `codeql.yml` | code scanning, Python | PRs, push, weekly | reports |
-| `upstream-sync.yml` | `check_upstream.py --open-pr`: one pull request per upstream whose pinned directories moved | Mondays, or by hand | opens PRs |
+| `upstream-sync.yml` | `check_upstream.py --open-pr`: one pull request per upstream whose pinned directories moved | Sundays and Wednesdays, or by hand | opens PRs |
 
 `upstream-sync.yml` is the one workflow that writes: it pushes a `sync/<upstream>-<commit>`
 branch and opens a pull request, and it runs only in `intel/skills`. It needs no secret, but

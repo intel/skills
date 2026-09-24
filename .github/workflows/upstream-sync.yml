@@ -6,7 +6,7 @@ name: Upstream sync
 # failure is silent, because a stale pin keeps every check green while what this catalog
 # publishes falls behind what its authors ship.
 #
-# So this asks the other half weekly: has the pinned directory changed at the tip of
+# So this asks the other half twice a week: has the pinned directory changed at the tip of
 # upstream's default branch, and if so, here is the pull request that moves it. What the
 # tool compares, and why a moved pin with unchanged bytes is deliberately not reported,
 # is in tools/check_upstream.py.
@@ -17,8 +17,9 @@ name: Upstream sync
 
 on:
   schedule:
-    # Weekly, an hour before the security scan, so a Monday morning has one place to look.
-    - cron: "43 8 * * 1"
+    # Sunday and Wednesday, 15:43 UTC: morning in US Pacific time. What Sunday
+    # proposes is waiting when the week starts; Wednesday catches what upstream merged since.
+    - cron: "43 15 * * 0,3"
   workflow_dispatch:
     inputs:
       dry-run:
