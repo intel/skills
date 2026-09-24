@@ -1,50 +1,33 @@
 #!/usr/bin/env python3
 """Notice when an imported skill's upstream has moved past its pin, and propose the move.
 
-`sync_external.py --check` answers "is the copy still the pinned commit". Nothing
-answered the other half: the pin is a commit, upstream keeps committing, and a copy that
-matches its pin perfectly can be a year behind. That is a silent failure -- every check
-in this repository stays green while what it publishes drifts away from what upstream
-maintains.
+`sync_external.py --check` proves the copy matches its pin; nothing proved the pin still
+matches upstream, and a stale pin keeps every check green.
 
-What is compared is the *pinned directory*, not the repository around it: the tree object
-id of `external-path` at the pin against the same path at the tip of upstream's default
-branch. Upstream's HEAD moving is not news here -- most commits upstream touch none of
-the skills this catalog imports, and treating every one of them as an update would open a
-pull request that moves 23 pins, rewrites 23 `.source.json` files and changes no skill
-text at all. A directory hash answers the question that matters, and answers it for
-13.75 KiB of transfer: no file content is fetched and nothing is checked out.
+What is compared is the tree object id of each `external-path` at the pin against the
+same path at the tip of upstream's default branch, not upstream's HEAD: most upstream
+commits touch no imported skill, and proposing those would rewrite every `.source.json`
+and change no skill text. No file content is fetched.
 
-When a pinned directory did change, the update is mechanical and this tool applies it --
-move the commit everywhere the repository writes it down (`skills.yaml`, including the
-comment introducing each import group, and `NOTICE`), re-vendor with
-`sync_external.py --write`, then open one pull request per upstream.
+When a pinned directory changed, this moves the commit everywhere it is written
+(`skills.yaml` entries and group comment, `NOTICE`), re-vendors with
+`sync_external.py --write`, and opens one pull request per upstream. Whether to merge is
+left to that pull request's checks and reviewer.
 
-What it deliberately does not decide is whether the new bytes should be merged. That is
-the pull request's own business: its checks answer the structural half, and a reviewer
-reads the diff -- an import is somebody else's document, so a change in it is a change
-somebody made there and may be one this catalog does not want.
-
-    python3 tools/check_upstream.py                  # survey every pin, report, change nothing
-    python3 tools/check_upstream.py --json           # the same survey, for a workflow to act on
+    python3 tools/check_upstream.py                  # survey every pin, change nothing
+    python3 tools/check_upstream.py --json           # the same survey, as data
     python3 tools/check_upstream.py --update         # move the pins and re-vendor, no git
     python3 tools/check_upstream.py --open-pr        # branch, commit, push, open the pull request
     python3 tools/check_upstream.py --open-pr --dry-run   # print what that would run
     python3 tools/check_upstream.py --open-pr --remote fork --against intel   # from a fork
 
-The workflow pushes to the repository it runs in, where the branch and the pull request
-live in the same place. A maintainer running this by hand pushes to their fork and opens
-against this repository, so the two are separate: `--remote` is pushed to, `--against`
-is opened against, and it defaults to `--remote`.
+`--remote` is pushed to and `--against` is opened against; it defaults to `--remote`.
 
-Exit status is about this repository, not about upstream: a pin that no longer resolves,
-or a pinned path that is no longer a directory upstream, fails. An upstream that has
-merely moved ahead does not -- that is what the pull request is for -- and an upstream
-that cannot be reached warns, for the same reason the link check does.
+Fails on a pin that no longer resolves or a pinned path that is gone upstream; an
+upstream that merely moved does not fail, and one that cannot be reached warns.
 
-`--open-pr` needs `git` and `gh`, and a token that may push a branch and open a pull
-request. Opened with the workflow's own `GITHUB_TOKEN`, its checks wait for a maintainer
-to approve them -- see .github/workflows/upstream-sync.yml.
+`--open-pr` needs `git`, `gh`, and a token that may push and open a pull request. With
+the workflow's `GITHUB_TOKEN`, its checks wait for a maintainer to approve them.
 """
 
 from __future__ import annotations
@@ -57,8 +40,7 @@ import sys
 
 from sync_external import external_entries
 
-# BROKEN is defined beside the fetch rather than here: --mutate has to be able to break
-# the parse of upstream's default branch too, and that lives in the transport module.
+# BROKEN lives in upstream_git so --mutate can also break the parse done there.
 from upstream_git import (
     BROKEN,
     SyncError,
@@ -78,9 +60,7 @@ from validate_skills import (
 
 TOOL = "tools/check_upstream.py"
 
-# Every way this detector can break is silent -- an upstream that moved and was not
-# reported reads exactly like an upstream nobody has touched -- so each break is
-# available as a mutation and --self-test has an assertion that must catch it.
+# Each silent way this detector can break, and --self-test must catch every one.
 MUTATIONS = {
     "M1": "rewrite_sha moves the full commit id but not the twelve characters used in prose",
     "M2": "rewrite_sha replaces every commit id it finds, not this upstream's",
@@ -100,12 +80,7 @@ def upstream_slug(repo: str) -> str:
 
 
 def branch_name(repo: str, head: str) -> str:
-    """The branch a pull request for this move goes on.
-
-    Derived from the target commit rather than from the date or the run number, so a
-    second run proposes the same branch, finds its own pull request, and stops -- which
-    is the whole of this bot's idempotence.
-    """
+    """The branch for this move, named by the target commit so a rerun finds its own PR."""
     slug = upstream_slug(repo).rsplit("/", 1)[-1]
     if BROKEN.which == "M7":
         return f"sync/{slug}"
@@ -190,14 +165,10 @@ def survey(group: dict) -> dict:
 
 
 def rewrite_sha(text: str, old: str, new: str) -> str:
-    """Move a pin's commit everywhere one file writes it down.
+    """Replace a pin's commit id, and the twelve characters prose quotes, in one file.
 
-    Both the object id and the twelve characters this repository uses for it in prose:
-    `skills.yaml` states the pin in every entry of an upstream and again in the comment
-    that introduces the group, and `NOTICE` repeats it for each upstream republished
-    here. A commit id belongs to one upstream, so replacing the string cannot reach
-    another upstream's pin -- asserted against the real catalog in --self-test rather
-    than assumed.
+    A commit id belongs to one upstream, so this cannot reach another pin; --self-test
+    asserts that against the real catalog.
     """
     if BROKEN.which == "M1":
         return text.replace(old, new)
@@ -207,12 +178,7 @@ def rewrite_sha(text: str, old: str, new: str) -> str:
 
 
 def bump(record: dict) -> None:
-    """Move the pin in every file that states it, then re-vendor from the new commit.
-
-    Progress is printed here rather than returned so that it interleaves with what the
-    generator prints: the two are one operation, and reading it afterwards should say
-    which pin moved before saying which files it rewrote.
-    """
+    """Move the pin in every file that states it, then re-vendor from the new commit."""
     for path in (CATALOG_PATH, NOTICE_PATH):
         text = path.read_bytes().decode("utf-8")
         moved = rewrite_sha(text, record["pinned"], record["head"])
@@ -226,7 +192,6 @@ def bump(record: dict) -> None:
         print(f"     {path.name}: {record['pinned'][:12]} -> {record['head'][:12]}")
 
     names = sorted(record["skills"].values())
-    # The generator writes to this stdout, so what it says lands after what led to it.
     sys.stdout.flush()
     done = subprocess.run(
         [sys.executable, str(REPO_ROOT / "tools" / "sync_external.py"), "--write", *names],
@@ -251,11 +216,7 @@ def compare_url(record: dict) -> str:
 
 
 def pr_body(record: dict) -> str:
-    """What a reviewer needs to know that the diff does not say.
-
-    ASCII only: this text is printed by --dry-run and handed to `gh` on a pipe, and both
-    of those go through the console encoding on the machine running the tool.
-    """
+    """What a reviewer needs that the diff does not say. ASCII only: it crosses a console."""
     changed = record["changed"]
     untouched = sorted(set(record["skills"].values()) - set(changed))
     lines = [
@@ -342,22 +303,12 @@ def parse_remote_url(url: str, remote: str) -> str:
 
 
 def remote_slug(remote: str) -> str:
-    """Which repository `gh` is to act on, taken from the remote rather than guessed.
-
-    `gh` resolves a bare `pr list` from whatever remotes the checkout has, which is one
-    repository in CI and several in a maintainer's clone -- there it can answer about, or
-    open against, a repository nobody asked for.
-    """
+    """The repository `gh` acts on, from the remote: bare `gh` may pick another clone remote."""
     return parse_remote_url(git("remote", "get-url", remote), remote)
 
 
 def head_ref(push_slug: str, target_slug: str, branch: str) -> str:
-    """How the branch is named to the repository the pull request is opened against.
-
-    A branch pushed to a fork is not a ref of the target repository, so `gh` has to be
-    told whose it is. Without the owner the request either names a branch of the target
-    that does not exist, or -- worse -- one that does and was never part of this move.
-    """
+    """The `--head` for `gh pr create`: a branch on a fork needs the fork's owner."""
     if push_slug == target_slug or BROKEN.which == "M9":
         return branch
     return f"{push_slug.split('/')[0]}:{branch}"
@@ -419,8 +370,7 @@ def propose(record: dict, remote: str, against: str) -> None:
         print(f"SKIP {upstream_slug(record['repo'])}: {existing}")
         return
 
-    # Off the target's default branch, not the fork's: a fork can be behind, and a pull
-    # request branched off a stale base carries whatever it is missing as a deletion.
+    # Off the target's default branch: a stale fork base would show up as deletions.
     base = base_branch(against)
     git("fetch", "--quiet", against)
     git("switch", "--quiet", "--create", branch, f"{against}/{base}")
@@ -475,12 +425,7 @@ def render(records: list[dict]) -> None:
 
 
 def self_test() -> int:
-    """Assert the detector against this repository's real pins, offline.
-
-    Every number below is a property of the catalog as it stands rather than a fixture,
-    so a pin moved by hand or a rewrite that reaches too far shows up here. --mutate
-    M1..M9 breaks one thing each, and each of them must turn one of these lines red.
-    """
+    """Assert the detector against this catalog's real pins, offline. Each --mutate fails it."""
     failures: list[str] = []
 
     def check(ok: bool, message: str) -> None:
@@ -626,7 +571,7 @@ def self_test() -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Every flag, kept out of main() so what main() does is legible in one screen."""
+    """Every flag."""
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--json", action="store_true", help="the survey, as JSON")

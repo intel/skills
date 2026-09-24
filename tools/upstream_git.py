@@ -31,11 +31,8 @@ server-side blob filtering, and intel/gpu-ai-skills measures ~2.4 s here against
 ~0.6 s there. Paying two seconds per upstream to stop downloading gigabytes per
 upstream is the right side of that trade, and it is one code path rather than two.
 
-The same transport answers a second question, for `check_upstream.py`: has upstream
-moved past the pin, and did the move change the pinned directory? That needs tree
-objects and no file content at all — two commits of intel/gpu-ai-skills cost 13.75 KiB
-this way — so `commit_trees` fetches without blobs and without a checkout, and
-`subtree_hashes` reads the directory object id that `ls-tree` records.
+`check_upstream.py` uses the same transport to ask whether a pinned directory changed
+upstream: `commit_trees` fetches trees only, no blobs, and `subtree_hashes` compares ids.
 
 Bytes come from the object store (`ls-tree` + `cat-file`), not from the working tree:
 a `.gitattributes` with `text`/`eol` or a clean/smudge filter would otherwise let the
@@ -55,9 +52,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
 
-# Which deliberate break `check_upstream.py --mutate` is running. It shares this object,
-# because the staleness check it asserts reads upstream's default branch through this
-# module and a mutation that could not reach here would leave that parse unasserted.
+# The break `check_upstream.py --mutate` is running; shared so it reaches parse_symref.
 BROKEN = SimpleNamespace(which=None)
 
 # Line-ending translation off on every call, as in bin/intel-skills.mjs: CRLF would
@@ -243,13 +238,7 @@ def root_files(work: Path, wanted: set[str]) -> dict[str, bytes]:
 
 
 def parse_symref(listing: str, repo: str) -> tuple[str, str]:
-    """The branch upstream's HEAD points at, and the commit at its tip.
-
-    `ls-remote --symref` answers with the symbolic ref first and the object id second,
-    both against HEAD, so the two lines are read as a pair rather than searched
-    separately -- a repository whose HEAD names a branch that has no commit yet would
-    otherwise resolve to whatever else the listing happened to carry.
-    """
+    """The branch upstream's HEAD names and its commit, read as a pair from `ls-remote`."""
     branch = ""
     for line in listing.splitlines():
         fields = line.split()
@@ -267,15 +256,10 @@ def parse_symref(listing: str, repo: str) -> tuple[str, str]:
 
 
 def default_head(repo: str) -> tuple[str, str]:
-    """The name of upstream's default branch and the commit it is at.
+    """Upstream's default branch, as its HEAD states it, and the commit it is at.
 
-    This is what a pin is compared against: the pin records a commit, and "has upstream
-    moved" is a question about whichever branch upstream develops on, which upstream
-    states through HEAD rather than this repository guessing `main`. One round trip, no
-    objects transferred.
-
-    Run from a directory that is not a repository, so that neither an `insteadOf` rule
-    nor a credential helper in the caller's clone can change which server is asked.
+    Run outside any repository, so the caller's `insteadOf` or credential helper cannot
+    change which server is asked.
     """
     with tempfile.TemporaryDirectory(prefix="intel-skills-lsremote-") as tmp:
         listing = _git(["ls-remote", "--symref", repo, "HEAD"], Path(tmp))
@@ -284,12 +268,7 @@ def default_head(repo: str) -> tuple[str, str]:
 
 @contextlib.contextmanager
 def commit_trees(repo: str, commits: list[str]) -> Iterator[Path]:
-    """Materialize the trees of several commits, with no blobs and no working tree.
-
-    Comparing two revisions of a pinned directory is a comparison of tree object ids,
-    so nothing here needs file content: this transfers the commit and tree objects of
-    each revision only, and never checks anything out.
-    """
+    """Fetch the commit and tree objects of several commits: no blobs, no checkout."""
     work = _empty_clone(repo, "intel-skills-trees-")
     wanted = sorted(set(commits))
     try:
@@ -308,12 +287,7 @@ def commit_trees(repo: str, commits: list[str]) -> Iterator[Path]:
 
 
 def subtree_hashes(work: Path, commit: str, paths: list[str]) -> dict[str, str]:
-    """The tree object id of each given path at `commit`.
-
-    A path absent from the result is a path that is not a directory at that commit --
-    deleted, renamed, or turned into a file or a submodule. All three mean the same
-    thing to a caller comparing revisions of a pin: what the pin names is not there.
-    """
+    """The tree object id of each path at `commit`; one that is not a directory is omitted."""
     listing = _git(
         [
             "ls-tree",

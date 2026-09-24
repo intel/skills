@@ -219,23 +219,12 @@ still what was reviewed. The route is a pull request upstream, then move
 raising with the upstream maintainer rather than living with; if upstream will not take
 the fix, the pin is the wrong pin.
 
-Moving the pin is proposed for you. `check_upstream.py` compares the tree object id of each
-pinned directory against the same path at the tip of upstream's default branch, and
-`upstream-sync.yml` runs it twice a week: when a pinned directory has changed, it opens one pull
-request per upstream that moves `external-commit` everywhere it is written down — every
-entry of that upstream, the twelve characters the catalog comment quotes, and `NOTICE` — and
-re-runs `--write`. A moved upstream whose pinned directories are untouched is deliberately
-not reported, because such a pull request would rewrite 23 `.source.json` files and change
-no skill text.
-
-What that pull request is *not* is a decision. It says only that upstream's bytes changed;
-whether they should be published here is what its checks and its reviewer are for. The
-diff to read is the skill text, not the pin. Run it by hand with
-`python3 tools/check_upstream.py` for the survey, `--json` for the same thing as data, and
-`--update` to move a pin locally without opening anything. To open the same pull request by
-hand from a fork, `--open-pr --remote <your fork> --against <this repository>`: the branch
-goes to the fork, the pull request is opened here and branched off this repository's default
-branch rather than the fork's, and `--dry-run` prints all of it without doing any of it.
+Moving the pin is proposed for you: when a pinned directory changes at the tip of
+upstream's default branch, `upstream-sync.yml` opens one pull request per upstream that
+moves the pin and re-runs `--write`. An upstream that moved without touching a pinned
+directory is not reported. That pull request is not a decision; the diff to read is the
+skill text. By hand: `python3 tools/check_upstream.py` to survey, `--update` to move a pin
+locally, `--open-pr --remote <your fork> --against <this repository> --dry-run` to preview.
 
 ## CI
 
@@ -248,13 +237,10 @@ branch rather than the fork's, and `--dry-run` prints all of it without doing an
 | `codeql.yml` | code scanning, Python | PRs, push, weekly | reports |
 | `upstream-sync.yml` | `check_upstream.py --open-pr`: one pull request per upstream whose pinned directories moved | Sundays and Wednesdays, or by hand | opens PRs |
 
-`upstream-sync.yml` is the one workflow that writes: it pushes a `sync/<upstream>-<commit>`
-branch and opens a pull request, and it runs only in `intel/skills`. It needs no secret, but
-it does need *Allow GitHub Actions to create and approve pull requests* enabled; without it
-the run fails at `gh pr create`. Opened with `GITHUB_TOKEN`, the pull request's checks wait
-for a maintainer to select **Approve workflows to run**; an `UPSTREAM_SYNC_TOKEN` secret
-holding an app or account token only removes that click. A second run of the same upstream commit
-finds its own pull request and stops, because the branch name is derived from that commit.
+`upstream-sync.yml` is the one workflow that writes, and runs only in `intel/skills`. It
+needs no secret, but needs *Allow GitHub Actions to create and approve pull requests*, or it
+fails at `gh pr create`. Its pull request's checks wait for a maintainer to select **Approve
+workflows to run**; an `UPSTREAM_SYNC_TOKEN` app or account token removes that click.
 
 `codeql.yml` runs its job only where the repository is public, which it reads from the event
 rather than being told. Uploading results needs GitHub Advanced Security, which a public
@@ -295,11 +281,8 @@ Everything else runs offline.
 
 Three more exist for the imported skills: `sync_external.py` regenerates a copy from its
 pin with `--write`, or with `--check` re-fetches the pinned commit and byte-compares what
-is here against it; `check_upstream.py` asks the other question — whether the pinned
-directory has changed at the tip of upstream's default branch — and opens the pull request
-that moves the pin when it has; and `upstream_git.py` is the transport both use, fetching
-just the pinned subtree, or just the trees of two commits, instead of the repository
-around it.
+is here against it; `check_upstream.py` proposes moving a pin whose directory changed
+upstream; and `upstream_git.py` is the transport both use, fetching only what they need.
 
 ## Current state
 
