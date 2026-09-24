@@ -43,10 +43,8 @@ merely moved ahead does not -- that is what the pull request is for -- and an up
 that cannot be reached warns, for the same reason the link check does.
 
 `--open-pr` needs `git` and `gh`, and a token that may push a branch and open a pull
-request. A pull request opened with the workflow's own `GITHUB_TOKEN` carries no checks:
-GitHub does not start workflow runs for events that token causes. The pull request says
-so in its body, and the fix is a token belonging to an account -- see
-.github/workflows/upstream-sync.yml.
+request. Opened with the workflow's own `GITHUB_TOKEN`, its checks wait for a maintainer
+to approve them -- see .github/workflows/upstream-sync.yml.
 """
 
 from __future__ import annotations
@@ -280,9 +278,8 @@ def pr_body(record: dict) -> str:
         "somebody else's document, so a change in it is a change somebody made there: the "
         "checks below answer the structural half, and the diff is worth reading.",
         "",
-        "If no checks are listed, this pull request was opened with `GITHUB_TOKEN`, which "
-        "does not start workflow runs. Push to the branch, or close and reopen it, to get "
-        "them.",
+        "If the checks are waiting for approval, this pull request was opened with "
+        "`GITHUB_TOKEN`: select **Approve workflows to run** in the merge box to start them.",
     ]
     return "\n".join(lines) + "\n"
 

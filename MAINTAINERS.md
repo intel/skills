@@ -249,11 +249,11 @@ branch rather than the fork's, and `--dry-run` prints all of it without doing an
 | `upstream-sync.yml` | `check_upstream.py --open-pr`: one pull request per upstream whose pinned directories moved | Mondays, or by hand | opens PRs |
 
 `upstream-sync.yml` is the one workflow that writes: it pushes a `sync/<upstream>-<commit>`
-branch and opens a pull request, and it runs only in `intel/skills`. Whether that pull
-request arrives with checks depends on the token — GitHub starts no workflow run for
-anything `GITHUB_TOKEN` does, so without an `UPSTREAM_SYNC_TOKEN` secret the pull request is
-correct but unchecked until somebody pushes to its branch. The run warns when it falls back,
-and the pull request body says which case it is. A second run of the same upstream commit
+branch and opens a pull request, and it runs only in `intel/skills`. It needs no secret, but
+it does need *Allow GitHub Actions to create and approve pull requests* enabled; without it
+the run fails at `gh pr create`. Opened with `GITHUB_TOKEN`, the pull request's checks wait
+for a maintainer to select **Approve workflows to run**; an `UPSTREAM_SYNC_TOKEN` secret
+holding an app or account token only removes that click. A second run of the same upstream commit
 finds its own pull request and stops, because the branch name is derived from that commit.
 
 `codeql.yml` runs its job only where the repository is public, which it reads from the event

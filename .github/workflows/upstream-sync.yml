@@ -69,18 +69,14 @@ jobs:
       - name: Staleness detector still detects
         run: python3 tools/check_upstream.py --self-test
 
-      # A token belonging to an account or an app is what makes the pull request run its
-      # own checks: GitHub starts no workflow run for anything GITHUB_TOKEN does. Without
-      # UPSTREAM_SYNC_TOKEN the pull request is still opened and still correct, it just
-      # arrives with no checks until somebody pushes to it or closes and reopens it, and
-      # its body says so. Warned rather than failed, because a catalog that finds out its
-      # pins are stale is better off than one that does not.
+      # A pull request opened with GITHUB_TOKEN gets its checks in an approval-required
+      # state: a maintainer starts them with "Approve workflows to run" in the merge box.
+      # UPSTREAM_SYNC_TOKEN, an app or account token, is only what skips that click.
       - name: Note which token the pull request will be opened with
         if: env.SYNC_TOKEN_SET != 'true'
         run: |
-          echo "::warning::UPSTREAM_SYNC_TOKEN is not set, so any pull request from this" \
-               "run is opened by GITHUB_TOKEN and will carry no checks until somebody" \
-               "pushes to its branch."
+          echo "::notice::Opened with GITHUB_TOKEN, so the pull request's checks wait for" \
+               "a maintainer to select Approve workflows to run."
 
       - name: Survey the pins, and propose what moved
         env:
