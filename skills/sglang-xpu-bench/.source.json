@@ -1,6 +1,6 @@
 {
   "repo": "https://github.com/intel/gpu-ai-skills",
   "path": "plugins/intel-gpu-ai-skills/skills/sglang-xpu-bench",
-  "commit": "0b4fafd09c5eb4cc5daf532d915ef5984a919775",
+  "commit": "fa107a317bdabdf49ef0e35fb75786175f407f57",
   "license": "Apache-2.0"
 }
