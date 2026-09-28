@@ -218,19 +218,23 @@ rules:
     skills: ["xpu-runtime-preflight"]
     message: "*.env*"
     reason: "POLICY: `--env-file .env` hands a container its own configuration; no credential file is read"
+  - id: "PE3"
+    skills: ["xpu-system-setup"]
+    message: "*keyring*"
+    reason: "POLICY: the match is /usr/share/keyrings/intel-graphics.gpg, an apt signing keyring for Intel's own GPU repository, not a credential read"
 
   # AE1 — the scanner reports a referenced artifact it could only inspect in part. The
-  # cause is its own nested-artifact bound meeting a 400-line shell script, not
+  # cause is its own nested-artifact bound meeting a long first-party script, not
   # anything the skill does to evade analysis. Scoped to the three artifacts it is
   # true of, so a new partially-inspected reference still surfaces.
   - id: "AE1"
     skills: ["xpu-deploy-plan"]
     message: "*build_plan.sh (partial)*"
-    reason: "POLICY: nested-artifact inspection bound on a 385-line first-party script, not evasion"
+    reason: "POLICY: nested-artifact inspection bound on a first-party script, not evasion"
   - id: "AE1"
     skills: ["xpu-system-setup"]
     message: "*check_battlemage_prerequisites.sh (partial)*"
-    reason: "POLICY: nested-artifact inspection bound on a 402-line first-party script, not evasion"
+    reason: "POLICY: nested-artifact inspection bound on a first-party script, not evasion"
   - id: "AE1"
     skills: ["vllm-xpu-run"]
     message: "*remote-deploy.md (partial)*"
