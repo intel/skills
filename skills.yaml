@@ -201,7 +201,7 @@
   external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/cuda-to-xpu-migration"
   external-license: "Apache-2.0"
-  intel-products: "Intel Arc, Intel Arc Pro"
+  intel-products: "Intel GPU"
   intel-hw-class: "gpu"
   intel-source-ledger: ""
 
@@ -211,7 +211,7 @@
   external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/llamacpp-xpu-run"
   external-license: "Apache-2.0"
-  intel-products: "Intel GPU, Level Zero"
+  intel-products: "Intel GPU"
   intel-hw-class: "gpu"
   intel-source-ledger: ""
 
@@ -231,7 +231,7 @@
   external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/model-config-recommend"
   external-license: "Apache-2.0"
-  intel-products: "Intel Arc"
+  intel-products: "Intel GPU"
   intel-hw-class: "gpu"
   intel-source-ledger: ""
 
@@ -251,7 +251,7 @@
   external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/sglang-xpu-run"
   external-license: "Apache-2.0"
-  intel-products: "Intel GPU, Level Zero"
+  intel-products: "Intel GPU"
   intel-hw-class: "gpu"
   intel-source-ledger: ""
 
@@ -333,7 +333,7 @@
   external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/xpu-deploy-plan"
   external-license: "Apache-2.0"
-  intel-products: "Intel XPU"
+  intel-products: "Intel GPU"
   intel-hw-class: "gpu"
   intel-source-ledger: ""
 
@@ -343,7 +343,7 @@
   external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/xpu-discover"
   external-license: "Apache-2.0"
-  intel-products: "Intel Arc, Intel Arc Pro, Intel Data Center GPU Max"
+  intel-products: "Intel GPU"
   intel-hw-class: "gpu"
   intel-source-ledger: ""
 
@@ -353,7 +353,7 @@
   external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/xpu-model-type-detect"
   external-license: "Apache-2.0"
-  intel-products: "Intel XPU"
+  intel-products: "Intel GPU"
   intel-hw-class: "gpu"
   intel-source-ledger: ""
 
@@ -375,7 +375,7 @@
   external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/xpu-profile-unitrace"
   external-license: "Apache-2.0"
-  intel-products: "Intel XPU, pti-gpu, oneCCL"
+  intel-products: "Intel GPU, pti-gpu"
   intel-hw-class: "gpu"
   intel-source-ledger: ""
 
@@ -395,6 +395,6 @@
   external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/xpu-system-setup"
   external-license: "Apache-2.0"
-  intel-products: "Intel GPU, Intel Arc Pro, xpu-smi, Level Zero"
+  intel-products: "Intel GPU, xpu-smi"
   intel-hw-class: "gpu"
   intel-source-ledger: ""
