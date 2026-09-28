@@ -31,15 +31,12 @@ false sharing, where threads write different fields on the same line.
 
 ## Why frequent shared stats hurt under scaling
 
-Every atomic increment on a shared counter requires the updater to hold the cache
-line **exclusively**. With N threads all updating the same counter:
-
-- N-1 threads must wait for the exclusive transfer on every update
-- The cache line bounces between LLC slices at near-memory latency (~100–300 ns)
-- The more threads, the more bouncing — this is the defining signature of
-  scaling-limited true sharing
-- Even `memory_order_relaxed` does not help: the **hardware** still enforces
-  exclusive ownership for any write, regardless of the software memory order
+Every atomic increment on a shared counter requires exclusive ownership of its
+cache line, so with N threads updating it, N-1 must wait for each exclusive
+transfer and the line bounces between LLC slices at near-memory latency
+(~100–300 ns) — worse as thread count grows. `memory_order_relaxed` doesn't
+help: the hardware still enforces exclusive ownership for any write regardless
+of software memory order.
 
 ---
 

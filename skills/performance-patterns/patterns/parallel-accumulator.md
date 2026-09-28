@@ -29,14 +29,12 @@ independent.
 
 ## Why this is slow
 
-Modern CPUs can issue multiple FP operations per cycle, but only if those
-operations are **independent**. A single accumulator forces strictly sequential
-execution: the add at iteration `i+1` cannot begin until the add at iteration `i`
-retires. The CPU's out-of-order engine stalls waiting for the dependency to
-resolve, giving throughput limited by FP add **latency** (~4–5 cycles) rather than
-FP add **throughput** (~0.5 cycles). This is an 8–10× gap on modern hardware.
+A single accumulator forces strictly sequential execution — each `+=` depends
+on the previous result — so throughput is limited by FP add **latency**
+(~4–5 cycles) instead of **throughput** (~0.5 cycles), an 8–10× gap on modern
+out-of-order hardware that can otherwise issue multiple independent FP ops per
+cycle.
 
-Example serial pattern:
 ```c
 float sum = 0.0f;
 for (int i = 0; i < n; i++)
