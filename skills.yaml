@@ -132,7 +132,7 @@
   intel-source-ledger: "skills/onetbb-quickstart/references/official-sources.md"
 
 # The three entries below are copies of one upstream repository, intel/intel-performance-skills,
-# MIT, pinned at e9d0b6410fb1. Three skills there, so three entries here: one locally
+# MIT. Three skills there, so three entries here: one locally
 # invented name covering them would merge three routing decisions into one.
 - name: linux-perf
   maintainer: "napetrov"
@@ -176,7 +176,7 @@
   intel-source-ledger: ""
 
 # The twenty entries below are the second upstream repository: intel/gpu-ai-skills,
-# Apache-2.0, pinned at 0b4fafd09c5e. Same mechanism, three things worth knowing.
+# Apache-2.0. Same mechanism, three things worth knowing.
 #
 # One entry per upstream skill, again under upstream's own name — twenty entries
 # rather than one "gpu-ai" umbrella, because these skills route against each other

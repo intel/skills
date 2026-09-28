@@ -220,10 +220,12 @@ raising with the upstream maintainer rather than living with; if upstream will n
 the fix, the pin is the wrong pin.
 
 Moving the pin is proposed for you: when a pinned directory changes at the tip of
-upstream's default branch, `upstream-sync.yml` opens one pull request per upstream that
-moves the pin and re-runs `--write`. An upstream that moved without touching a pinned
-directory is not reported. That pull request is not a decision; the diff to read is the
-skill text. By hand: `python3 tools/check_upstream.py` to survey, `--update` to move a pin
+upstream's default branch, `upstream-sync.yml` opens one pull request per changed skill
+that moves its pin and re-runs `--write`. A skill whose directory did not change keeps its
+pin, so skills of one upstream may be pinned at different commits. Merge any subset; closing
+one declines that version, and a later change is proposed again. It edits only the skill's
+entry and directory, never `NOTICE`, whose `Commit:` lines are kept by hand.
+That pull request is not a decision; the diff to read is the skill text. By hand: `python3 tools/check_upstream.py` to survey, `--update` to move a pin
 locally, `--open-pr --remote <your fork> --against <this repository> --dry-run` to preview.
 
 ## CI
@@ -235,7 +237,7 @@ locally, `--open-pr --remote <your fork> --against <this repository> --dry-run` 
 | `harbor-smoke.yml` | the oracle arm over every task in `tasks/` | PRs touching tasks or skills | yes |
 | `security.yml` | `actionlint`, `zizmor` | every PR | yes |
 | `codeql.yml` | code scanning, Python | PRs, push, weekly | reports |
-| `upstream-sync.yml` | `check_upstream.py --open-pr`: one pull request per upstream whose pinned directories moved | Sundays and Wednesdays, or by hand | opens PRs |
+| `upstream-sync.yml` | `check_upstream.py --open-pr`: one pull request per skill whose pinned directory moved | Sundays and Wednesdays, or by hand | opens PRs |
 
 `upstream-sync.yml` is the one workflow that writes, and runs only in `intel/skills`. It
 needs no secret, but needs *Allow GitHub Actions to create and approve pull requests*, or it

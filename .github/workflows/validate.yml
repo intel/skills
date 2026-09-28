@@ -82,7 +82,7 @@ jobs:
         run: python3 tools/validate_skills.py --check-links
 
       # Here as well as in upstream-sync.yml, so a PR that breaks it fails now, not on the
-      # next scheduled run. Offline; --mutate M1..M9 each turn it red.
+      # next scheduled run. Offline; --mutate M1..M11 each turn it red.
       - name: Staleness detector still detects
         run: python3 tools/check_upstream.py --self-test
 

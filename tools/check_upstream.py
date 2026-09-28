@@ -4,22 +4,24 @@
 `sync_external.py --check` proves the copy matches its pin; nothing proved the pin still
 matches upstream, and a stale pin keeps every check green.
 
-What is compared is the tree object id of each `external-path` at the pin against the
-same path at the tip of upstream's default branch, not upstream's HEAD: most upstream
-commits touch no imported skill, and proposing those would rewrite every `.source.json`
-and change no skill text. No file content is fetched.
+What is compared is the tree object id of each `external-path` at its own pin against the
+same path at the tip of upstream's default branch, not upstream's HEAD: a skill whose
+directory did not change is not proposed, however far upstream moved. No file content is
+fetched.
 
-When a pinned directory changed, this moves the commit everywhere it is written
-(`skills.yaml` entries and group comment, `NOTICE`), re-vendors with
-`sync_external.py --write`, and opens one pull request per upstream. Whether to merge is
-left to that pull request's checks and reviewer.
+Each changed skill gets its own pull request, which moves only that skill's
+`external-commit` and re-vendors it with `sync_external.py --write`, so any subset can be
+merged and the rest closed. The branch is named by the directory's tree id: a closed one
+is not proposed again, and a newer change supersedes an open one. No other line states a
+commit, so two of these pull requests never edit the same line.
 
     python3 tools/check_upstream.py                  # survey every pin, change nothing
     python3 tools/check_upstream.py --json           # the same survey, as data
     python3 tools/check_upstream.py --update         # move the pins and re-vendor, no git
-    python3 tools/check_upstream.py --open-pr        # branch, commit, push, open the pull request
+    python3 tools/check_upstream.py --open-pr        # per skill: branch, commit, push, open
     python3 tools/check_upstream.py --open-pr --dry-run   # print what that would run
     python3 tools/check_upstream.py --open-pr --remote fork --against intel   # from a fork
+    python3 tools/check_upstream.py --update xpu-system-setup   # one skill, or one upstream
 
 `--remote` is pushed to and `--against` is opened against; it defaults to `--remote`.
 
@@ -52,25 +54,27 @@ from upstream_git import (
 )
 from validate_skills import (
     CATALOG_PATH,
-    NOTICE_PATH,
     REPO_ROOT,
     Report,
     parse_catalog,
 )
 
 TOOL = "tools/check_upstream.py"
+BRANCH_RE = re.compile(r"^sync/(.+)-([0-9a-f]{12})$")
 
 # Each silent way this detector can break, and --self-test must catch every one.
 MUTATIONS = {
-    "M1": "rewrite_sha moves the full commit id but not the twelve characters used in prose",
-    "M2": "rewrite_sha replaces every commit id it finds, not this upstream's",
+    "M1": "set_pin moves every entry pinned at that commit, not the one skill",
+    "M2": "set_pin moves the first entry pinned at that commit, whichever skill it is",
     "M3": "classify never finds a changed directory",
     "M4": "classify treats a pinned path that is gone upstream as unchanged",
     "M5": "groups keys by skill instead of by upstream repository",
     "M6": "parse_symref reads the commit off the symbolic-ref line",
-    "M7": "branch_name leaves the target commit out of the branch",
+    "M7": "branch_name leaves the tree id out of the branch",
     "M8": "parse_remote_url accepts a remote that is not a github repository",
     "M9": "head_ref leaves the fork's owner off a branch pushed somewhere else",
+    "M10": "groups gives every skill of an upstream the first skill's pin",
+    "M11": "superseded matches a branch by prefix, so it closes another skill's pull request",
 }
 
 
@@ -79,37 +83,38 @@ def upstream_slug(repo: str) -> str:
     return "/".join(repo.rstrip("/").removesuffix(".git").rsplit("/", 2)[-2:])
 
 
-def branch_name(repo: str, head: str) -> str:
-    """The branch for this move, named by the target commit so a rerun finds its own PR."""
-    slug = upstream_slug(repo).rsplit("/", 1)[-1]
+def branch_name(skill: str, tree: str) -> str:
+    """The branch for this version of one skill, so a rerun finds its own pull request."""
     if BROKEN.which == "M7":
-        return f"sync/{slug}"
-    return f"sync/{slug}-{head[:12]}"
+        return f"sync/{skill}"
+    return f"sync/{skill}-{tree[:12]}"
 
 
-def groups(report: Report) -> dict[str, dict]:
-    """Every pin in the catalog, grouped by the upstream repository it names."""
+def groups(entries: dict[str, dict[str, str]]) -> dict[str, dict]:
+    """Every pinned skill, grouped by upstream so each upstream is asked and fetched once."""
     out: dict[str, dict] = {}
-    for name, entry in external_entries(parse_catalog(report), report).items():
+    for name, entry in entries.items():
         repo = entry["external-repo"].rstrip("/").removesuffix(".git")
         key = name if BROKEN.which == "M5" else repo
-        group = out.setdefault(
-            key, {"repo": repo, "pinned": entry["external-commit"], "skills": {}}
-        )
-        if group["pinned"] != entry["external-commit"]:
-            report.error(
-                f"skills.yaml: {repo} is pinned at both {group['pinned'][:12]} and "
-                f"{entry['external-commit'][:12]}. One upstream is one pin here: a second "
-                "commit fetches the same repository twice and splits one upstream move "
-                "across two reviews"
-            )
-            continue
+        group = out.setdefault(key, {"repo": repo, "skills": {}, "pins": {}})
+        commit = entry["external-commit"]
+        if BROKEN.which == "M10" and group["pins"]:
+            commit = next(iter(group["pins"].values()))
         group["skills"][entry["external-path"].strip("/")] = name
+        group["pins"][name] = commit
+    return out
+
+
+def paths_by_pin(group: dict) -> dict[str, list[str]]:
+    """The pinned paths of one upstream, keyed by the commit each is pinned at."""
+    out: dict[str, list[str]] = {}
+    for path, name in sorted(group["skills"].items()):
+        out.setdefault(group["pins"][name], []).append(path)
     return out
 
 
 def classify(group: dict, before: dict[str, str], after: dict[str, str]) -> dict:
-    """What two revisions of one upstream's pinned directories say about the pin."""
+    """What each pinned directory at its pin and at upstream's tip say about the pins."""
     paths = sorted(group["skills"])
     gone = sorted(path for path in paths if path not in after)
     changed = sorted(
@@ -132,21 +137,24 @@ def classify(group: dict, before: dict[str, str], after: dict[str, str]) -> dict
 
 
 def survey(group: dict) -> dict:
-    """One upstream's state, carrying everything a pull request for it would need."""
-    repo, pinned = group["repo"], group["pinned"]
+    """One upstream's state, carrying everything its pull requests would need."""
+    repo = group["repo"]
     paths = sorted(group["skills"])
-    record = {"repo": repo, "pinned": pinned, "skills": dict(sorted(group["skills"].items()))}
+    record = {
+        "repo": repo,
+        "skills": dict(sorted(group["skills"].items())),
+        "pins": dict(sorted(group["pins"].items())),
+        "trees": {},
+    }
     try:
         default_branch, head = default_head(repo)
-        record |= {
-            "default-branch": default_branch,
-            "head": head,
-            "branch": branch_name(repo, head),
-        }
-        if head == pinned:
+        record |= {"default-branch": default_branch, "head": head}
+        if set(group["pins"].values()) == {head}:
             return record | {"state": "current", "changed": [], "gone": []}
-        with commit_trees(repo, [pinned, head]) as work:
-            before = subtree_hashes(work, pinned, paths)
+        before: dict[str, str] = {}
+        with commit_trees(repo, [*group["pins"].values(), head]) as work:
+            for commit, pinned_paths in paths_by_pin(group).items():
+                before |= subtree_hashes(work, commit, pinned_paths)
             after = subtree_hashes(work, head, paths)
     except SyncUnavailable as exc:
         return record | {"state": "unreachable", "changed": [], "gone": [], "detail": str(exc)}
@@ -161,79 +169,109 @@ def survey(group: dict) -> dict:
             "gone": absent,
             "detail": "the pinned commit itself does not hold " + ", ".join(absent),
         }
+    record["trees"] = {group["skills"][path]: tree for path, tree in sorted(after.items())}
     return record | classify(group, before, after)
 
 
-def rewrite_sha(text: str, old: str, new: str) -> str:
-    """Replace a pin's commit id, and the twelve characters prose quotes, in one file.
+def proposals(record: dict) -> list[dict]:
+    """One pull request per changed skill of a stale upstream."""
+    changed = record["changed"]
+    return [
+        {
+            "repo": record["repo"],
+            "default-branch": record["default-branch"],
+            "head": record["head"],
+            "skill": name,
+            "pinned": record["pins"][name],
+            "branch": branch_name(name, record["trees"][name]),
+            "siblings": [other for other in changed if other != name],
+        }
+        for name in changed
+    ]
 
-    A commit id belongs to one upstream, so this cannot reach another pin; --self-test
-    asserts that against the real catalog.
-    """
+
+def set_pin(text: str, skill: str, old: str, new: str) -> str:
+    """Move one skill's `external-commit` in skills.yaml, and no other line."""
     if BROKEN.which == "M1":
         return text.replace(old, new)
     if BROKEN.which == "M2":
-        return re.sub(r"\b[0-9a-f]{40}\b", new, text).replace(old[:12], new[:12])
-    return text.replace(old, new).replace(old[:12], new[:12])
+        return text.replace(old, new, 1)
+    lines = text.split("\n")
+    if f"- name: {skill}" not in lines:
+        raise ValueError(f"no entry for {skill}")
+    start = lines.index(f"- name: {skill}")
+    end = next(
+        (i for i in range(start + 1, len(lines)) if lines[i].startswith("- ")), len(lines)
+    )
+    hits = [i for i in range(start, end) if lines[i] == f'  external-commit: "{old}"']
+    if len(hits) != 1:
+        raise ValueError(f"{skill} has {len(hits)} external-commit line(s) at {old[:12]}")
+    lines[hits[0]] = f'  external-commit: "{new}"'
+    return "\n".join(lines)
 
 
-def bump(record: dict) -> None:
-    """Move the pin in every file that states it, then re-vendor from the new commit."""
-    for path in (CATALOG_PATH, NOTICE_PATH):
-        text = path.read_bytes().decode("utf-8")
-        moved = rewrite_sha(text, record["pinned"], record["head"])
-        if moved == text:
-            sys.exit(
-                f"FAIL {path.name} states no pin at {record['pinned'][:12]}, so this run has "
-                "nothing to move there. Either it was edited by hand between the survey and "
-                "now, or the pin is written some way this tool does not recognise"
-            )
-        path.write_bytes(moved.encode("utf-8"))
-        print(f"     {path.name}: {record['pinned'][:12]} -> {record['head'][:12]}")
+def bump(proposal: dict) -> None:
+    """Move one skill's pin, then re-vendor it from the new commit."""
+    skill, old, new = proposal["skill"], proposal["pinned"], proposal["head"]
+    text = CATALOG_PATH.read_bytes().decode("utf-8")
+    try:
+        moved = set_pin(text, skill, old, new)
+    except ValueError as exc:
+        sys.exit(
+            f"FAIL skills.yaml: {exc}, so this run has nothing to move there. Either it was "
+            "edited by hand between the survey and now, or the pin is written some way this "
+            "tool does not recognise"
+        )
+    CATALOG_PATH.write_bytes(moved.encode("utf-8"))
+    print(f"     skills.yaml: {skill} {old[:12]} -> {new[:12]}")
 
-    names = sorted(record["skills"].values())
     sys.stdout.flush()
     done = subprocess.run(
-        [sys.executable, str(REPO_ROOT / "tools" / "sync_external.py"), "--write", *names],
+        [sys.executable, str(REPO_ROOT / "tools" / "sync_external.py"), "--write", skill],
         cwd=REPO_ROOT,
         check=False,
     )
     if done.returncode != 0:
         sys.exit(
-            f"FAIL sync_external.py --write refused {record['head'][:12]}. The pin moved in "
-            "the two files above and the tree was not re-vendored, so nothing here is in a "
-            "state to propose: read the failure above, and revert both files"
+            f"FAIL sync_external.py --write refused {new[:12]}. The pin moved in skills.yaml "
+            "and the tree was not re-vendored, so nothing here is in a state to propose: read "
+            "the failure above, and revert skills.yaml"
         )
-    print(f"     re-vendored {len(names)} skill(s) from {record['head'][:12]}")
+    print(f"     re-vendored {skill} from {new[:12]}")
 
 
-def commit_subject(record: dict) -> str:
-    return f"chore: move the {upstream_slug(record['repo'])} pin to {record['head'][:12]}"
+def commit_subject(proposal: dict) -> str:
+    return (
+        f"chore: move {proposal['skill']} to "
+        f"{upstream_slug(proposal['repo'])}@{proposal['head'][:12]}"
+    )
 
 
-def compare_url(record: dict) -> str:
-    return f"{record['repo']}/compare/{record['pinned'][:12]}...{record['head'][:12]}"
+def compare_url(proposal: dict) -> str:
+    return f"{proposal['repo']}/compare/{proposal['pinned'][:12]}...{proposal['head'][:12]}"
 
 
-def pr_body(record: dict) -> str:
+def pr_body(proposal: dict) -> str:
     """What a reviewer needs that the diff does not say. ASCII only: it crosses a console."""
-    changed = record["changed"]
-    untouched = sorted(set(record["skills"].values()) - set(changed))
+    skill = proposal["skill"]
     lines = [
-        f"`{upstream_slug(record['repo'])}` has moved on `{record['default-branch']}` and "
-        f"this repository's copy of it has not. Opened by `{TOOL}`; the bytes are "
-        "upstream's at the new commit, written by `tools/sync_external.py --write`.",
+        f"`{skill}` has changed in `{upstream_slug(proposal['repo'])}` on "
+        f"`{proposal['default-branch']}` and this repository's copy of it has not. Opened by "
+        f"`{TOOL}`; the bytes are upstream's at the new commit, written by "
+        "`tools/sync_external.py --write`.",
         "",
-        f"- pin: `{record['pinned']}` -> `{record['head']}`",
-        f"- upstream diff: {compare_url(record)}",
-        f"- changed upstream: {', '.join(f'`{name}`' for name in changed)}",
+        f"- pin: `{proposal['pinned']}` -> `{proposal['head']}`",
+        f"- upstream diff: {compare_url(proposal)}",
     ]
-    if untouched:
+    if proposal["siblings"]:
         lines.append(
-            "- unchanged upstream, re-vendored because the pin moved: "
-            + ", ".join(f"`{name}`" for name in untouched)
+            "- also changed upstream, each in its own pull request: "
+            + ", ".join(f"`{name}`" for name in proposal["siblings"])
         )
     lines += [
+        "",
+        f"Merge or close this one on its own. Closing it declines this version of `{skill}`: "
+        "it is not proposed again, and the next change upstream is.",
         "",
         "What this does not decide is whether the new text should be merged. An import is "
         "somebody else's document, so a change in it is a change somebody made there: the "
@@ -314,93 +352,94 @@ def head_ref(push_slug: str, target_slug: str, branch: str) -> str:
     return f"{push_slug.split('/')[0]}:{branch}"
 
 
-def already_proposed(branch: str, slug: str) -> str | None:
-    """Whether this move, or an earlier one for the same upstream, is already open."""
-    listed = gh(
-        "pr", "list", "--repo", slug, "--state", "all", "--head", branch,
-        "--json", "number,state",
-    )
-    if same := json.loads(listed):
-        return f"#{same[0]['number']} ({same[0]['state'].lower()}) already proposes {branch}"
-    prefix = f"{branch.rsplit('-', 1)[0]}-"
-    open_prs = json.loads(
-        gh("pr", "list", "--repo", slug, "--state", "open", "--json", "number,headRefName")
-    )
-    others = [
-        pull
+def superseded(branch: str, skill: str, open_prs: list[dict]) -> list[int]:
+    """Open pull requests for an older version of this skill."""
+    if BROKEN.which == "M11":
+        return [
+            pull["number"]
+            for pull in open_prs
+            if pull["headRefName"].startswith(f"sync/{skill}-") and pull["headRefName"] != branch
+        ]
+    return [
+        pull["number"]
         for pull in open_prs
-        if pull["headRefName"].startswith(prefix) and pull["headRefName"] != branch
+        if (match := BRANCH_RE.match(pull["headRefName"]))
+        and match.group(1) == skill
+        and pull["headRefName"] != branch
     ]
-    if others:
-        return (
-            f"#{others[0]['number']} is an open update for the same upstream and is itself "
-            "behind now; merge or close it and the next run proposes the newer commit"
-        )
-    return None
 
 
-def dry_run(record: dict, remote: str, against: str, base: str) -> None:
+def dry_run(proposal: dict, remote: str, against: str, base: str) -> None:
     """Print the run without doing any of it, including the body a reviewer would read."""
-    branch = record["branch"]
+    branch, skill = proposal["branch"], proposal["skill"]
     target = remote_slug(against)
     head = head_ref(remote_slug(remote), target, branch)
     for line in (
         f"git switch --create {branch} {against}/{base}",
-        f"{TOOL} --update {upstream_slug(record['repo'])}",
-        f"git add -- skills skills.yaml NOTICE && git commit -m {commit_subject(record)!r}",
+        f"{TOOL} --update {skill}",
+        f"git add -- skills/{skill} skills.yaml && git commit -m {commit_subject(proposal)!r}",
         f"git push {remote} HEAD:refs/heads/{branch}",
         f"gh pr create --repo {target} --base {base} --head {head} "
-        f"--title {commit_subject(record)!r}",
+        f"--title {commit_subject(proposal)!r}",
+        f"gh pr close <each open sync/{skill}-* of an older tree> --comment 'Superseded ...'",
     ):
         print(f"     would run: {line}")
     print("     not asked here: whether that pull request already exists, which is a gh call")
-    print("".join(f"     | {line}\n" for line in pr_body(record).splitlines()), end="")
+    print("".join(f"     | {line}\n" for line in pr_body(proposal).splitlines()), end="")
 
 
-def propose(record: dict, remote: str, against: str) -> None:
-    """Branch, re-vendor, commit, push, and open the pull request for one moved upstream."""
-    branch = record["branch"]
+def propose(proposal: dict, remote: str, against: str) -> None:
+    """Branch, re-vendor, commit, push, and open the pull request for one changed skill."""
+    branch, skill = proposal["branch"], proposal["skill"]
     if dirty := git("status", "--porcelain"):
         sys.exit(
             "FAIL the working tree has uncommitted changes, and a pull request from it would "
             f"carry them: {dirty.splitlines()[0]}"
         )
     target = remote_slug(against)
-    if existing := already_proposed(branch, target):
-        print(f"SKIP {upstream_slug(record['repo'])}: {existing}")
+    listed = gh(
+        "pr", "list", "--repo", target, "--state", "all", "--head", branch,
+        "--json", "number,state",
+    )
+    if same := json.loads(listed):
+        print(f"SKIP {skill}: #{same[0]['number']} ({same[0]['state'].lower()}) is {branch}")
         return
+    open_prs = json.loads(
+        gh(
+            "pr", "list", "--repo", target, "--state", "open", "--limit", "500",
+            "--json", "number,headRefName",
+        )
+    )
 
     # Off the target's default branch: a stale fork base would show up as deletions.
     base = base_branch(against)
     git("fetch", "--quiet", against)
     git("switch", "--quiet", "--create", branch, f"{against}/{base}")
     print(f"     branched {branch} off {against}/{base}")
-    bump(record)
-    git("add", "--", "skills", "skills.yaml", "NOTICE")
-    git(
-        "commit",
-        "--quiet",
-        "-m",
-        commit_subject(record),
-        "-m",
-        f"{len(record['changed'])} of {len(record['skills'])} imported skill(s) changed "
-        f"upstream. Diff: {compare_url(record)}",
-    )
+    bump(proposal)
+    git("add", "--", f"skills/{skill}", "skills.yaml")
+    git("commit", "--quiet", "-m", commit_subject(proposal), "-m", compare_url(proposal))
     git("push", "--quiet", remote, f"HEAD:refs/heads/{branch}")
     url = gh(
         "pr", "create",
         "--repo", target,
         "--base", base,
         "--head", head_ref(remote_slug(remote), target, branch),
-        "--title", commit_subject(record),
+        "--title", commit_subject(proposal),
         "--body-file", "-",
-        stdin=pr_body(record),
+        stdin=pr_body(proposal),
     )
     print(f"OPENED {url}")
+    for number in superseded(branch, skill, open_prs):
+        gh(
+            "pr", "close", str(number), "--repo", target,
+            "--comment", f"Superseded by {url}: `{skill}` changed again upstream.",
+        )
+        print(f"CLOSED #{number}, superseded")
 
 
 def render(records: list[dict]) -> None:
-    """One line per upstream, plus what a stale one would carry into a pull request."""
+    """One line per upstream, plus one per skill a stale one would propose."""
     for record in records:
         where = upstream_slug(record["repo"])
         count = len(record["skills"])
@@ -413,11 +452,14 @@ def render(records: list[dict]) -> None:
             )
         elif record["state"] == "stale":
             print(
-                f"NEW  {where}: {record['default-branch']} moved {record['pinned'][:12]} -> "
-                f"{record['head'][:12]}, {len(record['changed'])} of {count} skill(s) changed"
+                f"NEW  {where}: {record['default-branch']} at {record['head'][:12]}, "
+                f"{len(record['changed'])} of {count} skill(s) changed"
             )
-            print(f"     changed: {', '.join(record['changed'])}")
-            print(f"     branch:  {record['branch']}")
+            for proposal in proposals(record):
+                print(
+                    f"     {proposal['skill']}: {proposal['pinned'][:12]} -> "
+                    f"{proposal['head'][:12]}, branch {proposal['branch']}"
+                )
         elif record["state"] == "unreachable":
             print(f"WARN {where}: not checked, upstream unreachable ({record['detail']})")
         else:
@@ -434,12 +476,13 @@ def self_test() -> int:
             failures.append(message)
 
     report = Report()
-    grouped = groups(report)
+    entries = external_entries(parse_catalog(report), report)
+    grouped = groups(entries)
     check(not report.errors, f"the catalog's pins parse: {'; '.join(report.errors) or 'clean'}")
     check(bool(grouped), f"{len(grouped)} group(s) carry a pin")
     check(
         len({group["repo"] for group in grouped.values()}) == len(grouped),
-        "one group per upstream repository, so one fetch and one pull request per move",
+        "one group per upstream repository, so one ls-remote and one fetch per upstream",
     )
     check(
         all(
@@ -449,49 +492,47 @@ def self_test() -> int:
         ),
         "every pinned path ends in the skill it is imported as",
     )
-    pins = [group["pinned"] for group in grouped.values()]
-    check(
-        len(set(pins)) == len(pins),
-        "no two upstreams share a commit id, which is what makes moving one a textual "
-        "substitution",
-    )
 
     subject = max(grouped.values(), key=lambda group: (len(group["skills"]), group["repo"]))
-    old, new = subject["pinned"], "0" * 40
+    names = sorted(subject["pins"])
+    last = names[-1]
+    moved_entries = {
+        name: entry | {"external-commit": "f" * 40} if name == last else entry
+        for name, entry in entries.items()
+    }
+    split = groups(moved_entries)[subject["repo"]]
+    last_path = next(path for path, name in split["skills"].items() if name == last)
+    check(
+        all(split["pins"][name] == subject["pins"][name] for name in names if name != last)
+        and paths_by_pin(split)["f" * 40] == [last_path],
+        f"one upstream at several pins is one group that fetches each ({last} moved alone)",
+    )
+
     catalog = CATALOG_PATH.read_bytes().decode("utf-8")
-    moved = rewrite_sha(catalog, old, new)
+    old, new = subject["pins"][last], "0" * 40
+    moved = set_pin(catalog, last, old, new)
+    lines = catalog.split("\n")
+    differing = [i for i, (was, now) in enumerate(zip(lines, moved.split("\n"))) if was != now]
     check(
-        moved.count(new) == catalog.count(old) and old not in moved,
-        f"moving {upstream_slug(subject['repo'])} rewrites its {catalog.count(old)} pin line(s)",
+        [moved.split("\n")[i] for i in differing] == [f'  external-commit: "{new}"'],
+        f"moving {last} rewrites exactly one line of skills.yaml ({len(differing)} changed)",
     )
+    start = lines.index(f"- name: {last}")
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("- ")), len(lines))
     check(
-        old[:12] not in moved and moved.count(new[:12]) >= catalog.count(old[:12]),
-        f"and the {catalog.count(old[:12]) - catalog.count(old)} place(s) that name it in "
-        "prose, so no comment is left describing the commit before the move",
+        all(start < i < end for i in differing),
+        f"and that line is in the {last} entry, not in another skill pinned at the same commit",
     )
-    others = [pin for pin in pins if pin != old]
-    check(
-        all(moved.count(pin) == catalog.count(pin) for pin in others),
-        f"while {len(others)} other upstream pin(s) are untouched",
-    )
-    touched = [
-        line
-        for line in catalog.splitlines()
-        if old in line or old[:12] in line
-    ]
-    differing = [
-        was
-        for was, now in zip(catalog.splitlines(), moved.splitlines())
-        if was != now
+    pins = {pin for group in grouped.values() for pin in group["pins"].values()}
+    prose = [
+        line.strip()
+        for line in lines
+        if any(pin[:12] in line for pin in pins) and not line.startswith("  external-commit: ")
     ]
     check(
-        differing == touched,
-        f"and the {len(differing)} changed line(s) are exactly the ones naming that commit",
-    )
-    notice = NOTICE_PATH.read_bytes().decode("utf-8")
-    check(
-        old not in rewrite_sha(notice, old, new) and new in rewrite_sha(notice, old, new),
-        "NOTICE, which repeats the pin for each upstream it republishes, moves too",
+        not prose,
+        "no line but an entry's external-commit names a pin, so two pull requests for one "
+        f"upstream never edit the same line: {prose[:1] or 'none'}",
     )
 
     paths = sorted(subject["skills"])
@@ -513,10 +554,20 @@ def self_test() -> int:
     )
 
     head = "1234567890abcdef1234567890abcdef12345678"
-    slug = upstream_slug(subject["repo"]).rsplit("/", 1)[-1]
+    tree = "abcdef1234567890abcdef1234567890abcdef12"
+    branch = branch_name(last, tree)
     check(
-        branch_name(subject["repo"], head) == f"sync/{slug}-{head[:12]}",
-        "the branch names the commit it moves to, so a second run finds its own pull request",
+        branch == f"sync/{last}-{tree[:12]}",
+        "the branch names the skill and its tree, so a closed one is not proposed again",
+    )
+    open_prs = [
+        {"number": 1, "headRefName": f"sync/{last}-{'9' * 12}"},
+        {"number": 2, "headRefName": f"sync/{last}-extra-{'9' * 12}"},
+        {"number": 3, "headRefName": branch},
+    ]
+    check(
+        superseded(branch, last, open_prs) == [1],
+        "a newer version supersedes only this skill's older pull request, not a sibling's",
     )
 
     listing = f"ref: refs/heads/main\tHEAD\n{head}\tHEAD\n"
@@ -558,12 +609,14 @@ def self_test() -> int:
         "repository instead",
     )
 
-    body = pr_body(
-        {**subject, "head": head, "default-branch": "main", "changed": [subject["skills"][one]]}
-    )
+    record = {
+        **subject, "head": head, "default-branch": "main", "changed": [names[0], last],
+        "trees": {name: tree for name in names},
+    }
+    body = pr_body(proposals(record)[1])
     check(
-        head in body and old in body and subject["skills"][one] in body,
-        "the pull request body names both commits and every skill that changed",
+        head in body and old in body and last in body and names[0] in body,
+        "the pull request body names both commits, its skill, and the others changed with it",
     )
 
     print(f"\n{'FAIL' if failures else 'PASS'} --self-test: {len(failures)} failure(s)")
@@ -578,12 +631,12 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument(
         "--update",
         action="store_true",
-        help="move the pin of every upstream that moved, and re-vendor. No git, no PR",
+        help="move the pin of every skill that changed upstream, and re-vendor. No git, no PR",
     )
     mode.add_argument(
         "--open-pr",
         action="store_true",
-        help="one branch, commit, push and pull request per upstream that moved",
+        help="one branch, commit, push and pull request per skill that changed upstream",
     )
     mode.add_argument("--self-test", action="store_true", help="assert against this catalog")
     parser.add_argument(
@@ -596,24 +649,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--against",
         help="the remote whose repository the pull request is opened against (--remote)",
     )
-    parser.add_argument("repos", nargs="*", help="limit to these upstreams (default: all)")
+    parser.add_argument(
+        "names", nargs="*", help="limit to these upstreams or skills (default: all)"
+    )
     parser.add_argument("--mutate", choices=sorted(MUTATIONS), help=argparse.SUPPRESS)
     return parser
 
 
-def selected(grouped: dict[str, dict], repos: list[str]) -> list[dict]:
-    """The groups named on the command line, or all of them."""
-    if not repos:
-        return [grouped[key] for key in sorted(grouped)]
-    wanted = {repo.rstrip("/").removesuffix(".git").lower() for repo in repos}
-    chosen = [
-        group
-        for key, group in sorted(grouped.items())
-        if wanted & {group["repo"].lower(), upstream_slug(group["repo"]).lower()}
-    ]
-    if not chosen:
-        sys.exit(f"FAIL no pinned upstream matches {', '.join(repos)}")
-    return chosen
+def wanted_by(names: set[str], group: dict) -> set[str]:
+    """The skills of one upstream that the command line asks for."""
+    skills = set(group["pins"])
+    if not names or names & {group["repo"].lower(), upstream_slug(group["repo"]).lower()}:
+        return skills
+    return skills & names
 
 
 def main() -> int:
@@ -626,7 +674,7 @@ def main() -> int:
         return self_test()
 
     report = Report()
-    grouped = groups(report)
+    grouped = groups(external_entries(parse_catalog(report), report))
     for error in report.errors:
         print(f"FAIL {error}", file=sys.stderr)
     if report.errors:
@@ -635,21 +683,30 @@ def main() -> int:
         print("OK   no imported skills")
         return 0
 
-    records = [survey(group) for group in selected(grouped, args.repos)]
+    names = {name.rstrip("/").removesuffix(".git").lower() for name in args.names}
+    chosen = {key: group for key, group in sorted(grouped.items()) if wanted_by(names, group)}
+    if not chosen:
+        sys.exit(f"FAIL no pinned upstream or skill matches {', '.join(args.names)}")
+
+    records = [survey(group) for group in chosen.values()]
     if args.json:
         print(json.dumps(records, indent=2))
         return 0
 
     render(records)
     against = args.against or args.remote
-    stale = [record for record in records if record["state"] == "stale"]
-    for record in stale:
-        if args.update:
-            bump(record)
-        elif args.open_pr and args.dry_run:
-            dry_run(record, args.remote, against, base_branch(against))
-        elif args.open_pr:
-            propose(record, args.remote, against)
+    for record, group in zip(records, chosen.values()):
+        if record["state"] != "stale":
+            continue
+        for proposal in proposals(record):
+            if proposal["skill"] not in wanted_by(names, group):
+                continue
+            if args.update:
+                bump(proposal)
+            elif args.open_pr and args.dry_run:
+                dry_run(proposal, args.remote, against, base_branch(against))
+            elif args.open_pr:
+                propose(proposal, args.remote, against)
     return 1 if any(record["state"] == "broken" for record in records) else 0
 
 
