@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Skill } from './skills';
 import { skills } from './skills';
@@ -43,6 +43,11 @@ function slugify(title: string): string {
 
 function loadSkillGroups(): SkillGroup[] {
   const path = join(CATALOG_ROOT, 'skills.sh.json');
+  if (!existsSync(path)) {
+    console.warn(`[groups] ${path} not found — Bundles tab will be empty`);
+    return [];
+  }
+
   let parsed: SkillsShFile;
   try {
     parsed = JSON.parse(readFileSync(path, 'utf8')) as SkillsShFile;
