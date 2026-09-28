@@ -392,7 +392,7 @@
 - name: xpu-system-setup
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
+  external-commit: "fa107a317bdabdf49ef0e35fb75786175f407f57"
   external-path: "plugins/intel-gpu-ai-skills/skills/xpu-system-setup"
   external-license: "Apache-2.0"
   intel-products: "Intel GPU, Intel Arc Pro, xpu-smi, Level Zero"
