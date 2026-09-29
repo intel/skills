@@ -96,6 +96,11 @@ jobs:
       - name: Link check
         run: python3 tools/validate_skills.py --check-links
 
+      # Here as well as in upstream-sync.yml, so a PR that breaks it fails now, not on the
+      # next scheduled run. Offline; --mutate M1..M11 each turn it red.
+      - name: Staleness detector still detects
+        run: python3 tools/check_upstream.py --self-test
+
       # The other check that needs someone else's server, and the counterpart to the
       # offline half in validate_skills.py: that one compares a vendored copy against
       # the pin in skills.yaml, this one re-fetches the pinned commit and compares the

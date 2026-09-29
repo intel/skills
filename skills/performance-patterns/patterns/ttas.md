@@ -30,26 +30,11 @@ high cache-coherence traffic under contention.
 
 ## Why this is slow
 
-A simple Test-and-Set loop:
-
-```c
-/* Test-and-Set — DO NOT USE under contention */
-while (!cmpxchg(&lock, UNLOCKED, LOCKED))
-    _mm_pause();
-```
-
-`cmpxchg` always acquires the cache line **exclusively**, even on failure. When
-thread A holds the lock and threads B and C are spinning:
-
-- B and C repeatedly race each other for exclusive ownership of the lock's cache line
-- The cache line bounces between B and C at high frequency
-- This *also* steals the line away from thread A — even when A is trying to
-  release the lock
-- If protected data shares the same cache line as the lock, that data is caught
-  in the same bounce (shows as false sharing in `perf c2c`)
-
-The more waiters, the worse this scales — bus traffic grows as O(N²) under
-contention.
+`cmpxchg` always acquires the cache line **exclusively**, even on failure, so
+every spinning waiter fights the others (and the lock holder) for the line.
+Bus traffic grows as **O(N²)** under contention, and any protected data sharing
+the lock's cache line gets caught in the same bounce (visible as false sharing
+in `perf c2c`).
 
 ---
 

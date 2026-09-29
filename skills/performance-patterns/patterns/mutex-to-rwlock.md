@@ -40,41 +40,13 @@ they do not conflict with each other.
 
 ## Why this is slow
 
-A mutex is an **exclusive lock**: every acquisition moves the lock cache line to
-Modified state via a LOCK CMPXCHG (Read-For-Ownership). Even two threads that
-only read the protected data must take turns:
-
-```
-Mutex with N readers (all serialize):
-
-  Thread 1: [LOCK CMPXCHG → M state] read data [unlock → store]
-  Thread 2:  ← waits (RFO pending) → [LOCK CMPXCHG → M state] read data [unlock]
-  Thread 3:  ← waits ──────────────── ← waits (RFO pending) → [acquire] read [unlock]
-  ...
-  Thread N:  ← waits for all N-1 predecessors
-```
-
-At HCC scale (100+ cores), this serialization is catastrophic:
-
-1. **O(N) wait time per reader** — each reader must wait for all preceding
-   readers to release, even though no data is being modified
-2. **OSQ spin burns cycles** — the kernel mutex optimistic spin queue keeps
-   threads spinning on their MCS nodes while the holder is running; with many
-   readers each holding briefly, the aggregate spin time is enormous
-3. **Cache-line bouncing** — the mutex's internal state transitions
-   (locked → unlocked → locked) force the lock cache line to bounce between
-   cores via the LLC/CHA, adding coherence latency to every handoff
-
-The Linux kernel mutex implementation has three acquisition phases:
-1. **Fast path** — single LOCK CMPXCHG; succeeds if mutex is unlocked
-2. **Midpath (OSQ)** — optimistic spinning on a per-CPU MCS node while the
-   owner is running on another CPU; avoids the cost of sleeping
-3. **Slow path** — thread is added to the wait queue and calls `schedule()`
-   (sleeps); woken by the holder on unlock via `wake_up_process()`
-
-When `osq_lock` dominates perf, threads are stuck in the midpath — spinning
-because the mutex holder is running (doing its read-only work) but not
-releasing fast enough for the queue of waiters.
+A mutex forces every acquisition — even read-only ones — to take exclusive
+ownership of its cache line via `LOCK CMPXCHG`, so N concurrent readers fully
+serialize. At HCC scale (100+ cores) this means O(N) wait time per reader,
+kernel mutexes burning cycles in optimistic (OSQ) spin, and the lock's cache
+line bouncing between cores on every handoff. When `osq_lock` dominates
+`perf`, threads are stuck in this midpath spin because the holder (doing brief
+read-only work) isn't releasing fast enough for the queue of waiters.
 
 ---
 

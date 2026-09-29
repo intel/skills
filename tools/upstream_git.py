@@ -31,6 +31,9 @@ server-side blob filtering, and intel/gpu-ai-skills measures ~2.4 s here against
 ~0.6 s there. Paying two seconds per upstream to stop downloading gigabytes per
 upstream is the right side of that trade, and it is one code path rather than two.
 
+`check_upstream.py` uses the same transport to ask whether a pinned directory changed
+upstream: `commit_trees` fetches trees only, no blobs, and `subtree_hashes` compares ids.
+
 Bytes come from the object store (`ls-tree` + `cat-file`), not from the working tree:
 a `.gitattributes` with `text`/`eol` or a clean/smudge filter would otherwise let the
 checkout hand back something other than what upstream committed, and what this
@@ -47,6 +50,10 @@ import subprocess
 import tempfile
 from collections.abc import Iterator
 from pathlib import Path
+from types import SimpleNamespace
+
+# The break `check_upstream.py --mutate` is running; shared so it reaches parse_symref.
+BROKEN = SimpleNamespace(which=None)
 
 # Line-ending translation off on every call, as in bin/intel-skills.mjs: CRLF would
 # change the hash of every text file and break every shebang.
@@ -113,6 +120,14 @@ def _git(args: list[str], cwd: Path, *, stdin: bytes | None = None) -> bytes:
     raise SyncUnavailable(last)
 
 
+def _empty_clone(repo: str, prefix: str) -> Path:
+    """A temporary repository with `repo` as its only remote and nothing fetched yet."""
+    work = Path(tempfile.mkdtemp(prefix=prefix))
+    _git(["init", "--quiet", "."], work)
+    _git(["remote", "add", "origin", repo], work)
+    return work
+
+
 @contextlib.contextmanager
 def pinned_subtrees(repo: str, commit: str, paths: list[str]) -> Iterator[Path]:
     """Materialize the given subtrees of one commit into a temporary clone.
@@ -121,10 +136,8 @@ def pinned_subtrees(repo: str, commit: str, paths: list[str]) -> Iterator[Path]:
     the pinned paths, so the promisor fetch pulls those blobs in one request instead
     of one request per file when they are read back.
     """
-    work = Path(tempfile.mkdtemp(prefix="intel-skills-upstream-"))
+    work = _empty_clone(repo, "intel-skills-upstream-")
     try:
-        _git(["init", "--quiet", "."], work)
-        _git(["remote", "add", "origin", repo], work)
         _git(["config", "core.sparseCheckout", "true"], work)
         _git(["config", "core.sparseCheckoutCone", "false"], work)
         patterns = "".join(f"/{path.strip('/')}/*\n" for path in sorted(set(paths)))
@@ -221,4 +234,76 @@ def root_files(work: Path, wanted: set[str]) -> dict[str, bytes]:
             oids.append(oid)
     for name, blob in zip(names, _read_blobs(work, oids)):
         found[name] = blob
+    return found
+
+
+def parse_symref(listing: str, repo: str) -> tuple[str, str]:
+    """The branch upstream's HEAD names and its commit, read as a pair from `ls-remote`."""
+    branch = ""
+    for line in listing.splitlines():
+        fields = line.split()
+        if len(fields) == 3 and fields[0] == "ref:" and fields[2] == "HEAD":
+            branch = fields[1]
+        elif branch and len(fields) == 2 and fields[1] == "HEAD":
+            if BROKEN.which == "M6":
+                return branch.removeprefix("refs/heads/"), branch
+            return branch.removeprefix("refs/heads/"), fields[0]
+    raise SyncError(
+        f"{repo}: git ls-remote returned no branch and commit for HEAD. An empty "
+        "repository, or one whose HEAD is not a branch, has no default branch for a pin "
+        "to be compared against"
+    )
+
+
+def default_head(repo: str) -> tuple[str, str]:
+    """Upstream's default branch, as its HEAD states it, and the commit it is at.
+
+    Run outside any repository, so the caller's `insteadOf` or credential helper cannot
+    change which server is asked.
+    """
+    with tempfile.TemporaryDirectory(prefix="intel-skills-lsremote-") as tmp:
+        listing = _git(["ls-remote", "--symref", repo, "HEAD"], Path(tmp))
+    return parse_symref(listing.decode("utf-8", "replace"), repo)
+
+
+@contextlib.contextmanager
+def commit_trees(repo: str, commits: list[str]) -> Iterator[Path]:
+    """Fetch the commit and tree objects of several commits: no blobs, no checkout."""
+    work = _empty_clone(repo, "intel-skills-trees-")
+    wanted = sorted(set(commits))
+    try:
+        try:
+            _git(
+                ["fetch", "--quiet", "--filter=blob:none", "--depth", "1", "origin", *wanted],
+                work,
+            )
+        except SyncError as exc:
+            raise SyncError(
+                f"{repo}: {exc} — one of {', '.join(c[:12] for c in wanted)} is not there"
+            ) from exc
+        yield work
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def subtree_hashes(work: Path, commit: str, paths: list[str]) -> dict[str, str]:
+    """The tree object id of each path at `commit`; one that is not a directory is omitted."""
+    listing = _git(
+        [
+            "ls-tree",
+            "-z",
+            "--format=%(objectmode) %(objectname) %(path)",
+            commit,
+            "--",
+            *sorted(set(paths)),
+        ],
+        work,
+    )
+    found: dict[str, str] = {}
+    for record in listing.split(b"\0"):
+        if not record:
+            continue
+        mode, oid, relative = record.decode("utf-8").split(" ", 2)
+        if mode == "040000":
+            found[relative] = oid
     return found
