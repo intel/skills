@@ -72,6 +72,21 @@ jobs:
       - name: Task leakage
         run: python3 tools/lint_task_leakage.py --fail-on-leak 5
 
+      # Quieter than the step above: a fence regex that stops matching scores every pair 0,
+      # which reads exactly like a catalog with no duplication. Blocks on the detector's
+      # liveness only - calibration against today's tree is printed, never failed, so adding
+      # a skill cannot redden this.
+      - name: Overlap detector still detects
+        run: python3 tools/lint_skill_overlap.py --self-test
+
+      # Advisory: which of two overlapping skills should win is a judgement a reviewer makes
+      # with the contributor. One finding blocks anyway - containment 1.0 on a pair with a
+      # skill authored here does nothing the other does not, so there is no division of
+      # labour to weigh, and a copy scores 1.0 whatever the threshold is. Rationale, the
+      # threshold's band and what the check cannot see: MAINTAINERS.md.
+      - name: Skill overlap
+        run: python3 tools/lint_skill_overlap.py --max-overlap 0.75 --min-shared 8 --advisory
+
       # Its own step because it is the one check that depends on someone else's
       # server. A 404 or 410 fails it — that is a pointer an agent would follow
       # into nothing — unless the link came from an imported body, where it warns

@@ -65,6 +65,31 @@ benchmark result from an API constant. And it does not check a description's voc
 unless the skill's catalog entry fills in `intel-products`; without it, the check reports
 that it did not run rather than passing silently.
 
+### Undeclared adjacency
+
+`tools/lint_skill_overlap.py` answers a narrower question than "are these two skills
+duplicates": do they drive the same commands, flags, environment variables, API calls and
+endpoint paths, and does neither description name the other? Sharing a tool is normal here
+and most of the catalog does it; competing silently for the same request is what leaves an
+agent nothing to route on.
+
+`--advisory` in CI, because which of two overlapping skills should win is a judgement about
+the catalog. One finding blocks: containment 1.0 on a pair with a skill authored here, where
+that skill does nothing the other already does and there is no division of labour to weigh.
+Two imports at 1.0 stay a warning — that repair lives upstream. `--self-test` blocks on the
+detector's liveness, never on calibration against today's tree, and `--mutate M1`…`M10` show
+each way of breaking the detector turning it red.
+
+What it cannot do, measured rather than assumed:
+
+| limit | measured |
+|---|---|
+| a restatement in different words is out of reach | `potion-base-8M` ranked a legitimate pair (0.9000) *above* a near-verbatim copy (0.8877). Closing this needs a literal-text axis, with a stoplist for the provenance notice that is byte-identical in all four imported skills — not a wider threshold, which misses the copy too |
+| name and description cannot screen a duplicate | a near-verbatim copy shares 0.05 of its description and 1.0000 of its actions, and a shared-name precondition would drop 4 of the 14 judgeable pairs. They order a reading queue and decide nothing |
+| most pairs are out of the action axis's reach, and the summary says so | of 528 pairs in 33 skills: 14 judged, 421 under `--min-shared 8`, 93 touching a skill with fewer than five actions of its own. That floor is not a flag, and it is why `linux-perf` and `onetbb-quickstart` — 1.0 over three C loop variables — does not block |
+| the threshold is not a constant to defend | CI runs `--max-overlap 0.75`. `--self-test` prints as a *note* whether it still sits in the 1.0–1.5× band above the tree's top pair (0.6154 at 33 skills), and the value to set if not: that ceiling rises with the catalog (0.36 at 12 skills, 0.56 at 20, 0.62 at 33), so a contribution can move it and does not own it. Disagreement between the files naming the flag does block |
+| a stricter run exists, and it is not the CI one | setting `--max-overlap` to zero and dropping `--advisory` fails on any undeclared authored pair at any score. Useful for auditing one family on purpose, useless as a gate. In prose rather than as a command, because the drift check reads any `--max-overlap` value in a text file as a copy of the gate's number |
+
 ## Level 2 — the differential
 
 The three-arm run in `evaluation/harbor/`. An agent attempts real containerized tasks in
@@ -232,7 +257,8 @@ locally, `--open-pr --remote <your fork> --against <this repository> --dry-run` 
 
 | Workflow | Job | Runs on | Blocks? |
 |---|---|---|---|
-| `validate.yml` | `validate` — `validate_skills.py`, `run_evals.py --validate`, task leakage and its self-test, the staleness detector's self-test, link check | every PR | yes |
+| `validate.yml` | `validate` — `validate_skills.py`, `run_evals.py --validate`, task leakage and its self-test, the overlap self-test, the staleness detector's self-test, link check | every PR | yes |
+| `validate.yml` | `validate` — skill overlap, `--advisory` | every PR | only on containment 1.0 |
 | `validate.yml` | `install` — the installer resolves, lists, and installs from the catalog | every PR | yes |
 | `harbor-smoke.yml` | the oracle arm over every task in `tasks/` | PRs touching tasks or skills | yes |
 | `security.yml` | `actionlint`, `zizmor` | every PR | yes |
@@ -279,6 +305,7 @@ Everything else runs offline.
 | `compare_harbor_skill.py` | runs and reports the three-arm differential, with cost and time |
 | `check_harbor_job.py` | asserts a harbor run's trial count and reward floor |
 | `lint_task_leakage.py` | ranks how much of its own answer each task's instruction leaks; blocks above 5 in CI, and `--self-test` asserts against this tree that the detector behind that number still detects |
+| `lint_skill_overlap.py` | reports skill pairs that drive the same actions with no hand-off written between them; advisory in CI except on a pair with a skill authored here at containment 1.0, while `--self-test` blocks and `--mutate` proves it fails when broken |
 | `behavior_digest.py` | digests the skill bytes a measurement was taken against, so a later edit to `SKILL.md` cannot leave `perf/` describing text that no longer exists |
 
 Three more exist for the imported skills: `sync_external.py` regenerates a copy from its
