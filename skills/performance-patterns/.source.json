@@ -1,7 +1,7 @@
 {
   "repo": "https://github.com/intel/intel-performance-skills",
   "path": "skills/performance-patterns",
-  "commit": "e9d0b6410fb1ad7a50fb81e0868fd23ae886882c",
+  "commit": "3e33aecabb956ec48526b3f842f4f70ae96d98ff",
   "license": "MIT",
   "modified-files": [
     "patterns/cold-path-annotation.md"
