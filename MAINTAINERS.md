@@ -244,6 +244,10 @@ still what was reviewed. The route is a pull request upstream, then move
 raising with the upstream maintainer rather than living with; if upstream will not take
 the fix, the pin is the wrong pin.
 
+The same route applies to a real (not false-positive) `SkillSpector` finding: file it
+upstream, then name that issue's URL in the `TRACKED` entry that suppresses it here —
+not just what would fix it, so the suppression can be checked rather than trusted.
+
 Moving the pin is proposed for you: when a pinned directory changes at the tip of
 upstream's default branch, `upstream-sync.yml` opens one pull request per changed skill
 that moves its pin and re-runs `--write`. A skill whose directory did not change keeps its
@@ -280,6 +284,13 @@ coverage.
 There is no secrets-scanning job either: the action for it needs an organisation licence key
 this repository has no secret for, so the job could only ever fail. GitHub's own secret
 scanning covers it instead.
+
+`CodeFactor` is a third-party status check, not a workflow here, and it is not one of
+the ruleset's required checks. Its style and complexity metrics are not chased
+upstream — there is no reviewer's time to file an issue per metric across hundreds of
+imported files — so a red `CodeFactor` on an imported skill is expected and does not
+block a merge. A finding worth fixing at the source is a security finding, not a style
+one; see the `SkillSpector` `TRACKED` convention in `.skillspector-baseline.yaml`.
 
 The oracle arm applies each task's `solution/solve.sh` and never reads `SKILL.md`. It
 proves a task is solvable and its verifier emits a reward — nothing about the skill. It
@@ -343,3 +354,6 @@ CI covers form. What a reviewer has to supply is the judgement no keyless check 
 5. Is `maintainer` a GitHub handle belonging to the person you think it does? Nothing
    validates it beyond "not empty", so open `github.com/<handle>` once. A plausible
    handle can quietly credit a stranger.
+6. Does a sync pull request's checks include a real (not false-positive) security
+   finding on upstream's bytes? It needs a `TRACKED` entry naming the upstream issue,
+   not a maintainer's private judgement that it's fine.
