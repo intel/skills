@@ -340,7 +340,7 @@
 - name: xpu-discover
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
+  external-commit: "e7d07772c32825ce749c1e3459b9cd80bd1d4da2"
   external-path: "plugins/intel-gpu-ai-skills/skills/xpu-discover"
   external-license: "Apache-2.0"
   intel-products: "Intel Arc, Intel Arc Pro, Intel Data Center GPU Max"
