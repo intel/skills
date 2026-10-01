@@ -52,17 +52,12 @@ A skill that answers 1, 4 and 7 only is a tutorial. The shape to aim for:
 Recognize → Inspect → Decide → Act → Verify → Recover → Report
 ```
 
-[`skills/vllm-xpu-run`](skills/vllm-xpu-run) is the worked example. It recognizes a request
-for an OpenAI-compatible endpoint on an Intel GPU; inspects image, model architecture,
-`/dev/dri` access and available memory; decides dtype, attention backend, quantization and
-KV-cache pairing, and whether the transformers backend fallback is needed; launches the
-container; sends a real generation request and confirms the work landed on the GPU;
-diagnoses an unsupported architecture, an OOM, a oneCCL initialization failure or a missing
-device node; and hands off to `vllm-xpu-bench` the moment the question becomes "how fast is
-it?". That is the part a Markdown copy of the vLLM documentation does not carry.
-[`skills/linux-perf`](skills/linux-perf) is the same shape on a CPU scalability problem,
-including two hand-offs: benchmark setup to `phoronix-test-suite`, a diagnosed pattern to
-`performance-patterns`.
+[`skills/vllm-xpu-run`](skills/vllm-xpu-run) is the worked example: every step of the shape
+above, on a real request for an OpenAI-compatible endpoint on an Intel GPU, plus a hand-off
+to `vllm-xpu-bench` the moment the question becomes "how fast is it?" — the part a Markdown
+copy of the vLLM documentation does not carry. [`skills/linux-perf`](skills/linux-perf) is
+the same shape on a CPU scalability problem, with two hand-offs: benchmark setup to
+`phoronix-test-suite`, a diagnosed pattern to `performance-patterns`.
 
 ## 1. Fork, clone, create the directory
 
@@ -214,11 +209,17 @@ python3 tools/validate_skills.py --check-links   # also checks external URLs; ne
 python3 tools/run_evals.py --validate            # only if you wrote evals/evals.json
 python3 tools/lint_task_leakage.py --fail-on-leak 5   # only if you wrote a Harbor task
 python3 tools/sync_external.py --check           # only if you imported a skill
+python3 tools/lint_skill_overlap.py --max-overlap 0.75 --min-shared 8 --advisory
 ```
 
 Only `--check-links` and `sync_external.py --check` reach the network. If the offline ones
 pass, the blocking checks left are about the repository rather than your text: the workflow
 linters and the installer round trip.
+
+The last one lists the skills that drive the same commands, flags and API calls as yours,
+where neither skill's description says which one a request should route to. Answer that in
+the pull request; it fails only if your skill does nothing another already does. It compares
+what a skill does, not what it says, so a clean run is not a duplication check.
 
 ### The security scan
 
@@ -368,10 +369,15 @@ Blocking, keyless, and runnable on a fork:
   because the repair has to land upstream and arrive here through a moved pin. A timeout, a
   5xx or rate limiting only warns, so an outage elsewhere cannot hold up a pull request
 
-Reported but not blocking: the coverage gaps between what a suite claims and what it
-implements, a dead link in a body this repository copied rather than wrote, a
-SkillSpector HIGH/CRITICAL finding in a skill whose score is still within its threshold,
-and SkillEvaluator's warnings and advisory script lint.
+Reported but not blocking:
+
+- the coverage gaps between what a suite claims and what it implements
+- a dead link in a body this repository copied rather than wrote
+- a SkillSpector HIGH/CRITICAL finding in a skill whose score is still within its threshold
+- a pair of skills that drive the same actions with no hand-off written between them — a
+  reviewer's call rather than a threshold's; what blocks there is a skill of yours that does
+  nothing another already does, and that check's own self-test
+- SkillEvaluator's warnings and advisory script lint
 
 ## Evaluation levels
 

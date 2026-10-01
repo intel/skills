@@ -58,18 +58,11 @@ when it matches any of these patterns:
 
 ## Why the hot path suffers without it
 
-Without the annotation the compiler has no way to know how likely each branch
-is. It interleaves the cold-path instructions with the hot-path instructions in
-program order. This has two costs for the caller:
-
-1. **Instruction-cache pollution.** The cold-path instructions occupy cache
-   lines. Every time the hot path runs, it potentially evicts useful hot-path
-   instructions to make room for code that almost never executes.
-
-2. **Branch predictor pressure.** The compiler generates generic branch
-   sequences. With the annotation it can emit the branch in a form the CPU's
-   static branch predictor recognizes as "almost never taken," saving a
-   mis-prediction penalty.
+Without the annotation, the compiler interleaves cold-path instructions with
+hot-path instructions in program order, which pollutes the instruction cache
+(cold code evicts useful hot-path lines) and denies the compiler the chance to
+emit a branch sequence the CPU's static predictor recognizes as "almost never
+taken."
 
 ---
 

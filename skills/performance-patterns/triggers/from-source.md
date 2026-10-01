@@ -30,215 +30,30 @@ structure alone is a strong predictor of the performance problem.
 
 ---
 
-## Pattern descriptions
+## Additional detection notes
 
-### Missing vzeroupper
+These cover cases where the table alone doesn't carry enough specificity to
+identify the pattern. For the mechanism/rationale behind each pattern, read the
+linked `patterns/*.md` file — don't re-derive it here.
 
-An inline assembly block or function that uses `ymm` registers or `zmm0`–`zmm15`
-(which alias `ymm0`–`ymm15`) and returns or calls into code that may use legacy
-SSE instructions, without emitting `vzeroupper` first. The upper 128 bits of the
-YMM registers remain "dirty" from the CPU's perspective; the first SSE instruction
-that follows will trigger an AVX↔SSE transition penalty costing hundreds of cycles.
+- **Missing restrict** — C only; C++ has no standard `restrict` (only the
+  non-portable `__restrict__` extension).
+- **Narrow SIMD** — check `/proc/cpuinfo` for `avx2`/`avx512f` before
+  recommending a target width; also fires when the compiler auto-vectorized to
+  `xmm` instead of a wider register.
+- **SIMD sort** — check whether `std::stable_sort` is used before recommending
+  x86-simd-sort; no stable-sort equivalent exists.
+- **Known algorithm** — function name is sufficient trigger; inspect the body
+  only to confirm ISA level. Common name variants:
 
-Recognizable by: `ymm` or `zmm0`–`zmm15` in an asm block with no `vzeroupper`
-at the end; or AVX intrinsic code (`_mm256_*`, `_mm512_*`) with no
-`_mm256_zeroupper()` before returning to a caller compiled without AVX.
+  | Algorithm | Common function names in code |
+  |-----------|-------------------------------|
+  | Cosine Similarity | `cosine_similarity`, `cosine_sim`, `cos_sim`, `cosine_distance`, `angular_similarity`, `dot_normalized` |
+  | Hamming Distance | `hamming_distance`, `hamming_dist`, `hamming`, `count_differing_bits`, `bit_diff_count`, `popcount_xor` |
+  | Jaccard Distance | `jaccard_distance`, `jaccard_similarity`, `jaccard_sim`, `jaccard_index`, `jaccard_coeff`, `iou` |
 
-Read `patterns/missing-vzeroupper.md`.
-
----
-
-### Serial accumulator
-
-A loop that reduces a sequence into a single value — dot product, sum, running
-max/min, weighted sum, histogram bucket — using one accumulator variable. The
-accumulator is updated on every iteration (`sum += a[i] * b[i]`), creating a
-loop-carried dependency: each iteration must wait for the previous one to finish
-before it can begin. The CPU cannot exploit its ability to run multiple FP
-operations per cycle. Recognizable by a single scalar variable on the left-hand
-side of a compound-assignment inside the loop body, with no other loop-carried
-dependency present.
-
-Read `patterns/parallel-accumulator.md`.
-
----
-
-### Missing restrict
-
-A C function (not C++) that takes two or more pointer parameters — at least one
-written — without `restrict`, where the buffers are guaranteed by the caller not
-to overlap. Common signatures: `void filter(float *in, float *out, int n)`,
-`void add(const float *a, const float *b, float *dst, int n)`. Without
-`restrict`, the compiler must assume any write might alias any read of the same
-type, forcing it to emit a runtime overlap check and a scalar fallback, or to
-abandon auto-vectorization entirely.
-
-Only applies to C. For C++, `__restrict__` (GCC/Clang extension) is available
-but non-standard.
-
-Read `patterns/missing-restrict.md`.
-
----
-
-### Narrow SIMD
-
-A floating-point or integer loop that uses 128-bit SSE intrinsics (`_mm_*`,
-`__m128`, `__m128d`) or no SIMD at all (plain `float` or `double` arithmetic in
-a loop). Modern x86 CPUs support 256-bit (AVX2) and often 512-bit (AVX-512)
-operations that process 2–4× more data per instruction. This pattern also applies
-when the compiler has auto-vectorized the loop but chose `xmm` registers —
-visible in the object file or assembly listing (`-S` output). Check
-`/proc/cpuinfo` for `avx2` and `avx512f` flags before recommending a target width.
-
-Read `patterns/simd-upconversion.md`.
-
----
-
-### Test-and-Set spinlock
-
-A spinlock whose spin loop performs only an atomic read-modify-write operation
-with no preceding ordinary read of the lock variable:
-
-```c
-while (!cmpxchg(&lock, UNLOCKED, LOCKED))   /* ◄ no read before the atomic */
-    _mm_pause();
-```
-
-Every iteration of this loop acquires the lock's cache line exclusively — even
-on failure — causing the line to bounce between all waiting threads and away from
-the thread that holds the lock. Throughput degrades super-linearly with thread
-count. The fix (TTAS) adds a cheap shared read before each atomic attempt.
-
-Read `patterns/ttas.md`.
-
----
-
-### False sharing
-
-A struct contains fields that are written frequently by different threads (e.g.,
-per-thread counters, state flags, or work-item metadata), and those fields are
-not separated by `alignas(64)` / `__attribute__((aligned(64)))` padding. If they
-land on the same 64-byte cache line, each write by one thread invalidates the
-line for all other threads, even though no thread needs what the others wrote.
-Recognizable by a shared struct definition where different fields are documented
-as "owned by thread X" or updated inside per-thread loops with no explicit cache
-line alignment between them.
-
-Read `patterns/false-sharing.md`.
-
----
-
-### Shared statistics counter
-
-A global or shared counter that is incremented atomically from many threads in a
-frequently-called path: `global_counter++`, `atomic_inc(&hits)`,
-`atomic_fetch_add(&bytes, n)`. Unlike a lock, there is no retry logic — just a
-bare increment — but the hardware still requires exclusive cache-line ownership
-for every atomic write, causing the counter's cache line to bounce between all
-updating threads. Field names are the strongest hint: `count`, `total`, `hits`,
-`misses`, `errors`, `stat`, `bytes`, `packets`. No `cmpxchg` loop present
-(if there is one, the TTAS pattern applies instead).
-
-Read `patterns/per-cpu-stats.md`.
-
----
-
-### SIMD sort
-
-`std::sort`, `std::nth_element`, `std::partial_sort`, or C-style `qsort`
-called on an array or `std::vector` of `float`, `double`, `int32_t`,
-`uint32_t`, `int64_t`, or `uint64_t`. The data type is the key signal —
-these are the types for which x86-simd-sort provides a drop-in AVX-512/AVX2
-accelerated replacement. A hand-written quicksort or merge sort over numeric
-primitives is an equally strong trigger. Check whether `std::stable_sort` is
-in use before recommending a replacement (no stable-sort equivalent exists).
-
-Read `patterns/simd-sort.md`.
-
----
-
-### CV thundering herd
-
-A condition variable (`pthread_cond_broadcast` or `cv.notify_all()`) wakes all
-waiting threads when only a subset has work available. Or `notify_one()` is
-called in a sequential loop to wake N threads one by one. Common pattern: a
-dispatcher/leader thread wakes `num_threads` workers unconditionally
-(`for (i = 0; i < nthreads; i++) wake(thread[i])`) regardless of how many jobs
-are pending. Workers that find no work after waking call `sched_yield()` or
-immediately re-block. The wasted wakeups scale with thread count and become the
-dominant cost at high core count (HCC) scale.
-
-Read `patterns/cv-thundering-herd.md`.
-
----
-
-### Mutex to rwlock
-
-A mutex (`mutex_lock()` in kernel, `pthread_mutex_lock()` in user space)
-protects a critical section where the common path only reads shared data —
-lookups in a cache, searches in a tree, status checks, configuration reads.
-Writes occur rarely (new entry creation, occasional updates). With many threads
-and high core counts, all readers serialize on the mutex even though they don't
-conflict. The fix is replacing the mutex with an rwlock (`pthread_rwlock_t` in
-user space, or `rw_semaphore` in kernel for sleepable contexts; `rwlock_t` in
-kernel is spin-based and only suitable for non-sleeping critical sections) so
-readers proceed concurrently.
-
-Read `patterns/mutex-to-rwlock.md`.
-
----
-
-### Known algorithm — optimized SIMD replacement available
-
-A function whose name matches any entry in the table below. The implementation
-may be correct but scalar, or use a narrower SIMD width than the CPU supports.
-The function name is sufficient trigger — inspect the body only to confirm ISA
-level choices.
-
-| Algorithm | Common function names in code |
-|-----------|-------------------------------|
-| Cosine Similarity | `cosine_similarity`, `cosine_sim`, `cos_sim`, `cosine_distance`, `angular_similarity`, `dot_normalized` |
-| Hamming Distance | `hamming_distance`, `hamming_dist`, `hamming`, `count_differing_bits`, `bit_diff_count`, `popcount_xor` |
-| Jaccard Distance | `jaccard_distance`, `jaccard_similarity`, `jaccard_sim`, `jaccard_index`, `jaccard_coeff`, `iou` |
-
-If a function name from the table is present in the code being reviewed, read
-`references/known-algorithms-impl.md` for the ISA levels, dispatch guards, and
-implementation notes. Do not load it otherwise.
-
----
-
-### Fast CRC32C
-
-A function or loop that computes CRC32C using:
-
-- a single `_mm_crc32_u64` / `_mm_crc32_u32` accumulator variable (latency-bound),
-- a byte-by-byte or word-by-word table-lookup loop, or
-- a function whose name is `crc32c`, `crc32_c`, `calc_crc32c`, `hash_crc32c`,
-  or similar — the name alone strongly implies a suboptimal implementation.
-
-The function name is a distinctive trigger: if you see a function called
-`crc32c` in any performance-sensitive context, check whether it uses the
-corsix fusion implementation before looking at how it is called.
-
-Read `patterns/fast-crc32c.md`.
-
----
-
-### Cold-path annotation
-
-A hot function calls one or more functions that are only reached on rarely-taken
-branches — error reporters, impossible-state handlers, rare corner-case paths —
-and those callees are not marked `[[gnu::cold]]` or `__attribute__((cold))`.
-
-Without the annotation, the compiler interleaves the cold-path instructions with
-the hot-path instructions in the compiled output. This pollutes the instruction
-cache and generates suboptimal branch sequences for the hot path. The annotation
-tells the compiler the branch is almost never taken; it responds by emitting the
-cold code after the function's main return sequence, keeping the hot path tight.
-
-Recognizable by: a hot function whose body contains `if (error_condition)
-{ handle_error(...); }` or similar guards, where `handle_error` does logging,
-`fprintf(stderr, …)`, `exit`, `abort`, `throw`, or other error-only work, and
-carries no cold annotation.
-
-Read `patterns/cold-path-annotation.md`.
+  If a name from the table is present, read `references/known-algorithms-impl.md`
+  for ISA levels, dispatch guards, and implementation notes. Do not load it
+  otherwise.
+- **Fast CRC32C** — name is a sufficient trigger even without inspecting the
+  loop body; variants include `crc32c`, `crc32_c`, `calc_crc32c`, `hash_crc32c`.

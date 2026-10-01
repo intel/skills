@@ -62,10 +62,10 @@ Read `patterns/missing-vzeroupper.md`.
 
 The accumulate instruction (e.g., `vaddss`, `vaddpd`, `vmulss`, `vfmadd213ps`)
 appears at the top of the `perf annotate` cycle-count column for a tight loop.
-IPC from `perf stat` is well below 1.0, yet cache-miss rates are low — the CPU
-is not waiting for memory, it is waiting for the previous iteration's result.
-Cycles-per-iteration is at or above the FP latency of the operation (typically
-4–5 cycles for `vadd`/`vfma`), even though the loop body is short.
+IPC from `perf stat` is well below 1.0 with low cache-miss rates — a dependency
+stall, not a memory stall. Cycles-per-iteration is at or above the FP latency
+of the operation (typically 4–5 cycles for `vadd`/`vfma`), even though the loop
+body is short.
 
 Read `patterns/parallel-accumulator.md`.
 
@@ -139,13 +139,11 @@ Read `patterns/fast-crc32c.md`.
 ### SIMD sort
 
 `perf report` shows `std::sort`, `_introsort_loop`, `__gnu_cxx::__ops`,
-`std::__introsort_loop`, or `std::__sort` among the hottest symbols, and the
-sorted data type is a numeric primitive (`float`, `double`, `int32_t`,
-`uint32_t`, `int64_t`, `uint64_t`). `perf stat` may also show elevated
-`branch-misses` — the comparator-driven branches of introsort are notoriously
-hard for the branch predictor. The bottleneck is comparison and partitioning
-overhead, not memory bandwidth; replacing with x86-simd-sort gives 3–8×
-speedup by vectorizing both steps with AVX-512/AVX2.
+`std::__introsort_loop`, or `std::__sort` among the hottest symbols, on a
+numeric primitive type (`float`, `double`, `int32_t`, `uint32_t`, `int64_t`,
+`uint64_t`). `perf stat` may also show elevated `branch-misses` — introsort's
+comparator branches are hard to predict. See `patterns/simd-sort.md` for the
+x86-simd-sort replacement and expected speedup.
 
 Read `patterns/simd-sort.md`.
 

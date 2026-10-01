@@ -65,6 +65,31 @@ benchmark result from an API constant. And it does not check a description's voc
 unless the skill's catalog entry fills in `intel-products`; without it, the check reports
 that it did not run rather than passing silently.
 
+### Undeclared adjacency
+
+`tools/lint_skill_overlap.py` answers a narrower question than "are these two skills
+duplicates": do they drive the same commands, flags, environment variables, API calls and
+endpoint paths, and does neither description name the other? Sharing a tool is normal here
+and most of the catalog does it; competing silently for the same request is what leaves an
+agent nothing to route on.
+
+`--advisory` in CI, because which of two overlapping skills should win is a judgement about
+the catalog. One finding blocks: containment 1.0 on a pair with a skill authored here, where
+that skill does nothing the other already does and there is no division of labour to weigh.
+Two imports at 1.0 stay a warning — that repair lives upstream. `--self-test` blocks on the
+detector's liveness, never on calibration against today's tree, and `--mutate M1`…`M10` show
+each way of breaking the detector turning it red.
+
+What it cannot do, measured rather than assumed:
+
+| limit | measured |
+|---|---|
+| a restatement in different words is out of reach | `potion-base-8M` ranked a legitimate pair (0.9000) *above* a near-verbatim copy (0.8877). Closing this needs a literal-text axis, with a stoplist for the provenance notice that is byte-identical in all four imported skills — not a wider threshold, which misses the copy too |
+| name and description cannot screen a duplicate | a near-verbatim copy shares 0.05 of its description and 1.0000 of its actions, and a shared-name precondition would drop 4 of the 14 judgeable pairs. They order a reading queue and decide nothing |
+| most pairs are out of the action axis's reach, and the summary says so | of 528 pairs in 33 skills: 14 judged, 421 under `--min-shared 8`, 93 touching a skill with fewer than five actions of its own. That floor is not a flag, and it is why `linux-perf` and `onetbb-quickstart` — 1.0 over three C loop variables — does not block |
+| the threshold is not a constant to defend | CI runs `--max-overlap 0.75`. `--self-test` prints as a *note* whether it still sits in the 1.0–1.5× band above the tree's top pair (0.6154 at 33 skills), and the value to set if not: that ceiling rises with the catalog (0.36 at 12 skills, 0.56 at 20, 0.62 at 33), so a contribution can move it and does not own it. Disagreement between the files naming the flag does block |
+| a stricter run exists, and it is not the CI one | setting `--max-overlap` to zero and dropping `--advisory` fails on any undeclared authored pair at any score. Useful for auditing one family on purpose, useless as a gate. In prose rather than as a command, because the drift check reads any `--max-overlap` value in a text file as a copy of the gate's number |
+
 ## Level 2 — the differential
 
 The three-arm run in `evaluation/harbor/`. An agent attempts real containerized tasks in
@@ -219,17 +244,37 @@ still what was reviewed. The route is a pull request upstream, then move
 raising with the upstream maintainer rather than living with; if upstream will not take
 the fix, the pin is the wrong pin.
 
+The same route applies to a real (not false-positive) `SkillSpector` finding: file it
+upstream, then name that issue's URL in the `TRACKED` entry that suppresses it here —
+not just what would fix it, so the suppression can be checked rather than trusted.
+
+Moving the pin is proposed for you: when a pinned directory changes at the tip of
+upstream's default branch, `upstream-sync.yml` opens one pull request per changed skill
+that moves its pin and re-runs `--write`. A skill whose directory did not change keeps its
+pin, so skills of one upstream may be pinned at different commits. Merge any subset; closing
+one declines that version, and a later change is proposed again. It edits only the skill's
+entry and directory, never `NOTICE`, whose `Commit:` lines are kept by hand.
+That pull request is not a decision; the diff to read is the skill text. By hand: `python3 tools/check_upstream.py` to survey, `--update` to move a pin
+locally, `--open-pr --remote <your fork> --against <this repository> --dry-run` to preview.
+
 ## CI
 
 | Workflow | Job | Runs on | Blocks? |
 |---|---|---|---|
-| `validate.yml` | `validate` — `validate_skills.py`, `run_evals.py --validate`, task leakage and its self-test, link check | every PR | yes |
+| `validate.yml` | `validate` — `validate_skills.py`, `run_evals.py --validate`, task leakage and its self-test, the overlap self-test, the staleness detector's self-test, link check | every PR | yes |
+| `validate.yml` | `validate` — skill overlap, `--advisory` | every PR | only on containment 1.0 |
 | `validate.yml` | `install` — the installer resolves, lists, and installs from the catalog | every PR | yes |
 | `harbor-smoke.yml` | the oracle arm over every task in `tasks/` | PRs touching tasks or skills | yes |
 | `security.yml` | `actionlint`, `zizmor` | every PR | yes |
 | `skillevaluator.yml` | SkillEvaluator Tier 1 on each changed skill, gated by `skillevaluator_gate.py` against `.skillevaluator-baseline.yaml` | PRs touching skills or its own machinery, push, weekly | yes |
 | `skillevaluator-live.yml` | SkillEvaluator Tier 3: one skill's `evals/` cases, with and without the skill, under a real agent | dispatched by hand | no |
 | `codeql.yml` | code scanning, Python | PRs, push, weekly | reports |
+| `upstream-sync.yml` | `check_upstream.py --open-pr`: one pull request per skill whose pinned directory moved | Sundays and Wednesdays, or by hand | opens PRs |
+
+`upstream-sync.yml` is the one workflow that writes, and runs only in `intel/skills`. It
+needs no secret, but needs *Allow GitHub Actions to create and approve pull requests*, or it
+fails at `gh pr create`. Its pull request's checks wait for a maintainer to select **Approve
+workflows to run**; an `UPSTREAM_SYNC_TOKEN` app or account token removes that click.
 
 `codeql.yml` runs its job only where the repository is public, which it reads from the event
 rather than being told. Uploading results needs GitHub Advanced Security, which a public
@@ -243,6 +288,13 @@ organisation licence key this repository has no secret for, so the job could onl
 fail. `skillevaluator.yml` runs the gitleaks binary, which needs no key, over every skill it
 validates, so a secret in a skill blocks its pull request; GitHub's own secret scanning
 covers the rest of the tree.
+
+`CodeFactor` is a third-party status check, not a workflow here, and it is not one of
+the ruleset's required checks. Its style and complexity metrics are not chased
+upstream — there is no reviewer's time to file an issue per metric across hundreds of
+imported files — so a red `CodeFactor` on an imported skill is expected and does not
+block a merge. A finding worth fixing at the source is a security finding, not a style
+one; see the `SkillSpector` `TRACKED` convention in `.skillspector-baseline.yaml`.
 
 The oracle arm applies each task's `solution/solve.sh` and never reads `SKILL.md`. It
 proves a task is solvable and its verifier emits a reward — nothing about the skill. It
@@ -283,9 +335,9 @@ artifact is as readable as the repository, so treat agent transcripts as public.
 
 All stdlib-only Python 3.11 or newer — 3.11 for `tomllib`, and the two tools that need it
 say so rather than failing as a missing module. None of them ships in the installable
-package. Two reach the
-network and both say so when they cannot: `validate_skills.py --check-links` and
-`sync_external.py`. Everything else runs offline.
+package. Three reach the network and each says so when it cannot:
+`validate_skills.py --check-links`, `sync_external.py`, and `check_upstream.py`.
+Everything else runs offline.
 
 | Script | What it does |
 |---|---|
@@ -294,12 +346,13 @@ network and both say so when they cannot: `validate_skills.py --check-links` and
 | `compare_harbor_skill.py` | runs and reports the three-arm differential, with cost and time |
 | `check_harbor_job.py` | asserts a harbor run's trial count and reward floor |
 | `lint_task_leakage.py` | ranks how much of its own answer each task's instruction leaks; blocks above 5 in CI, and `--self-test` asserts against this tree that the detector behind that number still detects |
+| `lint_skill_overlap.py` | reports skill pairs that drive the same actions with no hand-off written between them; advisory in CI except on a pair with a skill authored here at containment 1.0, while `--self-test` blocks and `--mutate` proves it fails when broken |
 | `behavior_digest.py` | digests the skill bytes a measurement was taken against, so a later edit to `SKILL.md` cannot leave `perf/` describing text that no longer exists |
 
-Two more exist for the imported skills: `sync_external.py` regenerates a copy from its pin
-with `--write`, or with `--check` re-fetches the pinned commit and byte-compares what is
-here against it, and `upstream_git.py` fetches just the pinned subtree instead of the
-repository around it.
+Three more exist for the imported skills: `sync_external.py` regenerates a copy from its
+pin with `--write`, or with `--check` re-fetches the pinned commit and byte-compares what
+is here against it; `check_upstream.py` proposes moving a pin whose directory changed
+upstream; and `upstream_git.py` is the transport both use, fetching only what they need.
 
 ## Current state
 
@@ -331,3 +384,6 @@ CI covers form. What a reviewer has to supply is the judgement no keyless check 
 5. Is `maintainer` a GitHub handle belonging to the person you think it does? Nothing
    validates it beyond "not empty", so open `github.com/<handle>` once. A plausible
    handle can quietly credit a stranger.
+6. Does a sync pull request's checks include a real (not false-positive) security
+   finding on upstream's bytes? It needs a `TRACKED` entry naming the upstream issue,
+   not a maintainer's private judgement that it's fine.
