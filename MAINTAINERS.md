@@ -266,6 +266,7 @@ locally, `--open-pr --remote <your fork> --against <this repository> --dry-run` 
 | `validate.yml` | `install` — the installer resolves, lists, and installs from the catalog | every PR | yes |
 | `harbor-smoke.yml` | the oracle arm over every task in `tasks/` | PRs touching tasks or skills | yes |
 | `security.yml` | `actionlint`, `zizmor` | every PR | yes |
+| `skillevaluator.yml` | SkillEvaluator Tier 1 on each changed skill, gated by `skillevaluator_gate.py` against `.skillevaluator-baseline.yaml` | PRs touching skills or its own machinery, push, weekly | yes |
 | `codeql.yml` | code scanning, Python | PRs, push, weekly | reports |
 | `upstream-sync.yml` | `check_upstream.py --open-pr`: one pull request per skill whose pinned directory moved | Sundays and Wednesdays, or by hand | opens PRs |
 
@@ -281,9 +282,11 @@ would succeed and only the upload would fail — a check that is always red, whi
 people to ignore red checks. Anyone holding this tree privately should not count it as
 coverage.
 
-There is no secrets-scanning job either: the action for it needs an organisation licence key
-this repository has no secret for, so the job could only ever fail. GitHub's own secret
-scanning covers it instead.
+There is no repository-wide secrets-scanning job either: the action for it needs an
+organisation licence key this repository has no secret for, so the job could only ever
+fail. `skillevaluator.yml` runs the gitleaks binary, which needs no key, over every skill it
+validates, so a secret in a skill blocks its pull request; GitHub's own secret scanning
+covers the rest of the tree.
 
 `CodeFactor` is a third-party status check, not a workflow here, and it is not one of
 the ruleset's required checks. Its style and complexity metrics are not chased
