@@ -103,11 +103,11 @@ findings:
       the tool's documented purpose; see the comment above the call.
 
 incomplete:
-  # Semgrep's bash parser rejects valid shell: `${VAR:-intel/vllm:<version>-xpu}` in a
-  # parameter-expansion default (`<` was unexpected, PartialParsing), which `bash -n`
-  # accepts. SkillEvaluator then marks Code Risk Analysis incomplete for the skill.
+  # Semgrep reports a syntax error in shell that `bash -n` accepts: emit_launch.sh in
+  # vllm-xpu-run, check_battlemage_prerequisites.sh and setup_xpu_system.sh in
+  # xpu-system-setup. SkillEvaluator then marks Code Risk Analysis incomplete for the skill.
   - scanner: "semgrep"
-    skills: ["vllm-xpu-run", "xpu-deploy-plan", "xpu-system-setup"]
+    skills: ["vllm-xpu-run", "xpu-system-setup"]
     reason: >-
       POLICY: a Semgrep parser limitation on valid bash, not content hidden from
       analysis. Bandit and the other code-integrity scanners still complete, and

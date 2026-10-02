@@ -44,6 +44,12 @@ The report is also checked for the policy it ran under. A run that silently fell
 the bare `external` profile would fail every skill on `SCHEMA.author_missing`, which reads
 as 33 regressions rather than as one dropped flag.
 
+Every severity override in that policy must also be one in SAFE_OVERRIDES. When an
+override changes a finding, SkillEvaluator's apply_policy rebuilds that validator's error
+list from severity alone (ValidationResult.recalculate_from_findings), so an error-level
+MEDIUM such as a confident Bandit finding drops to a warning and this gate never sees it.
+The overrides listed are the ones that change nothing a validator counts as an error.
+
 Usage:
 
     uv run .github/scripts/skillevaluator_gate.py \\
@@ -74,6 +80,15 @@ EXPECTED_PROFILE = "intel-skills"
 GATED_SEVERITIES = ("critical", "high")
 DEFAULT_MIN_SCORE = 70.0
 GLOB_CHARS = set("*?[")
+# Overrides that cannot erase an error at SkillEvaluator 41e5469. SCHEMA.* is resolved by
+# schema.py when the finding is emitted, so apply_policy changes nothing; WORKFLOWS.* has
+# no finding on a skill; LICENSE.* raises findings that are all errors already.
+SAFE_OVERRIDES = frozenset({
+    "SCHEMA.author_missing",
+    "SCHEMA.author_format",
+    "WORKFLOWS.author_format",
+    "LICENSE.*",
+})
 SEVERITY_ORDER = ("critical", "high", "medium", "low", "info")
 
 
@@ -267,12 +282,23 @@ def gate_unstructured(
 
 def gate_report_shape(verdict: Verdict, report: dict[str, Any], min_score: float) -> bool:
     """Profile and quality floor; False when there are no results to gate at all."""
-    profile = (report.get("policy") or {}).get("profile")
+    policy = report.get("policy") or {}
+    profile = policy.get("profile")
     if profile != EXPECTED_PROFILE:
         verdict.errors.append(
             f"report ran under policy profile {profile!r}, not {EXPECTED_PROFILE!r}; "
             "was --policy .skillevaluator-policy.yaml dropped?"
         )
+    overrides = policy.get("severity_overrides")
+    if not isinstance(overrides, dict):
+        verdict.errors.append("report does not record the policy's severity_overrides")
+    else:
+        for key in sorted(set(overrides) - SAFE_OVERRIDES):
+            verdict.errors.append(
+                f"severity override {key!r} is not in SAFE_OVERRIDES: SkillEvaluator rebuilds "
+                "a changed validator's errors from severity alone, which can drop an "
+                "error-level MEDIUM; confirm it cannot, then add it there"
+            )
     results = report.get("results")
     if not isinstance(results, list) or not results:
         verdict.errors.append("report has no validator results; the run did not complete")
@@ -403,6 +429,9 @@ def self_test(
     def profile(r: dict[str, Any]) -> None:
         r.setdefault("policy", {})["profile"] = "external"
 
+    def unsafe_override(r: dict[str, Any]) -> None:
+        r.setdefault("policy", {}).setdefault("severity_overrides", {})["CODE_RISK.*"] = "low"
+
     def no_results(r: dict[str, Any]) -> None:
         r["results"] = []
 
@@ -432,6 +461,7 @@ def self_test(
     mutate("an unaccepted MEDIUM finding SkillEvaluator counts as an error", medium_error)
     mutate("an unaccepted incomplete scanner", incomplete)
     mutate("the bare external profile", profile)
+    mutate("a severity override not in SAFE_OVERRIDES", unsafe_override)
     mutate("no validator results", no_results)
     mutate("an unstructured validator error", unstructured)
     mutate("a quality score below the minimum", low_quality)

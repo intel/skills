@@ -267,7 +267,6 @@ locally, `--open-pr --remote <your fork> --against <this repository> --dry-run` 
 | `harbor-smoke.yml` | the oracle arm over every task in `tasks/` | PRs touching tasks or skills | yes |
 | `security.yml` | `actionlint`, `zizmor` | every PR | yes |
 | `skillevaluator.yml` | SkillEvaluator Tier 1 on each changed skill, gated by `skillevaluator_gate.py` against `.skillevaluator-baseline.yaml` | PRs touching skills or its own machinery, push, weekly | yes |
-| `skillevaluator-live.yml` | SkillEvaluator Tier 3: one skill's `evals/` cases, with and without the skill, under a real agent | dispatched by hand | no |
 | `codeql.yml` | code scanning, Python | PRs, push, weekly | reports |
 | `upstream-sync.yml` | `check_upstream.py --open-pr`: one pull request per skill whose pinned directory moved | Sundays and Wednesdays, or by hand | opens PRs |
 
@@ -304,32 +303,6 @@ Levels 2 and 3 do need inference credentials, so they are run by hand and their 
 attached to the pull request. Wiring an arm that needs a credential into a workflow that
 must also run on forks is unsolved; a gate nobody can run on a fork is not one this
 repository will pretend to have.
-
-### Running `skillevaluator-live.yml`
-
-The workflow reads its credentials from a `skillevaluator-live` environment, which has to
-exist before the first dispatch. Give it a required reviewer, so starting a run is not by
-itself permission to spend on one, and add the secrets for the provider you will use:
-
-| Provider (`evaluator_provider`) | Secrets | Agents that key covers on its own |
-|---|---|---|
-| `anthropic` | `ANTHROPIC_API_KEY` | `claude-code` |
-| `openai` | `OPENAI_API_KEY`, `OPENAI_BASE_URL` (`https://api.openai.com/v1`) | `codex` |
-| `nv_build` | `NVIDIA_API_KEY` | `opencode`, `codex`, `claude-code` |
-| `bedrock` | `AWS_REGION`, and `AWS_BEARER_TOKEN_BEDROCK` or `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` | `claude-code` |
-
-The provider's key also pays for the judge. The judge model is the `evaluator_model` input,
-else the environment variable (not secret) `SKILL_EVAL_LLM_MODEL`, else SkillEvaluator's
-default for the provider; it is also the agents' model unless `agent_model` names one.
-
-```bash
-gh workflow run skillevaluator-live.yml -f skill=dpnp-io -f agents=codex \
-  -f evaluator_provider=openai -f agent_model=codex=gpt-5.6-sol -f n_attempts=3
-```
-
-The job summary carries the Skill Lift table; the `skillevaluator-live-<skill>` artifact
-carries `report.html`, `result.json`, every trial's transcript, and Harbor's job logs. The
-artifact is as readable as the repository, so treat agent transcripts as public.
 
 ## Tools
 

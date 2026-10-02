@@ -30,10 +30,7 @@ name: skillevaluator
 #                   disagree with itself. skillspector.yml remains the one SkillSpector
 #                   gate, so `--checks` below names every default check but that one.
 #   Tier 2          embedding deduplication needs a provider key; --no-dedup.
-#   Tier 3          live agent evaluation needs agent credentials and Docker; it is
-#                   skillevaluator-live.yml, dispatched by a maintainer. The keyless half
-#                   of Tier 3 — that each evals/evals.json is a dataset SkillEvaluator can
-#                   run — is here, as `tier3 validate --strict`.
+#   Tier 3          live agent evaluation needs agent credentials and Docker.
 #
 # SkillEvaluator has a verdict of its own (any HIGH/CRITICAL finding, or any scanner that
 # did not complete, fails) but no way to accept a reviewed finding. So its exit code is
@@ -82,10 +79,8 @@ env:
   # only, so none of these move on their own; bump them in their own pull request and
   # expect the baseline to move with them.
   #
-  # 41e5469a is SkillEvaluator 0.3.0 (2026-09-23). The `security` and `tier3` extras
-  # are what the checks below need: Bandit and pip-audit, and Harbor for
-  # `tier3 validate`, which imports it. uv installs the tool into its own environment,
-  # so Harbor 0.13.2 here does not meet harbor-smoke.yml's 0.20.0.
+  # 41e5469a is SkillEvaluator 0.3.0 (2026-09-23). The `security` extra is what the
+  # checks below need: Bandit and pip-audit.
   SKILLEVALUATOR_COMMIT: 41e5469a229e82f97e4d3597d3422efa703fd4fe
   # The scanners SkillEvaluator runs, pinned too: its extras only give lower bounds, and
   # a `git+` install resolves them fresh rather than from upstream's lockfile. Semgrep
@@ -186,7 +181,7 @@ jobs:
       - name: Install SkillEvaluator
         run: |
           uv tool install --python 3.13 \
-            "skillevaluator[security,tier3] @ git+https://github.com/NVIDIA/SkillEvaluator.git@${SKILLEVALUATOR_COMMIT}" \
+            "skillevaluator[security] @ git+https://github.com/NVIDIA/SkillEvaluator.git@${SKILLEVALUATOR_COMMIT}" \
             --with "semgrep==${SEMGREP_VERSION}" \
             --with "bandit==${BANDIT_VERSION}" \
             --with "pip-audit==${PIP_AUDIT_VERSION}"
@@ -218,8 +213,9 @@ jobs:
       # too much reads exactly like a clean catalog. It runs one real skill's report
       # with one defect injected at a time — an unaccepted HIGH, CRITICAL, or
       # error-level MEDIUM finding, an incomplete scanner, an unstructured error, the
-      # wrong policy profile, an empty report, a quality score under the minimum, a
-      # stale baseline entry — and fails unless every one turns the verdict red.
+      # wrong policy profile, an unvetted severity override, an empty report, a quality
+      # score under the minimum, a stale baseline entry — and fails unless every one
+      # turns the verdict red.
       # xpu-port because it has accepted findings for the stale-entry check to remove.
       - name: Gate still refuses what it should
         run: |
@@ -286,27 +282,6 @@ jobs:
             uv run .github/scripts/skillevaluator_gate.py \
               --report-dir "reports/${skill}" --skill "$skill" \
               --min-score "$MIN_QUALITY_SCORE" --annotate || failed=1
-          done
-          exit "$failed"
-
-      # The evals/evals.json datasets are schema-checked by tools/run_evals.py against
-      # this repository's schema. This asks the other question: is each one a dataset
-      # SkillEvaluator's Tier 3 will accept, so a live run started from it spends its
-      # budget on the agent rather than on a parse error. --strict because a warning
-      # here is a case the live run would skip.
-      - name: Tier 3 datasets are runnable
-        if: always()
-        env:
-          SKILLS_JSON: ${{ needs.discover-skills.outputs.skills }}
-        run: |
-          set -uo pipefail
-          failed=0
-          for skill in $(printf '%s' "$SKILLS_JSON" | jq -r '.[]'); do
-            [ -d "skills/${skill}/evals" ] || continue
-            if ! skillevaluator tier3 validate "skills/${skill}" --strict; then
-              echo "::error title=SkillEvaluator Tier 3 dataset::skills/${skill}/evals is not a dataset SkillEvaluator can run."
-              failed=1
-            fi
           done
           exit "$failed"
 

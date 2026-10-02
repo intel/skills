@@ -10,6 +10,11 @@
 # CATEGORY.check_name and nothing finer. Per-skill acceptances live in
 # .skillevaluator-baseline.yaml, which the gate script reads. So an entry belongs here
 # only when the check is wrong for this catalog as a whole, never to quiet one skill.
+#
+# A new key also has to be added to SAFE_OVERRIDES in .github/scripts/skillevaluator_gate.py,
+# which fails any override it does not list: an override that changes a finding makes
+# SkillEvaluator rebuild that validator's errors from severity alone, and that can turn
+# an error-level MEDIUM into a warning.
 
 profile: intel-skills
 

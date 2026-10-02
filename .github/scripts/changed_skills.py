@@ -129,7 +129,7 @@ def select_skills(
         return all_skills
 
     if any(p in infra_paths for p in paths):
-        print("Scanning infra changed; scanning all skills.", file=sys.stderr)
+        print("Infra changed; scanning all skills.", file=sys.stderr)
         return all_skills
 
     prefix = f"{skills_dir.relative_to(REPO_ROOT).as_posix()}/"
