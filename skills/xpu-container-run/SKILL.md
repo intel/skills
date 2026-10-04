@@ -27,7 +27,7 @@ No "Intel container toolkit" needed; passing the DRM nodes is enough.
 
 Comes from the runner skill:
 - vLLM serving → **vllm-xpu-run** (`vllm/vllm-openai-xpu:latest`)
-- SGLang → **sglang-xpu-run** (built from upstream `docker/xpu.Dockerfile`)
+- SGLang → **sglang-xpu-run** (`lmsysorg/sglang:v0.5.20-xpu`)
 - PyTorch / Transformers → **torch-xpu-run**
 
 `<image>` below is whichever you picked.
