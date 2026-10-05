@@ -27,12 +27,11 @@ hand off.
 ## Say "GPU", not "XPU"
 
 Nearly every skill this router hands off to has `xpu` in its name. **XPU is Intel's name for
-the GPU as a compute device** — the same Arc, Arc Pro or Battlemage card the user is asking
-about. It is not a separate product, a separate device, or something they need to go and
+the GPU as a compute device** — the same Intel GPU the user is asking about, discrete card or
+laptop graphics. It is not a separate product, a separate device, or something they need to go and
 buy.
 
-Users do not type "XPU". They type GPU, graphics card, Arc, B580, or the model name on the
-box, and a request phrased that way is this catalog's request. So:
+Users do not type "XPU". They type GPU, graphics card, Arc, or the name on the box or laptop, and a request phrased that way is this catalog's request. So:
 
 - Recognise "XPU" when a user does say it, but **write "GPU"** back to them.
 - When handing off, say what the skill does before its name — "the skill that serves models
@@ -44,7 +43,7 @@ box, and a request phrased that way is this catalog's request. So:
 
 | The request is about | Do this |
 |---|---|
-| Running or serving a model on an Intel GPU / XPU / Arc / Arc Pro / Battlemage | Continue to stage 1 |
+| Running or serving a model on an Intel GPU — discrete or integrated | Continue to stage 1 |
 | An NVIDIA or AMD GPU | Stop. This catalog is Intel-only; say so and name no Intel skill |
 | A CPU-only workload | Stop, and point at the CPU skills — **linux-perf**, **performance-patterns**, **onetbb-quickstart**, **mkl-extension-advisor** |
 | Training or fine-tuning rather than inference | Stop. This catalog covers inference; do not improvise a training recipe |
@@ -65,17 +64,21 @@ each one owns a different set of skills.
 
 Only the **run** verb continues. Everything else is one hand-off and this skill is finished.
 
-## Stage 2 — which runtime
+## Stage 2 — which GPU, then which runtime
 
-The model format usually decides this before anything else does.
+Query the card; never assume one. Run `scripts/query_gpus.py` where the GPU runtime is — on
+the host, or inside the runtime's container if the host has none. It prints each device's
+name, memory and `class`: `dgpu`, `igpu` (shares system RAM), or `unknown`. On `unknown`, say
+so and ask; do not guess. A `state` other than `normal` means the GPU itself needs attention:
+report it and stop.
 
-| Signal | Runtime | Skill |
+| Signal | dgpu | igpu |
 |---|---|---|
-| GGUF weights | llama.cpp SYCL | **llamacpp-xpu-run** |
-| Wants an OpenAI-compatible endpoint, no other constraint | vLLM-XPU | **vllm-xpu-run** |
-| Names prefix caching, RadixAttention, or grammar-constrained output | SGLang-XPU | **sglang-xpu-run** |
-| Wants Transformers / Diffusers in-process, no HTTP server | PyTorch XPU | **torch-xpu-run** |
-| Says nothing about any of the above | vLLM-XPU | **vllm-xpu-run** — the default |
+| GGUF weights | **llamacpp-xpu-run** | **llamacpp-xpu-run** |
+| Wants an endpoint, nothing else said | **vllm-xpu-run** (default) | **openvino-gpu-run** (default) |
+| In-process Transformers / Diffusers | **torch-xpu-run** | **torch-xpu-run** |
+| Prefix caching or grammar-constrained output | **sglang-xpu-run** | not supported; offer **openvino-gpu-run** |
+| Asks for vLLM by name | **vllm-xpu-run** | **vllm-xpu-run**, warning it is unvalidated on integrated graphics |
 
 If the choice is genuinely open, or the user asks which to pick, read
 `references/runtime-choice.md` before answering. Apply the table rather than handing the
@@ -91,10 +94,8 @@ keyword argument at load time rather than as a routing error.
 | Host | Route |
 |---|---|
 | Linux | Continue to stage 4 |
-| Windows, with or without WSL | **Stop.** This catalog has no Windows skill, and the Linux procedures do not transfer — they pass Direct Rendering Manager device nodes and render-group membership, neither of which exists on a Windows host. Say that plainly, and do not assemble a Windows procedure from the Linux ones |
+| Windows | **openvino-gpu-run** — the one runtime here with a native Windows build. Every other path is Linux-only: say so, do not adapt the Linux steps |
 
-Every runtime skill in this catalog assumes a Linux host. That assumption is load-bearing,
-not incidental.
 
 ## Stage 4 — which install path
 
@@ -114,19 +115,19 @@ Skip only if a preflight has already run in this session.
 |---|---|
 | Unknown hardware | **xpu-discover** — what GPUs are present, and is the driver healthy |
 | Hardware known, readiness not | **xpu-runtime-preflight** — the read-only go/no-go |
-| Preflight reports `FAIL` | **xpu-system-setup**. On Arc Pro B-series it also owns the Battlemage prerequisites. Re-run preflight; do not launch past a `FAIL` |
-| Target GPU not one this catalog covers | Read `references/gpu-targets.md`. Report that there is no data for it and stop — do not extrapolate from a different part |
+| Preflight reports `FAIL` | **xpu-system-setup**. Re-run preflight; do not launch past a `FAIL` |
+| Preflight fails only its `xpu-smi` rows, and the query found the GPU | Not a blocker: `xpu-smi` does not enumerate every Intel GPU. Read `references/gpu-targets.md` |
 
 ## Stage 6 — hand off
 
-Resolve these five, then call the skill stage 2 chose, or **xpu-deploy-plan** if the user
-wants the whole chain written down as a plan:
+Resolve these, then call the skill stage 2 chose, or **xpu-deploy-plan** (dgpu only) if the
+user wants the whole chain written down as a plan:
 
 | Input | If not given |
 |---|---|
 | Model id or local path | **Ask.** This is the one thing never to guess |
 | Runtime | Stage 2's pick |
-| Target GPU | Whatever **xpu-discover** found; do not assume a count |
+| Target GPU, memory, count | From the query. Pass them explicitly to **model-can-it-fit** and **xpu-deploy-plan**; never rely on their defaults |
 | Context length | The runtime skill's own default |
 | Concurrency | One, for a first boot |
 

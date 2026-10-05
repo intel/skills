@@ -4,8 +4,9 @@
   "groupings": [
     {
       "title": "Deploy models on Intel GPUs",
-      "description": "A collection of Agent Skills for setting up, running, benchmarking, and profiling arbitrary Hugging Face safetensors and GGUF models on Intel GPUs (Arc, Arc Pro, Battlemage). Covers the PyTorch + Transformers, vLLM-XPU, SGLang-XPU, and llama.cpp-SYCL stacks, plus CUDA to XPU migration.",
+      "description": "A collection of Agent Skills for setting up, running, benchmarking, and profiling arbitrary Hugging Face safetensors and GGUF models on Intel GPUs, discrete and integrated. Covers the PyTorch + Transformers, vLLM-XPU, SGLang-XPU, llama.cpp-SYCL and OpenVINO Model Server stacks, plus CUDA to XPU migration.",
       "skills": [
+        "ai-inference-deploy",
         "xpu-system-setup",
         "xpu-discover",
         "xpu-runtime-preflight",
@@ -18,6 +19,7 @@
         "vllm-xpu-run",
         "sglang-xpu-run",
         "llamacpp-xpu-run",
+        "openvino-gpu-run",
         "torch-xpu-bench",
         "vllm-xpu-bench",
         "sglang-xpu-bench",
@@ -30,7 +32,7 @@
     },
     {
       "title": "Intel Data Parallel NumPy (dpnp)",
-      "description": "NumPy-compatible arrays on Intel CPU and GPU—install, migrate from NumPy/CuPy, arrays I/O, linear algebra, RNG, memory, interop, and troubleshooting.",
+      "description": "NumPy-compatible arrays on Intel CPU and GPU\u2014install, migrate from NumPy/CuPy, arrays I/O, linear algebra, RNG, memory, interop, and troubleshooting.",
       "skills": [
         "dpnp-quickstart",
         "dpnp-migration",
