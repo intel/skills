@@ -138,7 +138,7 @@
   intel-source-ledger: "skills/sycl-tla-quickstart/references/official-sources.md"
 
 # The three entries below are copies of one upstream repository, intel/intel-performance-skills,
-# MIT, pinned at e9d0b6410fb1. Three skills there, so three entries here: one locally
+# MIT. Three skills there, so three entries here: one locally
 # invented name covering them would merge three routing decisions into one.
 - name: linux-perf
   maintainer: "napetrov"
@@ -157,7 +157,7 @@
 - name: performance-patterns
   maintainer: "napetrov"
   external-repo: "https://github.com/intel/intel-performance-skills"
-  external-commit: "e9d0b6410fb1ad7a50fb81e0868fd23ae886882c"
+  external-commit: "3e33aecabb956ec48526b3f842f4f70ae96d98ff"
   external-path: "skills/performance-patterns"
   external-license: "MIT"
   # Empty, and it earns the warning the validator prints for that. This skill covers
@@ -182,7 +182,7 @@
   intel-source-ledger: ""
 
 # The twenty entries below are the second upstream repository: intel/gpu-ai-skills,
-# Apache-2.0, pinned at 3fb51a0b6952. Same mechanism, three things worth knowing.
+# Apache-2.0. Same mechanism, three things worth knowing.
 #
 # One entry per upstream skill, again under upstream's own name — twenty entries
 # rather than one "gpu-ai" umbrella, because these skills route against each other
@@ -204,7 +204,7 @@
 - name: cuda-to-xpu-migration
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/cuda-to-xpu-migration"
   external-license: "Apache-2.0"
   intel-products: "Intel Arc, Intel Arc Pro"
@@ -214,7 +214,7 @@
 - name: llamacpp-xpu-run
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/llamacpp-xpu-run"
   external-license: "Apache-2.0"
   intel-products: "Intel GPU, Level Zero"
@@ -224,7 +224,7 @@
 - name: model-can-it-fit
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/model-can-it-fit"
   external-license: "Apache-2.0"
   intel-products: "Intel GPU"
@@ -234,7 +234,7 @@
 - name: model-config-recommend
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-commit: "e7d07772c32825ce749c1e3459b9cd80bd1d4da2"
   external-path: "plugins/intel-gpu-ai-skills/skills/model-config-recommend"
   external-license: "Apache-2.0"
   intel-products: "Intel Arc"
@@ -244,7 +244,7 @@
 - name: sglang-xpu-bench
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/sglang-xpu-bench"
   external-license: "Apache-2.0"
   intel-products: "Intel GPU"
@@ -254,7 +254,7 @@
 - name: sglang-xpu-run
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/sglang-xpu-run"
   external-license: "Apache-2.0"
   intel-products: "Intel GPU, Level Zero"
@@ -264,7 +264,7 @@
 - name: torch-xpu-bench
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/torch-xpu-bench"
   external-license: "Apache-2.0"
   intel-products: "Intel GPU"
@@ -274,7 +274,7 @@
 - name: torch-xpu-profile
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/torch-xpu-profile"
   external-license: "Apache-2.0"
   intel-products: "Intel GPU"
@@ -284,7 +284,7 @@
 - name: torch-xpu-run
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/torch-xpu-run"
   external-license: "Apache-2.0"
   intel-products: "Intel GPU"
@@ -294,7 +294,7 @@
 - name: vllm-xpu-bench
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/vllm-xpu-bench"
   external-license: "Apache-2.0"
   intel-products: "Intel GPU"
@@ -304,7 +304,7 @@
 - name: vllm-xpu-profile
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/vllm-xpu-profile"
   external-license: "Apache-2.0"
   # Empty by construction, see the note above: upstream's description names the
@@ -316,7 +316,7 @@
 - name: vllm-xpu-run
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/vllm-xpu-run"
   external-license: "Apache-2.0"
   intel-products: "Intel GPU"
@@ -326,7 +326,7 @@
 - name: xpu-container-run
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/xpu-container-run"
   external-license: "Apache-2.0"
   intel-products: "Intel GPU"
@@ -336,7 +336,7 @@
 - name: xpu-deploy-plan
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/xpu-deploy-plan"
   external-license: "Apache-2.0"
   intel-products: "Intel XPU"
@@ -346,7 +346,7 @@
 - name: xpu-discover
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-commit: "e7d07772c32825ce749c1e3459b9cd80bd1d4da2"
   external-path: "plugins/intel-gpu-ai-skills/skills/xpu-discover"
   external-license: "Apache-2.0"
   intel-products: "Intel Arc, Intel Arc Pro, Intel Data Center GPU Max"
@@ -356,7 +356,7 @@
 - name: xpu-model-type-detect
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/xpu-model-type-detect"
   external-license: "Apache-2.0"
   intel-products: "Intel XPU"
@@ -366,7 +366,7 @@
 - name: xpu-port
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/xpu-port"
   external-license: "Apache-2.0"
   # Empty by construction, see the note above: upstream's description says XPU
@@ -378,7 +378,7 @@
 - name: xpu-profile-unitrace
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
   external-path: "plugins/intel-gpu-ai-skills/skills/xpu-profile-unitrace"
   external-license: "Apache-2.0"
   intel-products: "Intel XPU, pti-gpu, oneCCL"
@@ -388,7 +388,7 @@
 - name: xpu-runtime-preflight
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-commit: "e7d07772c32825ce749c1e3459b9cd80bd1d4da2"
   external-path: "plugins/intel-gpu-ai-skills/skills/xpu-runtime-preflight"
   external-license: "Apache-2.0"
   intel-products: "Intel GPU"
@@ -398,7 +398,7 @@
 - name: xpu-system-setup
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "3fb51a0b69527fadcdec3e4ae6b84121d39115dc"
+  external-commit: "fa107a317bdabdf49ef0e35fb75786175f407f57"
   external-path: "plugins/intel-gpu-ai-skills/skills/xpu-system-setup"
   external-license: "Apache-2.0"
   intel-products: "Intel GPU, Intel Arc Pro, xpu-smi, Level Zero"

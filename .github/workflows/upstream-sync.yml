@@ -1,0 +1,73 @@
+name: Upstream sync
+
+# Imported skills are copies of upstream at a pinned commit. validate.yml proves the copy
+# matches its pin; this proves the pin still matches upstream, and opens the pull request
+# that moves it when a pinned directory changed. Whether to merge is left to that pull
+# request's checks and reviewer. Details: tools/check_upstream.py.
+
+on:
+  schedule:
+    # Sunday and Wednesday, 15:43 UTC: morning in US Pacific time.
+    - cron: "43 15 * * 0,3"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Report what would be proposed, and open nothing"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    # A fork would open pull requests against itself; its pins move when it merges from here.
+    if: github.repository == 'intel/skills'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      # The secrets context is not available in a step's `if:`.
+      SYNC_TOKEN_SET: ${{ secrets.UPSTREAM_SYNC_TOKEN != '' }}
+    steps:
+      # Full history and stored credentials: this job commits and pushes.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # zizmor: ignore[artipacked]
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          token: ${{ secrets.UPSTREAM_SYNC_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+
+      # A broken detector reports "nothing moved", which looks like a quiet upstream.
+      - name: Staleness detector still detects
+        run: python3 tools/check_upstream.py --self-test
+
+      # With GITHUB_TOKEN the PR's checks await approval; UPSTREAM_SYNC_TOKEN skips that.
+      - name: Note which token the pull request will be opened with
+        if: env.SYNC_TOKEN_SET != 'true'
+        run: |
+          echo "::notice::Opened with GITHUB_TOKEN, so the pull request's checks wait for" \
+               "a maintainer to select Approve workflows to run."
+
+      - name: Survey the pins, and propose what moved
+        env:
+          GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN || secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ "${DRY_RUN}" = "true" ]; then
+            python3 tools/check_upstream.py --open-pr --dry-run
+          else
+            python3 tools/check_upstream.py --open-pr
+          fi

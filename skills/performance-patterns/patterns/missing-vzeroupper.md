@@ -38,19 +38,12 @@ on the first SSE instruction after the AVX section.
 
 ## Why this is slow
 
-When the CPU sees a write to a YMM (or ZMM0–15, which aliases the same state)
-register, it marks those registers' upper bits as potentially "dirty". Legacy SSE
-instructions treat the upper 128 bits of XMM registers as undefined and do not
-zero them. When the CPU transitions from a code section that has dirty upper bits
-to a section that uses legacy SSE, it must save and restore the full 256-bit (or
-512-bit) register state, even though the SSE instruction only needs 128 bits.
-
-The penalty is paid on the **first SSE instruction** after the dirty-upper-bit
-state is set, and costs hundreds of cycles on some microarchitectures.
-
-`vzeroupper` explicitly zeroes the upper 128 bits of all YMM registers (clearing
-the dirty state) at negligible cost (~1 cycle). It must be executed before any
-return or call path that may reach SSE code.
+Writing to a YMM/ZMM0-15 register marks its upper bits "dirty"; legacy SSE
+instructions leave the upper 128 bits of XMM undefined, so the CPU must save
+and restore the full register state on the **first SSE instruction** after the
+dirty state is set — costing hundreds of cycles on some microarchitectures.
+`vzeroupper` clears the dirty state for ~1 cycle and must run before any
+return/call path that may reach SSE code.
 
 ---
 

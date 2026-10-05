@@ -19,7 +19,7 @@ The upstreams republished here, and the terms they are received and redistribute
 under:
 
   intel/gpu-ai-skills — https://github.com/intel/gpu-ai-skills
-    Commit:  3fb51a0b69527fadcdec3e4ae6b84121d39115dc
+    Commit:  0b4fafd09c5eb4cc5daf532d915ef5984a919775
     Licence: Apache-2.0 (the same terms as this repository; see LICENSE)
     Skills:  cuda-to-xpu-migration, llamacpp-xpu-run, model-can-it-fit,
              model-config-recommend, sglang-xpu-bench, sglang-xpu-run,

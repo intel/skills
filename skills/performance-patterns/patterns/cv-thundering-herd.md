@@ -52,41 +52,14 @@ shows normal hold/wait times). The key differentiator:
 
 ## Why this is slow
 
-When `notify_all()` fires with N waiters:
-
-```
-Thundering Herd: notify_all with N waiters
-
-  t0: notify_all() → N threads become runnable simultaneously
-  t1: All N race for mutex re-acquisition (mandatory by CV semantics)
-      → only 1 wins, N-1 immediately block on the mutex
-  t2: Each of the N-1 losers pays a full futex round-trip
-      (wake → schedule → attempt acquire → fail → sleep)
-  t3: Threads wake one-by-one as holder releases mutex
-      Most re-check predicate, find nothing, go back to sleep
-```
-
-The cost per `notify_all` call:
-- O(N) context switches
-- O(N) futex syscalls
-- O(N) scheduler IPI dispatches (cross-core interrupts)
-- Burst of RFO traffic on the mutex cache line as N cores attempt acquire
-
-With a sequential `notify_one` loop, each call is a separate futex syscall +
-IPI + context switch. At 160 threads: `T_wakeup ≈ N × 5µs ≈ 800µs` of pure
-wakeup overhead per dispatch round.
-
-**Why this worsens super-linearly with core count.** If T threads wake for J
-jobs (J << T):
-
-```
-Wasted syscalls per round  = T - J   (grows with T)
-Failed mutex acquisitions  ≈ T - J   (grows with T)
-yield()/re-block calls     ≈ T - J   (grows with T)
-```
-
-On a 64-core system with 40 jobs, 24 threads waste — modest. On 160 cores,
-120 threads waste — 75% of all wakeup effort is pure overhead.
+`notify_all()` wakes all N waiters, but CV semantics force them to serialize on
+mutex re-acquisition — only one wins, the rest pay a full futex round-trip
+(wake → schedule → fail → sleep again) for nothing. Cost per call: O(N) context
+switches, O(N) futex syscalls, O(N) scheduler IPIs. At 160 threads this is
+roughly `T_wakeup ≈ N × 5µs ≈ 800µs` of pure overhead per dispatch round — and
+if only J << T threads have actual work, the wasted fraction (`T - J`) grows
+with core count, so a 160-core system with 40 jobs wastes ~75% of all wakeup
+effort.
 
 ---
 

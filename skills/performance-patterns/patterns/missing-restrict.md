@@ -48,28 +48,10 @@ portable.
 
 ## Why this is slow
 
-The C standard allows any two pointers of compatible type to alias each other.
-When the compiler sees:
-
-```c
-void add(float *a, float *b, float *dst, int n) {
-    for (int i = 0; i < n; i++)
-        dst[i] = a[i] + b[i];
-}
-```
-
-It cannot prove that `dst` doesn't overlap with `a` or `b`. A write to
-`dst[i]` could change the value that `a[i+1]` or `b[i+1]` reads on the next
-iteration. To handle this safely the compiler either:
-
-1. Generates **two loop versions** and a runtime overlap check — the vectorized
-   path is taken only when the check confirms no aliasing. This adds ~10–20
-   instructions of preamble before every call and increases i-cache footprint.
-2. Stays **fully scalar** if the compiler's cost model decides the versioned
-   approach is not worth it.
-
-Either outcome wastes cycles on alias bookkeeping that the programmer knows is
-unnecessary.
+Without `restrict`, the compiler must assume `dst` could alias `a` or `b`, so it
+either emits a runtime overlap check plus two loop versions (~10–20 instructions
+of preamble, extra i-cache pressure) or abandons vectorization entirely — cycles
+spent on alias bookkeeping the programmer already knows is unnecessary.
 
 ---
 

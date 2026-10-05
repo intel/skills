@@ -32,12 +32,11 @@ causing spurious invalidations.
 
 ## Why false sharing hurts under scaling
 
-A cache line is the smallest unit of coherence — typically 64 bytes. When thread A
-writes field X and thread B writes field Y — even though X and Y are completely
-unrelated — both writes invalidate each other's cached copy of the **entire** line.
-Every write forces all other holders to reload the full 64 bytes from the L3 or
-memory. This traffic grows linearly with thread count, which is why the function
-only becomes prominent in a multi-core profile.
+A cache line (typically 64 bytes) is the smallest unit of coherence, so a write
+to unrelated field X by thread A and field Y by thread B still invalidates the
+whole line for the other thread, forcing a full reload from L3/memory. This
+traffic scales linearly with thread count, which is why it only shows up as
+prominent in a multi-core profile.
 
 ---
 

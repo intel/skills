@@ -1,0 +1,55 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "Deploy models on Intel GPUs",
+      "description": "A collection of Agent Skills for setting up, running, benchmarking, and profiling arbitrary Hugging Face safetensors and GGUF models on Intel GPUs (Arc, Arc Pro, Battlemage). Covers the PyTorch + Transformers, vLLM-XPU, SGLang-XPU, and llama.cpp-SYCL stacks, plus CUDA to XPU migration.",
+      "skills": [
+        "xpu-system-setup",
+        "xpu-discover",
+        "xpu-runtime-preflight",
+        "xpu-container-run",
+        "model-can-it-fit",
+        "model-config-recommend",
+        "xpu-deploy-plan",
+        "xpu-model-type-detect",
+        "torch-xpu-run",
+        "vllm-xpu-run",
+        "sglang-xpu-run",
+        "llamacpp-xpu-run",
+        "torch-xpu-bench",
+        "vllm-xpu-bench",
+        "sglang-xpu-bench",
+        "torch-xpu-profile",
+        "vllm-xpu-profile",
+        "xpu-profile-unitrace",
+        "cuda-to-xpu-migration",
+        "xpu-port"
+      ]
+    },
+    {
+      "title": "Intel Data Parallel NumPy (dpnp)",
+      "description": "NumPy-compatible arrays on Intel CPU and GPU—install, migrate from NumPy/CuPy, arrays I/O, linear algebra, RNG, memory, interop, and troubleshooting.",
+      "skills": [
+        "dpnp-quickstart",
+        "dpnp-migration",
+        "dpnp-interop",
+        "dpnp-io",
+        "dpnp-memory",
+        "dpnp-linalg-fft",
+        "dpnp-random",
+        "dpnp-troubleshooting"
+      ]
+    },
+    {
+      "title": "Linux CPU performance & benchmarking",
+      "description": "Profile and optimize on Linux with perf, apply x86/C++ performance patterns, and run or tune Phoronix Test Suite benchmarks.",
+      "skills": [
+        "linux-perf",
+        "performance-patterns",
+        "phoronix-test-suite"
+      ]
+    }
+  ]
+}
