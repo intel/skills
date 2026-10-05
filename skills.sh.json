@@ -32,7 +32,7 @@
     },
     {
       "title": "Intel Data Parallel NumPy (dpnp)",
-      "description": "NumPy-compatible arrays on Intel CPU and GPU\u2014install, migrate from NumPy/CuPy, arrays I/O, linear algebra, RNG, memory, interop, and troubleshooting.",
+      "description": "NumPy-compatible arrays on Intel CPU and GPU—install, migrate from NumPy/CuPy, arrays I/O, linear algebra, RNG, memory, interop, and troubleshooting.",
       "skills": [
         "dpnp-quickstart",
         "dpnp-migration",

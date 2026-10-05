@@ -131,12 +131,6 @@
   intel-hw-class: "cpu"
   intel-source-ledger: "skills/onetbb-quickstart/references/official-sources.md"
 
-- name: sycl-tla-quickstart
-  maintainer: "mspoczynski"
-  intel-products: "sycl-tla, Intel Arc, Intel Data Center GPU Crescent Island"
-  intel-hw-class: "gpu"
-  intel-source-ledger: "skills/sycl-tla-quickstart/references/official-sources.md"
-
 # The three entries below are copies of one upstream repository, intel/intel-performance-skills,
 # MIT. Three skills there, so three entries here: one locally
 # invented name covering them would merge three routing decisions into one.
@@ -405,15 +399,7 @@
   intel-hw-class: "gpu"
   intel-source-ledger: ""
 
-# End of the imported entries. Everything above this line is a pin; the entry below is
-# written here, which is why it carries no external-* fields and ships a Harbor task.
-#
-# A router rather than a skill that does work: it owns the classification an
-# "I want to deploy a model" request needs before any of the twenty skills above can be
-# the right one, and hands off. It states no image tag, serve flag or environment
-# variable of its own — those drift in the runtime skills, and a second copy here would
-# drift against them. intel-products is the one term its description has to carry, and
-# deliberately not a SKU list: the router routes by request shape, not by part.
+# Written here. Routes a deploy request to a runtime skill by the GPU it queries.
 - name: ai-inference-deploy
   maintainer: "sandlbn"
   intel-products: "Intel GPU"
