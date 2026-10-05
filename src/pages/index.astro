@@ -20,6 +20,8 @@ import { showSkillStatus } from '../lib/features';
 
 const browsePanelId = 'catalog-panel-browse';
 const bundlesPanelId = 'catalog-panel-bundles';
+/** Hide the Bundles tab when skills.sh.json is missing or has no groupings. */
+const showBundles = skillGroups.length > 0;
 
 const CATALOG_REPO_URL = 'https://github.com/intel/skills';
 /** Without --skill, the same command opens the catalog and lets you pick. */
@@ -72,14 +74,18 @@ const facetGroups = [
     </header>
 
     <main>
-      <CatalogTabs browsePanelId={browsePanelId} bundlesPanelId={bundlesPanelId} />
+      {
+        showBundles ? (
+          <CatalogTabs browsePanelId={browsePanelId} bundlesPanelId={bundlesPanelId} />
+        ) : null
+      }
 
       <div
         id={browsePanelId}
         data-catalog-panel="browse"
-        role="tabpanel"
-        aria-labelledby="catalog-tab-browse"
-        hidden
+        role={showBundles ? 'tabpanel' : undefined}
+        aria-labelledby={showBundles ? 'catalog-tab-browse' : undefined}
+        hidden={showBundles ? true : undefined}
       >
         <SkillFilters groups={facetGroups} />
 
@@ -107,31 +113,35 @@ const facetGroups = [
         </p>
       </div>
 
-      <div
-        id={bundlesPanelId}
-        data-catalog-panel="bundles"
-        role="tabpanel"
-        aria-labelledby="catalog-tab-bundles"
-      >
-        <div data-group-list>
-          <p class="groups-lede">
-            Curated bundles for common Intel CPU and GPU workflows — choose one to see its
-            skills and install them.
-          </p>
+      {
+        showBundles ? (
+          <div
+            id={bundlesPanelId}
+            data-catalog-panel="bundles"
+            role="tabpanel"
+            aria-labelledby="catalog-tab-bundles"
+          >
+            <div data-group-list>
+              <p class="groups-lede">
+                Curated bundles for common Intel CPU and GPU workflows — choose one to see its
+                skills and install them.
+              </p>
 
-          <ul class="group-grid" data-group-grid>
-            {
-              skillGroups.map((group, index) => (
-                <li class="group-grid__item" style={`--i:${index}`}>
-                  <SkillGroupCard group={group} index={index} />
-                </li>
-              ))
-            }
-          </ul>
-        </div>
+              <ul class="group-grid" data-group-grid>
+                {
+                  skillGroups.map((group, index) => (
+                    <li class="group-grid__item" style={`--i:${index}`}>
+                      <SkillGroupCard group={group} index={index} />
+                    </li>
+                  ))
+                }
+              </ul>
+            </div>
 
-        {skillGroups.map((group) => <SkillGroupDetail group={group} />)}
-      </div>
+            {skillGroups.map((group) => <SkillGroupDetail group={group} />)}
+          </div>
+        ) : null
+      }
     </main>
 
     <footer class="footer">
