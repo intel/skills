@@ -30,7 +30,9 @@ export interface SkillGroup {
 }
 
 function groupInstallCommand(skillNames: string[]): string {
-  if (skillNames.length === 0) return 'npx skills add intel/skills';
+  if (skillNames.length === 0) {
+    throw new Error('[groups] install command requires at least one skill');
+  }
   return `npx skills add intel/skills --skill ${skillNames.join(' ')}`;
 }
 
@@ -68,10 +70,15 @@ function loadSkillGroups(): SkillGroup[] {
     for (const name of grouping.skills ?? []) {
       const skill = byName.get(name);
       if (!skill) {
-        console.warn(`[groups] ${title}: unknown skill "${name}"`);
-        continue;
+        throw new Error(
+          `[groups] ${title}: unknown skill "${name}" — not in skills.yaml`,
+        );
       }
       resolved.push(skill);
+    }
+
+    if (resolved.length === 0) {
+      throw new Error(`[groups] ${title}: grouping has no skills`);
     }
 
     let id = slugify(title);
