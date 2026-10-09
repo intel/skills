@@ -1,0 +1,109 @@
+---
+import BadgeList from './BadgeList.astro';
+import type { Skill } from '../lib/skills';
+import { renderInline } from '../lib/markdown';
+
+interface Props {
+  skill: Skill;
+}
+
+const { skill } = Astro.props;
+---
+
+<button
+  type="button"
+  class="skill-row"
+  data-skill-card={skill.name}
+  aria-haspopup="dialog"
+  aria-label={`${skill.name} — show install details`}
+>
+  <span class="skill-row__line">
+    <span class="skill-row__name">{skill.name}</span>
+    <span class="skill-row__sep" aria-hidden="true">—</span>
+    <span class="skill-row__summary" set:html={renderInline(skill.summary)} />
+  </span>
+  <span class="skill-row__badges">
+    <BadgeList skill={skill} maxProducts={3} />
+  </span>
+</button>
+
+<style>
+  .skill-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+    width: 100%;
+    margin: 0;
+    padding: 0.75rem 0.875rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition:
+      transform 0.18s ease,
+      border-color 0.18s ease,
+      box-shadow 0.18s ease;
+  }
+
+  .skill-row:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+    box-shadow: var(--shadow-card-hover);
+  }
+
+  .skill-row:active {
+    transform: translateY(-1px) scale(0.998);
+  }
+
+  .skill-row:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  .skill-row__line {
+    display: flex;
+    align-items: baseline;
+    gap: 0.375rem;
+    min-width: 0;
+  }
+
+  .skill-row__name {
+    flex: none;
+    color: var(--text);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    overflow-wrap: anywhere;
+  }
+
+  .skill-row__sep {
+    flex: none;
+    color: var(--border-strong);
+    font-size: 0.8125rem;
+  }
+
+  .skill-row__summary {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    line-height: 1.35;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .skill-row__summary :global(code) {
+    padding: 0.05em 0.25em;
+    border-radius: 4px;
+    background: var(--badge-neutral-bg);
+  }
+
+  .skill-row__badges {
+    display: block;
+  }
+</style>
