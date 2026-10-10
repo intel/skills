@@ -398,3 +398,16 @@
   intel-products: "Intel GPU, Intel Arc Pro, xpu-smi, Level Zero"
   intel-hw-class: "gpu"
   intel-source-ledger: ""
+
+# Written here. Routes a deploy request to a runtime skill by the GPU it queries.
+- name: ai-inference-deploy
+  maintainer: "sandlbn"
+  intel-products: "Intel GPU"
+  intel-hw-class: "gpu"
+
+# Written here. The serving path for Intel integrated GPUs and the one runtime in this
+# catalog with a native Windows build; ai-inference-deploy routes to it by device class.
+- name: openvino-gpu-run
+  maintainer: "sandlbn"
+  intel-products: "OpenVINO, Intel GPU"
+  intel-hw-class: "gpu"
