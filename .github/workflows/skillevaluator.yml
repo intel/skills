@@ -1,0 +1,321 @@
+name: skillevaluator
+
+# NVIDIA SkillEvaluator, Tier 1: the static quality, schema and code-integrity checks
+# this repository's own validators do not make. Keyless, offline apart from installing
+# the tools, and fork-safe, like validate.yml.
+#
+# What it adds over validate.yml and skillspector.yml:
+#
+#   schema          agentskills.io frontmatter as SkillEvaluator's pydantic model reads
+#                   it, including the rule that a description carries no XML tags
+#   version         metadata.version, when present, is strict SemVer
+#   pii             emails, phone numbers, local paths and identifiers in skill content
+#   license         licence files and headers against an allow/deny table
+#   code-integrity  Bandit and Semgrep over bundled scripts, Gitleaks for secrets —
+#                   the secret scan security.yml leaves out, because gitleaks-action needs
+#                   an organisation licence and the gitleaks binary does not
+#   unicode         bidi overrides, zero-width and tag characters (Unicode smuggling)
+#   quality         a 0-100 score over correctness, discoverability, reliability and
+#                   efficiency, gated at --min-score
+#   lint            advisory AST lint of bundled scripts; never fails
+#
+# What it leaves out, on purpose:
+#
+#   security        SkillEvaluator's `security` check is SkillSpector, run as a
+#                   subprocess (`skillspector scan --format json --no-llm`). It passes no
+#                   --baseline, so it would re-report every finding
+#                   .skillspector-baseline.yaml has triaged, under a stricter gate (any
+#                   HIGH fails) than the score thresholds skillspector.yml holds each
+#                   skill's origin to. Running it here would scan every skill twice and
+#                   disagree with itself. skillspector.yml remains the one SkillSpector
+#                   gate, so `--checks` below names every default check but that one.
+#   Tier 2          embedding deduplication needs a provider key; --no-dedup.
+#   Tier 3          live agent evaluation needs agent credentials and Docker.
+#
+# SkillEvaluator has a verdict of its own (any HIGH/CRITICAL finding, or any scanner that
+# did not complete, fails) but no way to accept a reviewed finding. So its exit code is
+# not the gate: .github/scripts/skillevaluator_gate.py re-derives the verdict from the
+# JSON report with .skillevaluator-baseline.yaml applied, and fails a baseline entry that
+# stops matching. .skillevaluator-policy.yaml overlays the upstream `external` profile for
+# the one check that is wrong for this catalog as a whole.
+#
+# Narrowed to the skills a change touches, by the same changed_skills.py skillspector.yml
+# uses, with this workflow's own machinery as the paths that force a full run. The
+# weekly cron is the counterpart, for the same reason as there: nothing pins the rules
+# of the scanners below except the pins in this file.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    # Keep in sync with the --infra-path list in the discover job.
+    paths:
+      - "skills/**"
+      - ".github/workflows/skillevaluator.yml"
+      - ".github/scripts/changed_skills.py"
+      - ".github/scripts/skillevaluator_gate.py"
+      - ".skillevaluator-baseline.yaml"
+      - ".skillevaluator-policy.yaml"
+  schedule:
+    # Monday, offset from skillspector (05:47), security (09:17) and CodeQL (09:31).
+    - cron: "23 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One run per ref, and a superseded run is cancelled rather than queued behind the
+# one that replaced it: a contributor pushing a fixup should not wait for the CI of
+# the commit they just replaced. Keyed on head_ref for a pull request and on ref
+# otherwise, so a pull request and the branch it targets never cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Every tool pinned, for the reason skillspector.yml pins its scanner: a new rule is a
+  # new finding nobody here has triaged, and it should arrive in a pull request that
+  # says so, not on an unrelated contributor's diff. Dependabot watches github-actions
+  # only, so none of these move on their own; bump them in their own pull request and
+  # expect the baseline to move with them.
+  #
+  # 41e5469a is SkillEvaluator 0.3.0 (2026-09-23). The `security` extra is what the
+  # checks below need: Bandit and pip-audit.
+  SKILLEVALUATOR_COMMIT: 41e5469a229e82f97e4d3597d3422efa703fd4fe
+  # The scanners SkillEvaluator runs, pinned too: its extras only give lower bounds, and
+  # a `git+` install resolves them fresh rather than from upstream's lockfile. Semgrep
+  # goes into the same tool environment, where SkillEvaluator looks for it first
+  # (prefer_interpreter_sibling in utils/tool_runner.py).
+  SEMGREP_VERSION: "1.178.0"
+  BANDIT_VERSION: "1.9.4"
+  PIP_AUDIT_VERSION: "2.10.1"
+  GITLEAKS_VERSION: "8.30.1"
+  GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+  # The Tier 1 checks this gate runs: every default check except `security` (see the
+  # header). `dependency` is opt-in upstream and needs network to OSV; skills here ship
+  # no lockfiles for it to read.
+  TIER1_CHECKS: schema,version,pii,license,code-integrity,unicode,quality,lint
+  # SkillEvaluator's own default, written out so raising it is a visible one-line diff.
+  # At this pin the lowest-scoring skill in the catalog is at 72.5.
+  MIN_QUALITY_SCORE: "70"
+
+jobs:
+  discover-skills:
+    name: Discover skills
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      skills: ${{ steps.discover.outputs.skills }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          # The scripts declare their dependencies inline and the tools come from pins,
+          # so there is no manifest for uv's cache key to match.
+          enable-cache: false
+
+      # Same rule as skillspector.yml: the PR base on a pull request, the commit pushed
+      # over on a push, and nothing (so every skill) on cron or a manual run.
+      - name: Determine diff base
+        id: base
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            echo "ref=$PR_BASE_SHA" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT_NAME" = "push" ]; then
+            echo "ref=$PUSH_BEFORE" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Select changed skills
+        id: discover
+        env:
+          BASE_REF: ${{ steps.base.outputs.ref }}
+        run: |
+          skills="$(uv run .github/scripts/changed_skills.py --base "$BASE_REF" \
+            --infra-path .github/workflows/skillevaluator.yml \
+            --infra-path .github/scripts/changed_skills.py \
+            --infra-path .github/scripts/skillevaluator_gate.py \
+            --infra-path .skillevaluator-baseline.yaml \
+            --infra-path .skillevaluator-policy.yaml)"
+          echo "skills=$skills" >> "$GITHUB_OUTPUT"
+
+      # On every run, whatever was selected: a change that deletes or renames a skill
+      # selects nothing, and would otherwise leave a baseline entry naming it to fail
+      # the next, unrelated pull request.
+      - name: Baseline names only skills that exist
+        run: uv run .github/scripts/skillevaluator_gate.py --check-baseline --annotate
+
+  # One job for the whole selection rather than a matrix per skill, unlike
+  # skillspector.yml: a SkillEvaluator run is seconds per skill and the install is the
+  # expensive part, so a 33-way matrix would spend most of its time installing the same
+  # tools 33 times. Every skill is still validated and gated on its own, and the job
+  # summary carries one section per skill.
+  evaluate:
+    name: Evaluate skills
+    needs: discover-skills
+    if: needs.discover-skills.outputs.skills != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: false
+
+      - name: Install SkillEvaluator
+        run: |
+          uv tool install --python 3.13 \
+            "skillevaluator[security] @ git+https://github.com/NVIDIA/SkillEvaluator.git@${SKILLEVALUATOR_COMMIT}" \
+            --with "semgrep==${SEMGREP_VERSION}" \
+            --with "bandit==${BANDIT_VERSION}" \
+            --with "pip-audit==${PIP_AUDIT_VERSION}"
+          # Where uv put the console script, stated rather than assumed on PATH.
+          uv tool dir --bin >> "$GITHUB_PATH"
+          "$(uv tool dir --bin)/skillevaluator" --version
+
+      # The binary release, checksum-verified, rather than gitleaks-action: the action
+      # needs a licence key for an organisation account and the CLI does not.
+      - name: Install Gitleaks
+        run: |
+          set -euo pipefail
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL --retry 3 -o "${RUNNER_TEMP}/${tarball}" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${tarball}"
+          echo "${GITLEAKS_SHA256}  ${RUNNER_TEMP}/${tarball}" | sha256sum -c -
+          mkdir -p "${RUNNER_TEMP}/bin"
+          tar -xzf "${RUNNER_TEMP}/${tarball}" -C "${RUNNER_TEMP}/bin" gitleaks
+          echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
+
+      - name: Show scanner versions
+        run: |
+          gitleaks version
+          tool_bin="$(dirname "$(readlink -f "$(command -v skillevaluator)")")"
+          "$tool_bin/semgrep" --version
+          "$tool_bin/bandit" --version | head -1
+
+      # First, because every way the gate can break is silent: a matcher that accepts
+      # too much reads exactly like a clean catalog. It runs one real skill's report
+      # with one defect injected at a time — an unaccepted HIGH, CRITICAL, or
+      # error-level MEDIUM finding, an incomplete scanner, an unstructured error, the
+      # wrong policy profile, an unvetted severity override, an empty report, a quality
+      # score under the minimum, a stale baseline entry — and fails unless every one
+      # turns the verdict red.
+      # xpu-port because it has accepted findings for the stale-entry check to remove.
+      - name: Gate still refuses what it should
+        run: |
+          set -uo pipefail
+          out="${RUNNER_TEMP}/selftest"
+          # Actions runs this under `bash -e`, and exit 1 is SkillEvaluator's own verdict,
+          # not an error, so the status is captured rather than left to abort the step.
+          code=0
+          skillevaluator validate skills/xpu-port \
+            --external --policy .skillevaluator-policy.yaml \
+            --checks "$TIER1_CHECKS" --no-dedup -c --min-score "$MIN_QUALITY_SCORE" \
+            -r json -o "$out" >/dev/null 2>&1 || code=$?
+          if [ "$code" -gt 1 ]; then
+            echo "::error title=SkillEvaluator error::validate exited ${code} on 'xpu-port'; no report to self-test."
+            exit 1
+          fi
+          uv run .github/scripts/skillevaluator_gate.py \
+            --report-dir "$out" --skill xpu-port --min-score "$MIN_QUALITY_SCORE" \
+            --self-test --annotate
+
+      - name: Validate skills
+        id: validate
+        env:
+          SKILLS_JSON: ${{ needs.discover-skills.outputs.skills }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -uo pipefail
+          mkdir -p reports
+          failed=0
+          for skill in $(printf '%s' "$SKILLS_JSON" | jq -r '.[]'); do
+            echo "::group::${skill}"
+            # Actions runs this under `bash -e`, so the status is captured with `||`:
+            # exit 1 is a verdict, and must not end the loop at the first skill with one.
+            code=0
+            skillevaluator validate "skills/${skill}" \
+              --external --policy .skillevaluator-policy.yaml \
+              --checks "$TIER1_CHECKS" --no-dedup -c \
+              --min-score "$MIN_QUALITY_SCORE" \
+              --evaluated-source-repository "$REPO" \
+              --evaluated-source-revision "$SHA" \
+              -r cli,json,markdown -o "reports/${skill}" || code=$?
+            echo "::endgroup::"
+            # 1 is SkillEvaluator's own verdict and the gate below re-derives it with the
+            # baseline applied, so it is not a failure here. Anything above 1 is a usage
+            # or runtime error: no verdict at all.
+            if [ "$code" -gt 1 ]; then
+              echo "::error title=SkillEvaluator error::validate exited ${code} on '${skill}'; no result to gate on."
+              failed=1
+            fi
+          done
+          exit "$failed"
+
+      # Skipped with Validate skills, when the self-test above failed: there are no
+      # reports to gate, and the self-test's own error is the one to read.
+      - name: Gate on the baseline
+        if: ${{ !cancelled() && steps.validate.outcome != 'skipped' }}
+        env:
+          SKILLS_JSON: ${{ needs.discover-skills.outputs.skills }}
+        run: |
+          set -uo pipefail
+          failed=0
+          for skill in $(printf '%s' "$SKILLS_JSON" | jq -r '.[]'); do
+            uv run .github/scripts/skillevaluator_gate.py \
+              --report-dir "reports/${skill}" --skill "$skill" \
+              --min-score "$MIN_QUALITY_SCORE" --annotate || failed=1
+          done
+          exit "$failed"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: skillevaluator-reports
+          path: reports/
+          if-no-files-found: warn
+
+  # Single check for branch protection to require, as skillspector.yml does, so a
+  # skipped evaluate job (no skill touched) reads as success rather than as missing.
+  skillevaluator:
+    name: SkillEvaluator validation
+    needs: [discover-skills, evaluate]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Summarize
+        env:
+          DISCOVER_RESULT: ${{ needs.discover-skills.result }}
+          RESULT: ${{ needs.evaluate.result }}
+        run: |
+          echo "discover-skills result: $DISCOVER_RESULT"
+          echo "evaluate result: $RESULT"
+          # A failed discovery skips evaluate, and a skipped evaluate otherwise reads as
+          # "no skill touched". Only a discovery that succeeded can vouch for that.
+          if [ "$DISCOVER_RESULT" != "success" ]; then
+            echo "Skill discovery did not complete (result: $DISCOVER_RESULT); nothing was evaluated." >&2
+            exit 1
+          fi
+          if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
+            echo "One or more skills failed the SkillEvaluator gate, or the run did not complete (result: $RESULT). See the job summary." >&2
+            exit 1
+          fi

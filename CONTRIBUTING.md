@@ -256,6 +256,40 @@ skill in the catalog. The file is the audit trail, so each suppression must be j
 Rules are not pinned to a specific version of your skill: they keep applying after the
 surrounding text is reworded.
 
+### The quality and code-integrity scan
+
+Every skill is also validated by [NVIDIA SkillEvaluator](https://github.com/NVIDIA/SkillEvaluator)
+Tier 1: frontmatter against the agentskills.io schema (including no XML tags in
+`description`), strict SemVer for `metadata.version` when you set one, PII, licence,
+Bandit and Semgrep over shipped scripts, Gitleaks for secrets, Unicode smuggling, and a
+0–100 quality score that fails below 70. Its `security` check is left out: that check is
+SkillSpector again, without this repository's baseline, and the scan above already covers
+it. Keyless, like the SkillSpector scan:
+
+```bash
+commit=$(sed -n 's/.*SKILLEVALUATOR_COMMIT: \([0-9a-f]\{40\}\).*/\1/p' \
+  .github/workflows/skillevaluator.yml | head -1)
+uv tool install --python 3.13 \
+  "skillevaluator[security] @ git+https://github.com/NVIDIA/SkillEvaluator.git@${commit}" \
+  --with semgrep==1.178.0 --with bandit==1.9.4 --with pip-audit==2.10.1
+# plus the gitleaks binary on PATH (brew install gitleaks); without it the scan is incomplete
+skillevaluator validate skills/your-skill-name --external \
+  --policy .skillevaluator-policy.yaml \
+  --checks schema,version,pii,license,code-integrity,unicode,quality,lint \
+  --no-dedup -c -r cli,json -o reports/your-skill-name
+uv run .github/scripts/skillevaluator_gate.py \
+  --report-dir reports/your-skill-name --skill your-skill-name --min-score 70
+```
+
+A finding SkillEvaluator counts as an error fails — every HIGH and CRITICAL, and the few
+MEDIUM findings a validator raises as errors, such as a Bandit finding it is confident of —
+and so do a scanner that could not finish and a quality score under 70. The rest are
+warnings, reported for you to read. The same rule as for SkillSpector applies: if the finding
+is real, fix it; if it is not, add an entry to
+[`.skillevaluator-baseline.yaml`](.skillevaluator-baseline.yaml) with a `POLICY:` or
+`TRACKED:` reason and your skill under `skills:`. An entry that stops matching fails too,
+so the one that accepted a finding leaves in the pull request that fixes it.
+
 ## 5. If you are writing a new skill, add a Harbor task
 
 One task under [`evaluation/harbor/tasks/`](evaluation/harbor/tasks): a `task.toml` naming
@@ -318,6 +352,8 @@ Blocking, keyless, and runnable on a fork:
 - SkillSpector scores the skill within the threshold its origin is held to — 20 for a skill
   written here, 50 for an imported body — with suppressions and their reasons in
   `.skillspector-baseline.yaml`
+- SkillEvaluator Tier 1 reports no error-level finding and no incomplete scanner beyond
+  those accepted in `.skillevaluator-baseline.yaml`, and the quality score is at least 70
 - for a new skill: its Harbor task is solvable, oracle reward 1.0
 - no Harbor task's instruction gives away more than 5 points of its own skill's answer —
   a point per API symbol the skill teaches, three per line of code copyable straight out
@@ -339,6 +375,7 @@ Reported but not blocking:
 - a pair of skills that drive the same actions with no hand-off written between them — a
   reviewer's call rather than a threshold's; what blocks there is a skill of yours that does
   nothing another already does, and that check's own self-test
+- SkillEvaluator's warnings and advisory script lint
 
 ## Evaluation levels
 

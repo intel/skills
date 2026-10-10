@@ -1,0 +1,114 @@
+# SkillEvaluator acceptance baseline for github.com/intel/skills
+#
+# Read by .github/scripts/skillevaluator_gate.py, which gates one skill's
+# `skillevaluator validate` JSON report. See .github/workflows/skillevaluator.yml for
+# how CI runs it and CONTRIBUTING.md for the local recipe.
+#
+# SkillEvaluator has no suppression mechanism of its own. Its policy overlay
+# (.skillevaluator-policy.yaml) remaps the severity of a *kind* of finding everywhere,
+# keyed on CATEGORY.check_name; nothing in it can say "this finding, in this skill, is
+# accepted". So that statement lives here, in a format this repository defines, and the
+# gate applies it. Every entry is scoped with `skills:` for the same reason
+# .skillspector-baseline.yaml scopes its rules: an unscoped acceptance also covers skills
+# nobody has written yet.
+#
+# SkillSpector findings are not here. The workflow runs SkillEvaluator with its
+# `security` check left out, because that check is SkillSpector run a second time —
+# without --baseline, which SkillEvaluator does not pass through — so it would re-report
+# every finding .skillspector-baseline.yaml has already triaged, under a gate with
+# different thresholds. skillspector.yml stays the one place SkillSpector is gated.
+#
+# Only error-level findings are gated: the ones SkillEvaluator itself counts as errors
+# and lists in the result's error list. That is every HIGH and CRITICAL, plus the few
+# MEDIUM findings a validator raises as errors (a Bandit MEDIUM at medium or high
+# confidence). Everything else is a warning, reported in the job summary and the
+# uploaded report, and never needs an entry here.
+#
+# Two sections:
+#
+#   findings    an error-level finding that is accepted. `check` is
+#               CATEGORY.check_name exactly as the JSON report prints it; `path` is the
+#               finding's file relative to the skill directory; `message` is optional.
+#               All three are fnmatch patterns; `skills` is not.
+#   incomplete  a scanner SkillEvaluator reports as incomplete for a skill, accepted
+#               because the scanner cannot read the file, not because the file hides
+#               anything. Without an entry an incomplete scan fails, the same as it
+#               fails SkillEvaluator's own gate.
+#
+# Every entry carries a `reason`, prefixed as in .skillspector-baseline.yaml:
+#
+#   POLICY      the finding is inherent to what the skill is for, and is not going to
+#               be fixed because there is nothing wrong with it.
+#   TRACKED     the finding is real and not fixed yet. The reason names the fix. For an
+#               imported skill the fix is upstream's to make and arrives through a moved
+#               pin, because tools/sync_external.py --check fails an edit made here.
+#               These are the entries to delete, not to grow.
+#
+# The file is a ratchet, not a list that only grows. An entry that matches nothing for a
+# skill in its scope fails the gate for that skill, so fixing a finding forces its entry
+# (or that skill's name in it) out in the same pull request. `skills:` lists exact skill
+# names, never patterns: a pattern would also cover a skill added later, which would then
+# fail as stale for an entry that never named it. A name with no skill directory fails
+# too, on every run, so deleting a skill means deleting its name here in the same change.
+
+findings:
+  # `metadata.version: "1.0"` in the ten skills written here. SkillEvaluator treats the
+  # field as optional, but when present it must be strict SemVer (x.y.z) so it can be
+  # compared against --previous-version.
+  - check: "VERSION.version_semver"
+    skills:
+      - "dpnp-interop"
+      - "dpnp-io"
+      - "dpnp-linalg-fft"
+      - "dpnp-memory"
+      - "dpnp-migration"
+      - "dpnp-quickstart"
+      - "dpnp-random"
+      - "dpnp-troubleshooting"
+      - "mkl-extension-advisor"
+      - "onetbb-quickstart"
+    path: "SKILL.md"
+    reason: >-
+      TRACKED: write metadata.version as "1.0.0". Left for its own pull request because
+      it edits ten SKILL.md bodies, and this one only adds the gate.
+
+  # An XML-looking placeholder in the frontmatter description — `<path>` in xpu-port,
+  # `<testname>`-style tokens in phoronix-test-suite. Descriptions are loaded into the
+  # agent's system prompt, where Claude's skill spec forbids XML tags, so this is real.
+  # The schema check and the quality scorer both report it, hence two entries each.
+  - check: "SCHEMA.frontmatter_field"
+    skills: ["xpu-port", "phoronix-test-suite"]
+    path: "SKILL.md"
+    message: "*must not contain XML tags*"
+    reason: >-
+      TRACKED: imported body. Upstream (intel/gpu-ai-skills for xpu-port,
+      intel/intel-performance-skills for phoronix-test-suite) to drop the angle-bracket
+      placeholders from the description; arrives with the next pin bump.
+  - check: "QUALITY.quality_correctness"
+    skills: ["xpu-port", "phoronix-test-suite"]
+    path: "SKILL.md"
+    message: "Description contains XML tags"
+    reason: >-
+      TRACKED: the quality scorer's view of the same description, fixed by the same
+      upstream change as the entry above.
+
+  # exec() of the builder snippet in xpu-port's verifier. The same call is accepted in
+  # .skillspector-baseline.yaml (AST7/AST4 family) and carries a `# nosec B102` with its
+  # justification inline; Semgrep has its own rule for it and does not read nosec.
+  - check: "SEMGREP.skillevaluator.python.dynamic-code-execution"
+    skills: ["xpu-port"]
+    path: "scripts/xpu_port_verify.py"
+    reason: >-
+      POLICY: executing the user's own --builder snippet in the user's own process is
+      the tool's documented purpose; see the comment above the call.
+
+incomplete:
+  # Semgrep reports a syntax error in shell that `bash -n` accepts: emit_launch.sh in
+  # vllm-xpu-run, check_battlemage_prerequisites.sh and setup_xpu_system.sh in
+  # xpu-system-setup. SkillEvaluator then marks Code Risk Analysis incomplete for the skill.
+  - scanner: "semgrep"
+    skills: ["vllm-xpu-run", "xpu-system-setup"]
+    reason: >-
+      POLICY: a Semgrep parser limitation on valid bash, not content hidden from
+      analysis. Bandit and the other code-integrity scanners still complete, and
+      SkillSpector reads the same scripts in skillspector.yml.
