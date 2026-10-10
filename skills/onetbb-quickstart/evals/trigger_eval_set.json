@@ -1,0 +1,22 @@
+[
+  {"query": "The row loop in src/filters/blur.cpp takes ~900 ms single-threaded on our 32-core Xeon box and we already ship oneTBB with the product. Make that loop use all the cores with oneTBB and show me the change.", "should_trigger": true},
+  {"query": "first time pulling oneTBB into our CMake build (CMakeLists.txt at repo root, executable target is `sim`). what's the find_package / target_link_libraries line, and which header do I include so the code compiles?", "should_trigger": true},
+  {"query": "after I switched the particle update loop in physics/step.cpp to tbb::parallel_for, the `collisions` counter (a plain int member of the Simulator class) comes out different on every run. can you fix it properly?", "should_trigger": true},
+  {"query": "I parallelized a sum over a std::vector<double> (about 200M elements) with tbb::parallel_for writing into a std::atomic<double> via compare_exchange. It's slower than the serial loop and the total drifts in the last digits. What's the right way to do this reduction with TBB?", "should_trigger": true},
+  {"query": "analytics/hist.cpp builds a 256-bucket histogram over 1e9 bytes in a serial loop. Parallelize it with oneTBB — the bucket counts have to come out exactly the same as the serial version.", "should_trigger": true},
+  {"query": "our Monte Carlo option pricer simulates 10M paths in a plain for loop (each path seeds its own RNG from its index). Multithread it with oneTBB and return the mean payoff; keep results reproducible run to run.", "should_trigger": true},
+  {"query": "hey can u make compute_norms() in linalg/norms.cpp run multi-threaded? the team standardized on oneTBB for CPU parallelism, not openmp", "should_trigger": true},
+  {"query": "g++ -std=c++17 main.cpp -o app fails with undefined reference to `tbb::detail::r1::execute_and_wait` right after I added #include <oneapi/tbb.h> and a parallel_for. How do I compile and link this correctly?", "should_trigger": true},
+  {"query": "stats.cpp scans 50M floats serially to find the max value and its index. Rewrite it to run in parallel with TBB and still return both the value and the position of the first maximum.", "should_trigger": true},
+  {"query": "In my tbb::parallel_for over blocked_range<size_t> the lambda gets a range, but I wrote the body as if it got one index and now only some elements are processed. Show me how the body should iterate and fix tools/convert.cpp.", "should_trigger": true},
+  {"query": "add `#pragma omp parallel for` to the row loop in src/filters/blur.cpp and wire -fopenmp into the Makefile; this project already uses OpenMP everywhere so keep it consistent.", "should_trigger": false},
+  {"query": "rewrite the worker pool in src/pool.cpp with std::jthread, a std::condition_variable job queue and a stop_token for shutdown. no third-party libraries allowed in this repo.", "should_trigger": false},
+  {"query": "offload the per-pixel loop in src/filters/blur.cpp to our Intel Arc GPU with SYCL, keeping a CPU fallback when no GPU is found.", "should_trigger": false},
+  {"query": "our oneTBB parallel_for already works and is correct, but scaling flattens at 16 threads on a 64-core machine. Should I switch to simple_partitioner, and how do I choose a grainsize for a 2 µs-per-element body?", "should_trigger": false},
+  {"query": "perf top on my TBB-based service shows ~40% of cycles in tbb::detail::r1 spin/wait functions under load. Help me find out where the worker threads are actually waiting and why.", "should_trigger": false},
+  {"query": "is tbb::concurrent_bounded_queue::pop blocking, and what's the clean way to shut down 8 consumer threads blocked on it when the producer is done?", "should_trigger": false},
+  {"query": "design a tbb::flow::graph for my video decoder: source -> decode -> filter -> encode, with a limiter_node so no more than 4 frames are in flight.", "should_trigger": false},
+  {"query": "this numpy loop in prep/features.py takes 40 s on one core: for i in range(len(x)): out[i] = np.dot(W, x[i]). speed it up on all cores without leaving Python.", "should_trigger": false},
+  {"query": "parallelize the outer loop in src/render.rs with rayon's par_iter and collect the rows back into a Vec<Vec<u8>> in order.", "should_trigger": false},
+  {"query": "MKL dgemm calls in our solver run on all 56 cores even though the app pins itself to one socket. how do I set MKL_NUM_THREADS / OMP_PLACES so BLAS respects the affinity?", "should_trigger": false}
+]

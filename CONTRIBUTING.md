@@ -137,6 +137,7 @@ Worked example: [`skills/dpnp-quickstart/SKILL.md`](skills/dpnp-quickstart/SKILL
 | `references/` | detail the skill loads on demand, so the body stays short |
 | `scripts/` | helpers the skill runs. Keep them readable; they are instructions too |
 | `evals/evals.json` | cases recording what a correct answer contains |
+| `evals/trigger_eval_set.json` | messages that should and should not make an agent load the skill — `[{"query", "should_trigger"}]`, the format [skill-creator](https://github.com/anthropics/skills/tree/main/skills/skill-creator)'s `run_eval.py` reads |
 | `perf/` | hardware measurements. Three files together — see `templates/perf/` |
 
 None of these is required to merge. They are how a skill earns `validated` later, which is
