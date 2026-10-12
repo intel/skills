@@ -1,0 +1,73 @@
+---
+import type { BundleIconVariant } from '../lib/bundle-visuals';
+
+interface Props {
+  variant: BundleIconVariant;
+  class?: string;
+}
+
+const { variant, class: className } = Astro.props;
+---
+
+<svg class:list={['bundle-icon', className]} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+  {
+    variant === 'deploy' && (
+      <>
+        <path
+          d="M6 10l6-4 6 4v8l-6 4-6-4v-8z"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linejoin="round"
+        />
+        <path d="M12 6v16M6 10l12 8M18 10 6 18" stroke="currentColor" stroke-width="1.5" />
+      </>
+    )
+  }
+  {
+    variant === 'dpnp' && (
+      <>
+        <rect x="5" y="5" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <rect x="14" y="5" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <rect x="5" y="14" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <rect x="14" y="14" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5" />
+      </>
+    )
+  }
+  {
+    variant === 'perf' && (
+      <>
+        <path
+          d="M12 4a8 8 0 1 1-5.3 14"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+        />
+        <path d="M12 12V7M12 12l3.5 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      </>
+    )
+  }
+  {
+    variant === 'bundle' && (
+      <>
+        <path d="M5 8h14v10H5V8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+        <path
+          d="M5 11h14M9 8V6.5A1.5 1.5 0 0 1 10.5 5h3A1.5 1.5 0 0 1 15 6.5V8"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+        />
+      </>
+    )
+  }
+</svg>
+
+<style>
+  .bundle-icon {
+    width: 1.375rem;
+    height: 1.375rem;
+    flex: none;
+  }
+</style>

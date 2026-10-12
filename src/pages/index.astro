@@ -3,6 +3,9 @@ import Layout from '../layouts/Layout.astro';
 import SkillCard from '../components/SkillCard.astro';
 import SkillDialog from '../components/SkillDialog.astro';
 import SkillFilters from '../components/SkillFilters.astro';
+import CatalogTabs from '../components/CatalogTabs.astro';
+import SkillGroupCard from '../components/SkillGroupCard.astro';
+import SkillGroupDetail from '../components/SkillGroupDetail.astro';
 import GithubIcon from '../components/GithubIcon.astro';
 import InstallCommand from '../components/InstallCommand.astro';
 import {
@@ -12,7 +15,13 @@ import {
   productFacets,
   validatedOnFacets,
 } from '../lib/skills';
+import { skillGroups } from '../lib/groups';
 import { showSkillStatus } from '../lib/features';
+
+const browsePanelId = 'catalog-panel-browse';
+const bundlesPanelId = 'catalog-panel-bundles';
+/** Hide the Bundles tab when skills.sh.json is missing or has no groupings. */
+const showBundles = skillGroups.length > 0;
 
 const CATALOG_REPO_URL = 'https://github.com/intel/skills';
 /** Without --skill, the same command opens the catalog and lets you pick. */
@@ -65,30 +74,74 @@ const facetGroups = [
     </header>
 
     <main>
-      <SkillFilters groups={facetGroups} />
+      {
+        showBundles ? (
+          <CatalogTabs browsePanelId={browsePanelId} bundlesPanelId={bundlesPanelId} />
+        ) : null
+      }
 
-      <ul class="grid" data-skill-grid>
-        {
-          skills.map((skill, index) => (
-            <li
-              class="grid__item"
-              style={`--i:${index}`}
-              data-skill-item
-              data-search={skill.searchText}
-              {...(showSkillStatus ? { 'data-facet-status': skill.statusLabel } : {})}
-              data-facet-hw={skill.hwClass}
-              data-facet-product={skill.products.join('|')}
-              data-facet-validated={skill.validatedOn.join('|')}
-            >
-              <SkillCard skill={skill} />
-            </li>
-          ))
-        }
-      </ul>
+      <div
+        id={browsePanelId}
+        data-catalog-panel="browse"
+        role={showBundles ? 'tabpanel' : undefined}
+        aria-labelledby={showBundles ? 'catalog-tab-browse' : undefined}
+        hidden={showBundles ? true : undefined}
+      >
+        <SkillFilters groups={facetGroups} />
 
-      <p class="empty" data-empty-state hidden>
-        No skills match. Try fewer filters or a different search term.
-      </p>
+        <ul class="grid" data-skill-grid>
+          {
+            skills.map((skill, index) => (
+              <li
+                class="grid__item"
+                style={`--i:${index}`}
+                data-skill-item
+                data-search={skill.searchText}
+                {...(showSkillStatus ? { 'data-facet-status': skill.statusLabel } : {})}
+                data-facet-hw={skill.hwClass}
+                data-facet-product={skill.products.join('|')}
+                data-facet-validated={skill.validatedOn.join('|')}
+              >
+                <SkillCard skill={skill} />
+              </li>
+            ))
+          }
+        </ul>
+
+        <p class="empty" data-empty-state hidden>
+          No skills match. Try fewer filters or a different search term.
+        </p>
+      </div>
+
+      {
+        showBundles ? (
+          <div
+            id={bundlesPanelId}
+            data-catalog-panel="bundles"
+            role="tabpanel"
+            aria-labelledby="catalog-tab-bundles"
+          >
+            <div data-group-list>
+              <p class="groups-lede">
+                Curated bundles for common Intel CPU and GPU workflows — choose one to see its
+                skills and install them.
+              </p>
+
+              <ul class="group-grid" data-group-grid>
+                {
+                  skillGroups.map((group, index) => (
+                    <li class="group-grid__item" style={`--i:${index}`}>
+                      <SkillGroupCard group={group} index={index} />
+                    </li>
+                  ))
+                }
+              </ul>
+            </div>
+
+            {skillGroups.map((group) => <SkillGroupDetail group={group} />)}
+          </div>
+        ) : null
+      }
     </main>
 
     <footer class="footer">
@@ -177,6 +230,19 @@ const facetGroups = [
       return;
     }
 
+    const groupCard = target.closest<HTMLElement>('[data-group-card]');
+    if (groupCard) {
+      lastGroupCard = groupCard;
+      showGroupDetail(groupCard.dataset.groupCard!);
+      return;
+    }
+
+    const groupBack = target.closest<HTMLElement>('[data-group-back]');
+    if (groupBack) {
+      showGroupList();
+      return;
+    }
+
     // A click that lands on the dialog element itself is on its backdrop:
     // the content sits in child elements, which `closest` would have matched.
     if (target instanceof HTMLDialogElement && target.hasAttribute('data-skill-dialog')) {
@@ -188,24 +254,110 @@ const facetGroups = [
   // get dropped back at the top of the document.
   for (const dialog of document.querySelectorAll<HTMLDialogElement>('[data-skill-dialog]')) {
     dialog.addEventListener('close', () => {
-      document
-        .querySelector<HTMLElement>(
-          `[data-skill-card="${CSS.escape(dialog.dataset.skillDialog!)}"]`,
-        )
-        ?.focus();
+      const name = dialog.dataset.skillDialog!;
+      const selector = `[data-skill-card="${CSS.escape(name)}"]`;
+      const bundlesPanel = document.querySelector<HTMLElement>('[data-catalog-panel="bundles"]');
+      const activeDetail =
+        bundlesPanel && !bundlesPanel.hidden
+          ? bundlesPanel.querySelector<HTMLElement>('[data-group-detail]:not([hidden])')
+          : null;
+      const opener =
+        activeDetail?.querySelector<HTMLElement>(selector) ??
+        document.querySelector<HTMLElement>(selector);
+      opener?.focus();
     });
   }
+
+  /* ----------------------------- bundle drill-down -------------------------- */
+
+  const bundlesPanel = document.querySelector<HTMLElement>('[data-catalog-panel="bundles"]');
+  const groupList = bundlesPanel?.querySelector<HTMLElement>('[data-group-list]');
+  const groupDetails = bundlesPanel
+    ? [...bundlesPanel.querySelectorAll<HTMLElement>('[data-group-detail]')]
+    : [];
+  let lastGroupCard: HTMLElement | null = null;
+
+  function showGroupList() {
+    groupList?.removeAttribute('hidden');
+    for (const detail of groupDetails) {
+      detail.hidden = true;
+    }
+    lastGroupCard?.focus();
+  }
+
+  function showGroupDetail(id: string) {
+    groupList?.setAttribute('hidden', '');
+    for (const detail of groupDetails) {
+      detail.hidden = detail.dataset.groupDetail !== id;
+    }
+    const heading = bundlesPanel?.querySelector<HTMLElement>(
+      `[data-group-detail="${CSS.escape(id)}"] .group-detail__title`,
+    );
+    heading?.focus();
+  }
+
+  bundlesPanel?.querySelectorAll<HTMLElement>('[data-group-detail]').forEach((detail) => {
+    const title = detail.querySelector<HTMLElement>('.group-detail__title');
+    if (title && !title.hasAttribute('tabindex')) {
+      title.tabIndex = -1;
+    }
+  });
+
+  /* ------------------------------- view tabs ------------------------------ */
+
+  const tabList = document.querySelector<HTMLElement>('[data-catalog-tabs]');
+  const tabButtons = tabList
+    ? [...tabList.querySelectorAll<HTMLButtonElement>('[data-catalog-tab]')]
+    : [];
+  const panels = [...document.querySelectorAll<HTMLElement>('[data-catalog-panel]')];
+
+  function showCatalogView(view: string) {
+    for (const button of tabButtons) {
+      const active = button.dataset.catalogTab === view;
+      button.setAttribute('aria-selected', active ? 'true' : 'false');
+      button.tabIndex = active ? 0 : -1;
+    }
+    for (const panel of panels) {
+      const active = panel.dataset.catalogPanel === view;
+      panel.hidden = !active;
+    }
+    if (view !== 'bundles') {
+      showGroupList();
+    }
+  }
+
+  tabList?.addEventListener('click', (event) => {
+    const button = (event.target as Element).closest<HTMLButtonElement>('[data-catalog-tab]');
+    if (!button) return;
+    showCatalogView(button.dataset.catalogTab!);
+  });
+
+  tabList?.addEventListener('keydown', (event) => {
+    if (!(event.target instanceof HTMLButtonElement) || !event.target.dataset.catalogTab) return;
+    const index = tabButtons.indexOf(event.target);
+    if (index < 0) return;
+
+    let next = index;
+    if (event.key === 'ArrowRight') next = (index + 1) % tabButtons.length;
+    else if (event.key === 'ArrowLeft') next = (index - 1 + tabButtons.length) % tabButtons.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = tabButtons.length - 1;
+    else return;
+
+    event.preventDefault();
+    tabButtons[next]!.focus();
+    showCatalogView(tabButtons[next]!.dataset.catalogTab!);
+  });
 
   /* ----------------------------- grid entrance ---------------------------- */
 
   const grid = document.querySelector<HTMLElement>('[data-skill-grid]');
+  const groupGrid = document.querySelector<HTMLElement>('[data-group-grid]');
 
-  // Retires the entrance animation once the last card has landed, so filtering
-  // shows and hides instantly instead of replaying it. Driven by the animations
-  // themselves rather than a guessed timeout.
-  if (grid) {
-    const settle = () => grid.classList.add('grid--settled');
-    const entrances = grid
+  function settleGridEntrance(gridEl: HTMLElement | null) {
+    if (!gridEl) return;
+    const settle = () => gridEl.classList.add('grid--settled');
+    const entrances = gridEl
       .getAnimations({ subtree: true })
       .filter((a) => (a as CSSAnimation).animationName === 'rise-in');
 
@@ -215,6 +367,12 @@ const facetGroups = [
       settle();
     }
   }
+
+  // Retires the entrance animation once the last card has landed, so filtering
+  // shows and hides instantly instead of replaying it. Driven by the animations
+  // themselves rather than a guessed timeout.
+  settleGridEntrance(grid);
+  settleGridEntrance(groupGrid);
 
   /* ------------------------------- filtering ------------------------------ */
 
@@ -359,6 +517,7 @@ const facetGroups = [
      before its turn. */
   .header,
   .grid__item,
+  .group-grid__item,
   .footer {
     animation: rise-in 0.55s cubic-bezier(0.22, 0.7, 0.28, 1) backwards;
   }
@@ -373,11 +532,16 @@ const facetGroups = [
     animation-delay: calc(200ms + min(var(--i, 0), 12) * 45ms);
   }
 
+  .group-grid__item {
+    animation-delay: calc(200ms + min(var(--i, 0), 12) * 45ms);
+  }
+
   /* Filtering toggles `hidden`, and leaving display:none restarts an element's
      animations — so without this every filter change replays the entrance,
      staggered delays and all, which drags badly while typing a search. The
      grid is marked settled once the load animation has run. */
-  .grid--settled .grid__item {
+  .grid--settled .grid__item,
+  .grid--settled .group-grid__item {
     animation: none;
   }
 
@@ -484,6 +648,31 @@ const facetGroups = [
   }
 
   .grid__item[hidden] {
+    display: none;
+  }
+
+  .groups-lede {
+    max-width: 42rem;
+    margin: 0 0 1.25rem;
+    color: var(--text-muted);
+    font-size: 0.9375rem;
+    line-height: 1.45;
+  }
+
+  .group-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+    gap: 1rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .group-grid__item {
+    display: flex;
+  }
+
+  [data-group-list][hidden] {
     display: none;
   }
 

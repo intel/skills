@@ -1,0 +1,102 @@
+---
+interface Props {
+  browsePanelId: string;
+  bundlesPanelId: string;
+}
+
+const { browsePanelId, bundlesPanelId } = Astro.props;
+---
+
+<div class="catalog-tabs" data-catalog-tabs>
+  <div class="catalog-tabs__list" role="tablist" aria-label="Catalog views">
+    <button
+      type="button"
+      class="catalog-tabs__tab"
+      role="tab"
+      id="catalog-tab-bundles"
+      aria-selected="true"
+      aria-controls={bundlesPanelId}
+      data-catalog-tab="bundles"
+    >
+      Bundles
+    </button>
+    <button
+      type="button"
+      class="catalog-tabs__tab"
+      role="tab"
+      id="catalog-tab-browse"
+      aria-selected="false"
+      aria-controls={browsePanelId}
+      data-catalog-tab="browse"
+      tabindex="-1"
+    >
+      All skills
+    </button>
+  </div>
+</div>
+
+<style>
+  .catalog-tabs {
+    margin-bottom: 1.5rem;
+  }
+
+  .catalog-tabs__list {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.125rem;
+    padding: 0 0.125rem;
+    border-bottom: 1px solid var(--border-strong);
+  }
+
+  .catalog-tabs__tab {
+    position: relative;
+    appearance: none;
+    margin: 0 0 -1px;
+    padding: 0.625rem 1.25rem 0.6875rem;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 10px 10px 0 0;
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.2;
+    cursor: pointer;
+    transition:
+      color 0.15s ease,
+      background 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .catalog-tabs__tab:hover {
+    color: var(--text);
+    background: rgb(255 255 255 / 4%);
+  }
+
+  .catalog-tabs__tab[aria-selected='true'] {
+    border-color: var(--border-strong);
+    background: var(--page);
+    color: var(--text);
+    box-shadow: inset 0 2px 0 0 var(--accent);
+  }
+
+  /* Merges the active tab with the page below the tab bar. */
+  .catalog-tabs__tab[aria-selected='true']::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    bottom: -1px;
+    left: 0;
+    height: 1px;
+    background: var(--page);
+  }
+
+  .catalog-tabs__tab:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: -2px;
+    z-index: 1;
+  }
+</style>

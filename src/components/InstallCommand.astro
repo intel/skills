@@ -23,13 +23,16 @@ const commandId = `cmd-${command.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`;
 <style>
   .install {
     display: inline-flex;
-    align-items: stretch;
+    /* Top-align so a wrapped multi-skill command does not stretch Copy. */
+    align-items: flex-start;
     width: fit-content;
     max-width: 100%;
     gap: 0.5rem;
     padding: 0.375rem 0.375rem 0.375rem 0.875rem;
     border: 1px solid var(--border);
-    border-radius: var(--radius-pill);
+    /* ~half the one-line control height: short commands still read as a capsule;
+       wrapped bundle commands keep ordinary rounded-rectangle corners. */
+    border-radius: 1.125rem;
     background: var(--page);
   }
 
@@ -50,6 +53,7 @@ const commandId = `cmd-${command.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`;
   /* Intel's calls to action are fully rounded pills at weight 500. */
   .install__copy {
     flex: none;
+    align-self: flex-start;
     padding: 0.25rem 0.625rem;
     border: 1px solid transparent;
     border-radius: var(--radius-pill);
@@ -58,6 +62,7 @@ const commandId = `cmd-${command.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`;
     font: inherit;
     font-size: 0.8125rem;
     font-weight: 500;
+    line-height: 1.25;
     cursor: pointer;
   }
 

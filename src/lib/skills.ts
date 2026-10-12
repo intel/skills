@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import matter from 'gray-matter';
 import { parse as parseYaml } from 'yaml';
+import { parseSkillFrontmatter } from './skill-frontmatter';
 import { presentStatus, type StatusTone } from './status';
 import { showSkillStatus } from './features';
 
@@ -162,11 +162,8 @@ function loadSkills(): Skill[] {
       throw new Error(`[skills] ${name}: cannot read ${skillMdPath}: ${detail}`);
     }
 
-    const frontmatter = matter(skillMd).data as {
-      description?: unknown;
-      license?: unknown;
-    };
-    const description = optionalString(frontmatter.description);
+    const frontmatter = parseSkillFrontmatter(skillMd, name, skillMdPath);
+    const description = frontmatter.description;
     const summary = leadSentence(description);
     const products = splitField(optionalString(entry['intel-products']), ',');
     const hwClass = optionalString(entry['intel-hw-class']);
@@ -180,7 +177,7 @@ function loadSkills(): Skill[] {
       title: toTitle(name),
       description,
       summary,
-      license: optionalString(frontmatter.license) || undefined,
+      license: frontmatter.license,
       status: catalogStatus,
       statusLabel: status.label,
       statusTone: status.tone,
