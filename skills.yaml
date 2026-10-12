@@ -372,7 +372,7 @@
 - name: xpu-profile-unitrace
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
+  external-commit: "31534d956d9cb5f548fb8f36c767f1494a559fbb"
   external-path: "plugins/intel-gpu-ai-skills/skills/xpu-profile-unitrace"
   external-license: "Apache-2.0"
   intel-products: "Intel XPU, pti-gpu, oneCCL"
