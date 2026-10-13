@@ -18,6 +18,7 @@ If you are contributing a skill, you do not need this file.
 | `skills/<name>/perf/` | hardware measurements. Required for `validated`, optional before |
 | `skills/<name>/.source.json` | present when the skill was imported: upstream repo, path, commit |
 | `skills.yaml` | the catalog. Maintainer, status, and the optional Intel product fields |
+| `skills.sh.json` | the bundles the catalog is grouped into on the skills.sh page |
 | `evaluation/harbor/` | the task suites, the runner config, and the suite policy |
 | `templates/` | starting points: `SKILL.template.md`, `task_example.md`, `evals.json`, `perf/` |
 | `schemas/` | JSON Schema for the files that have one |
@@ -257,6 +258,28 @@ entry and directory, never `NOTICE`, whose `Commit:` lines are kept by hand.
 That pull request is not a decision; the diff to read is the skill text. By hand: `python3 tools/check_upstream.py` to survey, `--update` to move a pin
 locally, `--open-pr --remote <your fork> --against <this repository> --dry-run` to preview.
 
+## Bundles on skills.sh
+
+`skills.sh.json` groups the catalog into bundles on this repository's skills.sh page,
+following the [skills.sh schema](https://skills.sh/schemas/skills.sh.schema.json). A bundle
+is the set of skills a user wants together for one use case. Skills imported from the same
+upstream usually form one, because upstream wrote them to route to each other; skills
+written here are grouped by use case. Not every skill needs a bundle: with
+`notGrouped: "bottom"` the page lists the rest below the bundles.
+
+`validate_skills.py` holds the file to the catalog and to the schema's limits, which it
+mirrors by hand — a change to the skills.sh schema has to be repeated there. A bundle that
+names a skill `skills.yaml` has no entry for fails, so a pull request that removes or
+renames a skill updates its bundle as well. A skill in no bundle is `INFO` and never fails,
+`--strict` included. The exception that gets attention is an import whose upstream's other
+skills are in a bundle: under GitHub Actions that note is annotated on the skill's
+`skills.yaml` line, which renders inline when the line is in the pull request's diff.
+Leaving such a skill out is a decision the pull request should explain.
+
+The pull requests `upstream-sync.yml` opens only move pins, so they never need a bundle
+change. A new skill from an existing upstream is added by hand, and that is the pull
+request the annotation is for.
+
 ## CI
 
 | Workflow | Job | Runs on | Blocks? |
@@ -311,7 +334,7 @@ Everything else runs offline.
 
 | Script | What it does |
 |---|---|
-| `validate_skills.py` | Level 1: every structural check, and the catalog ↔ tree bijection |
+| `validate_skills.py` | Level 1: every structural check, the catalog ↔ tree bijection, and `skills.sh.json` against the catalog |
 | `run_evals.py` | validates eval files against their schema; scores recorded answers |
 | `compare_harbor_skill.py` | runs and reports the three-arm differential, with cost and time |
 | `check_harbor_job.py` | asserts a harbor run's trial count and reward floor |
