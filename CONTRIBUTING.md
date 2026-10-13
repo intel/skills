@@ -258,37 +258,14 @@ surrounding text is reworded.
 
 ### The quality and code-integrity scan
 
-Every skill is also validated by [NVIDIA SkillEvaluator](https://github.com/NVIDIA/SkillEvaluator)
-Tier 1: frontmatter against the agentskills.io schema (including no XML tags in
-`description`), strict SemVer for `metadata.version` when you set one, PII, licence,
-Bandit and Semgrep over shipped scripts, Gitleaks for secrets, Unicode smuggling, and a
-0–100 quality score that fails below 70. Its `security` check is left out: that check is
-SkillSpector again, without this repository's baseline, and the scan above already covers
-it. Keyless, like the SkillSpector scan:
-
-```bash
-commit=$(sed -n 's/.*SKILLEVALUATOR_COMMIT: \([0-9a-f]\{40\}\).*/\1/p' \
-  .github/workflows/skillevaluator.yml | head -1)
-uv tool install --python 3.13 \
-  "skillevaluator[security] @ git+https://github.com/NVIDIA/SkillEvaluator.git@${commit}" \
-  --with semgrep==1.178.0 --with bandit==1.9.4 --with pip-audit==2.10.1
-# plus the gitleaks binary on PATH (brew install gitleaks); without it the scan is incomplete
-skillevaluator validate skills/your-skill-name --external \
-  --policy .skillevaluator-policy.yaml \
-  --checks schema,version,pii,license,code-integrity,unicode,quality,lint \
-  --no-dedup -c -r cli,json -o reports/your-skill-name
-uv run .github/scripts/skillevaluator_gate.py \
-  --report-dir reports/your-skill-name --skill your-skill-name --min-score 70
-```
-
-A finding SkillEvaluator counts as an error fails — every HIGH and CRITICAL, and the few
-MEDIUM findings a validator raises as errors, such as a Bandit finding it is confident of —
-and so do a scanner that could not finish and a quality score under 70. The rest are
-warnings, reported for you to read. The same rule as for SkillSpector applies: if the finding
-is real, fix it; if it is not, add an entry to
-[`.skillevaluator-baseline.yaml`](.skillevaluator-baseline.yaml) with a `POLICY:` or
-`TRACKED:` reason and your skill under `skills:`. An entry that stops matching fails too,
-so the one that accepted a finding leaves in the pull request that fixes it.
+CI also runs [NVIDIA SkillEvaluator](https://github.com/NVIDIA/SkillEvaluator) Tier 1 on
+each changed skill: frontmatter schema (no XML tags in `description`), SemVer for
+`metadata.version`, PII, licence, Bandit/Semgrep/Gitleaks over scripts, Unicode smuggling,
+and a quality score of at least 70. An error-level finding or a scanner that did not finish
+fails, unless [`.skillevaluator-baseline.yaml`](.skillevaluator-baseline.yaml) accepts it
+with a `POLICY:` or `TRACKED:` reason and your skill under `skills:`. To reproduce it
+locally, run the `evaluate` job's steps from
+[`skillevaluator.yml`](.github/workflows/skillevaluator.yml) against your skill.
 
 ## 5. If you are writing a new skill, add a Harbor task
 

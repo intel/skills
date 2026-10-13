@@ -32,8 +32,9 @@ name: skillevaluator
 #   Tier 2          embedding deduplication needs a provider key; --no-dedup.
 #   Tier 3          live agent evaluation needs agent credentials and Docker.
 #
-# SkillEvaluator has a verdict of its own (any HIGH/CRITICAL finding, or any scanner that
-# did not complete, fails) but no way to accept a reviewed finding. So its exit code is
+# SkillEvaluator has a verdict of its own (any error-level finding, which includes the
+# MEDIUM findings a validator raises as errors, or any scanner that did not complete,
+# fails) but no way to accept a reviewed finding. So its exit code is
 # not the gate: .github/scripts/skillevaluator_gate.py re-derives the verdict from the
 # JSON report with .skillevaluator-baseline.yaml applied, and fails a baseline entry that
 # stops matching. .skillevaluator-policy.yaml overlays the upstream `external` profile for
@@ -47,15 +48,10 @@ name: skillevaluator
 on:
   push:
     branches: [main]
+  # Every pull request, with no paths filter: a workflow a filter skips reports no
+  # check at all, which a ruleset requiring `SkillEvaluator validation` reads as
+  # pending. A pull request that touches no skill selects nothing and skips evaluate.
   pull_request:
-    # Keep in sync with the --infra-path list in the discover job.
-    paths:
-      - "skills/**"
-      - ".github/workflows/skillevaluator.yml"
-      - ".github/scripts/changed_skills.py"
-      - ".github/scripts/skillevaluator_gate.py"
-      - ".skillevaluator-baseline.yaml"
-      - ".skillevaluator-policy.yaml"
   schedule:
     # Monday, offset from skillspector (05:47), security (09:17) and CodeQL (09:31).
     - cron: "23 6 * * 1"
@@ -216,7 +212,9 @@ jobs:
       # wrong policy profile, an unvetted severity override, an empty report, a quality
       # score under the minimum, a stale baseline entry — and fails unless every one
       # turns the verdict red.
-      # xpu-port because it has accepted findings for the stale-entry check to remove.
+      # xpu-port because it has accepted findings for the stale-entry check to remove;
+      # the self-test fails if it has none. Its POLICY entry for the --builder exec
+      # keeps one after the TRACKED entries are fixed.
       - name: Gate still refuses what it should
         run: |
           set -uo pipefail

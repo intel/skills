@@ -33,7 +33,10 @@
 #   incomplete  a scanner SkillEvaluator reports as incomplete for a skill, accepted
 #               because the scanner cannot read the file, not because the file hides
 #               anything. Without an entry an incomplete scan fails, the same as it
-#               fails SkillEvaluator's own gate.
+#               fails SkillEvaluator's own gate. `message` is a required fnmatch pattern
+#               for the error the scanner reported: it must match at least one of the
+#               result's errors, and an error it does not match still fails, so an entry
+#               for a parse error does not also accept a crashed or empty scan.
 #
 # Every entry carries a `reason`, prefixed as in .skillspector-baseline.yaml:
 #
@@ -107,6 +110,7 @@ incomplete:
   # vllm-xpu-run, check_battlemage_prerequisites.sh and setup_xpu_system.sh in
   # xpu-system-setup. SkillEvaluator then marks Code Risk Analysis incomplete for the skill.
   - scanner: "semgrep"
+    message: "Semgrep scan error: Syntax error*"
     skills: ["vllm-xpu-run", "xpu-system-setup"]
     reason: >-
       POLICY: a Semgrep parser limitation on valid bash, not content hidden from

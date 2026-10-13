@@ -24,11 +24,13 @@ nothing else:
     raises as errors (a Bandit MEDIUM at medium or high confidence, for one). Gating by
     severity alone would leave those failing with nothing a baseline entry could match;
   * every scanner in a result's `incomplete_scans` must be matched by an `incomplete`
-    entry, or it fails -- an incomplete scan is no answer, and SkillEvaluator's own gate
-    treats it as a failure too;
-  * a result that failed with an error the findings do not account for (a validator that
-    reported through its legacy error list rather than a finding) fails, because there
-    is nothing structured to accept it by;
+    entry whose `message` matches at least one of the result's errors, or it fails --
+    an incomplete scan is no answer, and SkillEvaluator's own gate treats it as a
+    failure too;
+  * an error the findings do not account for (a validator that reported through its
+    legacy error list rather than a finding) fails unless it matches the `message` of an
+    accepted `incomplete` entry. So an entry for a known parse error does not also
+    accept a crashed or empty scan of the same scanner;
   * a quality score below --min-score fails. SkillEvaluator records that only as the
     QUALITY result's `passed`, with no finding or error behind it, so nothing else
     here would see it. It is not a baseline matter: the fix is in the skill;
@@ -126,7 +128,7 @@ def load_baseline(path: Path, skills_on_disk: list[str]) -> list[Entry]:
     if unknown:
         raise ValueError(f"baseline {path} has unknown sections: {sorted(unknown)}")
 
-    required = {"findings": ("check", "path"), "incomplete": ("scanner",)}
+    required = {"findings": ("check", "path"), "incomplete": ("scanner", "message")}
     optional = {"findings": ("message",), "incomplete": ()}
     entries: list[Entry] = []
     for section, keys in required.items():
@@ -219,12 +221,15 @@ def match_finding(scoped: list[Entry], check: str, path: str, message: str) -> E
     )
 
 
-def match_incomplete(scoped: list[Entry], scanner: str) -> Entry | None:
+def match_incomplete(scoped: list[Entry], scanner: str, unstructured: list[str]) -> Entry | None:
+    """An entry for this scanner whose message matches at least one unstructured error."""
     return next(
         (
             e
             for e in scoped
-            if e.section == "incomplete" and fnmatch.fnmatchcase(scanner, e.patterns["scanner"])
+            if e.section == "incomplete"
+            and fnmatch.fnmatchcase(scanner, e.patterns["scanner"])
+            and any(fnmatch.fnmatchcase(err, e.patterns["message"]) for err in unstructured)
         ),
         None,
     )
@@ -253,31 +258,34 @@ def gate_findings(
             annotate_error(skill, finding, path, check, message)
 
 
-def gate_incomplete(verdict: Verdict, result: dict[str, Any], scoped: list[Entry]) -> None:
-    validator = result.get("validator", "?")
-    for scanner in result.get("incomplete_scans") or []:
-        entry = match_incomplete(scoped, scanner)
-        text = f"{validator}: scanner '{scanner}' did not complete"
-        if entry is None:
-            detail = "; ".join((result.get("legacy") or {}).get("errors", [])[:3])
-            text = f"{text}{f' ({detail})' if detail else ''}"
-        accept_or_fail(verdict, entry, text)
-
-
-def gate_unstructured(
-    verdict: Verdict, result: dict[str, Any], gated: list[dict[str, Any]], legacy_errors: list[str]
+def gate_incomplete(
+    verdict: Verdict, result: dict[str, Any], gated: list[dict[str, Any]], legacy_errors: list[str],
+    scoped: list[Entry],
 ) -> None:
-    """A validator can fail through its legacy error list without a structured finding.
+    """Incomplete scanners, and the legacy errors no structured finding accounts for.
 
-    When the result is not incomplete, those errors have nothing a baseline entry could
-    match, so they fail rather than pass unread.
+    An unstructured error has nothing a `findings` entry could match, so it fails unless
+    it matches the `message` of an `incomplete` entry accepted for this result.
     """
+    validator = result.get("validator", "?")
     structured = {legacy_string(f) for f in gated}
     unstructured = [e for e in legacy_errors if e not in structured]
-    if result.get("status") == "failed" and unstructured and not result.get("incomplete_scans"):
-        detail = "; ".join(unstructured[:3])
-        validator = result.get("validator", "?")
-        verdict.errors.append(f"{validator}: {len(unstructured)} unstructured error(s): {detail}")
+    accepted: list[Entry] = []
+    for scanner in result.get("incomplete_scans") or []:
+        entry = match_incomplete(scoped, scanner, unstructured)
+        text = f"{validator}: scanner '{scanner}' did not complete"
+        if entry is None:
+            detail = "; ".join(unstructured[:3])
+            text = f"{text}{f' ({detail})' if detail else ''}"
+        if accept_or_fail(verdict, entry, text):
+            accepted.append(entry)
+    unexplained = [
+        e for e in unstructured
+        if not any(fnmatch.fnmatchcase(e, a.patterns["message"]) for a in accepted)
+    ]
+    if unexplained:
+        detail = "; ".join(unexplained[:3])
+        verdict.errors.append(f"{validator}: {len(unexplained)} unstructured error(s): {detail}")
 
 
 def gate_report_shape(verdict: Verdict, report: dict[str, Any], min_score: float) -> bool:
@@ -322,8 +330,7 @@ def gate(
         legacy_errors = list((result.get("legacy") or {}).get("errors") or [])
         gated = gated_findings(result, legacy_errors)
         gate_findings(verdict, gated, scoped, skill, skill_dir)
-        gate_incomplete(verdict, result, scoped)
-        gate_unstructured(verdict, result, gated, legacy_errors)
+        gate_incomplete(verdict, result, gated, legacy_errors, scoped)
 
     gate_stale(verdict, scoped, skill)
     return verdict
@@ -397,8 +404,9 @@ def self_test(
     Same reason the install job asserts that `verify` refuses an altered skill.
     """
 
-    def run(mutated: dict[str, Any]) -> Verdict:
-        return gate(mutated, skill, skill_dir, load_baseline(baseline, on_disk), min_score)
+    def run(mutated: dict[str, Any], extra: tuple[Entry, ...] = ()) -> Verdict:
+        entries = load_baseline(baseline, on_disk) + [Entry(**vars(e)) for e in extra]
+        return gate(mutated, skill, skill_dir, entries, min_score)
 
     problems: list[str] = []
     unmodified = run(json.loads(json.dumps(report)))
@@ -407,10 +415,10 @@ def self_test(
         problems.extend(f"  {error}" for error in unmodified.errors)
         return problems
 
-    def mutate(label: str, change) -> None:
+    def mutate(label: str, change, extra: tuple[Entry, ...] = ()) -> None:
         copy = json.loads(json.dumps(report))
         change(copy)
-        if not run(copy).errors:
+        if not run(copy, extra).errors:
             problems.append(f"gate accepted a report with {label}")
 
     def new_high(r: dict[str, Any]) -> None:
@@ -465,6 +473,35 @@ def self_test(
     mutate("no validator results", no_results)
     mutate("an unstructured validator error", unstructured)
     mutate("a quality score below the minimum", low_quality)
+
+    # An accepted incomplete scan covers only the error its entry names. A synthetic
+    # entry is scoped to this skill: the parse error it names must pass, and a different
+    # error from the same scanner, or none at all, must not.
+    parse_entry = Entry("incomplete", -1, {"scanner": "semgrep", "message": "Semgrep scan error: Syntax error*"},
+                        [skill], "POLICY: self-test")
+
+    def semgrep_incomplete(error: str | None):
+        def change(r: dict[str, Any]) -> None:
+            result = r["results"][0]
+            result.setdefault("incomplete_scans", []).append("semgrep")
+            if error is not None:
+                result.setdefault("legacy", {}).setdefault("errors", []).append(error)
+        return change
+
+    control = json.loads(json.dumps(report))
+    semgrep_incomplete("Semgrep scan error: Syntax error at line scripts/x.sh:8:")(control)
+    if run(control, (parse_entry,)).errors:
+        problems.append("gate refused an incomplete scan whose error its baseline entry names")
+    mutate("an accepted incomplete scanner with a different error",
+           semgrep_incomplete("Semgrep did not return valid JSON; scan did not complete"), (parse_entry,))
+    mutate("an accepted incomplete scanner with no error", semgrep_incomplete(None), (parse_entry,))
+
+    def parse_error_elsewhere(r: dict[str, Any]) -> None:
+        semgrep_incomplete("Semgrep scan error: Syntax error at line scripts/x.sh:8:")(r)
+        r["results"][1].setdefault("legacy", {}).setdefault("errors", []).append(
+            "Semgrep scan error: Syntax error at line scripts/y.sh:3:")
+
+    mutate("the accepted error in a result with no incomplete scan", parse_error_elsewhere, (parse_entry,))
 
     # Stale entries: dropping every gated finding and incomplete scan must fail when the
     # baseline scopes an entry to this skill, because that entry then matches nothing.
