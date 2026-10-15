@@ -275,6 +275,17 @@ skill in the catalog. The file is the audit trail, so each suppression must be j
 Rules are not pinned to a specific version of your skill: they keep applying after the
 surrounding text is reworded.
 
+### The quality and code-integrity scan
+
+CI also runs [NVIDIA SkillEvaluator](https://github.com/NVIDIA/SkillEvaluator) Tier 1 on
+each changed skill: frontmatter schema (no XML tags in `description`), SemVer for
+`metadata.version`, PII, licence, Bandit/Semgrep/Gitleaks over scripts, Unicode smuggling,
+and a quality score of at least 70. An error-level finding or a scanner that did not finish
+fails, unless [`.skillevaluator-baseline.yaml`](.skillevaluator-baseline.yaml) accepts it
+with a `POLICY:` or `TRACKED:` reason and your skill under `skills:`. To reproduce it
+locally, run the `evaluate` job's steps from
+[`skillevaluator.yml`](.github/workflows/skillevaluator.yml) against your skill.
+
 ## 5. If you are writing a new skill, add a Harbor task
 
 One task under [`evaluation/harbor/tasks/`](evaluation/harbor/tasks): a `task.toml` naming
@@ -339,6 +350,8 @@ Blocking, keyless, and runnable on a fork:
 - SkillSpector scores the skill within the threshold its origin is held to — 20 for a skill
   written here, 50 for an imported body — with suppressions and their reasons in
   `.skillspector-baseline.yaml`
+- SkillEvaluator Tier 1 reports no error-level finding and no incomplete scanner beyond
+  those accepted in `.skillevaluator-baseline.yaml`, and the quality score is at least 70
 - for a new skill: its Harbor task is solvable, oracle reward 1.0
 - no Harbor task's instruction gives away more than 5 points of its own skill's answer —
   a point per API symbol the skill teaches, three per line of code copyable straight out
@@ -363,6 +376,7 @@ Reported but not blocking:
 - a pair of skills that drive the same actions with no hand-off written between them — a
   reviewer's call rather than a threshold's; what blocks there is a skill of yours that does
   nothing another already does, and that check's own self-test
+- SkillEvaluator's warnings and advisory script lint
 
 ## Evaluation levels
 
