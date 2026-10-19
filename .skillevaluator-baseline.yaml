@@ -55,6 +55,15 @@
 # too, on every run, so deleting a skill means deleting its name here in the same change.
 
 findings:
+  # SKILL.md past the Agent Skills spec's 5000-token recommendation: sglang-xpu-run's
+  # body grew from 332 to 500 lines in the 31534d9 import (6179 tokens).
+  - check: "QUALITY.quality_efficiency"
+    skills: ["sglang-xpu-run"]
+    path: "SKILL.md"
+    message: "Large skill*"
+    reason: >-
+      TRACKED: imported body. Upstream to move the multi-GPU detail and the opt-in
+      extras into references/ (intel/gpu-ai-skills#30); arrives with the next pin bump.
   # `metadata.version: "1.0"` in the ten skills written here. SkillEvaluator treats the
   # field as optional, but when present it must be strict SemVer (x.y.z) so it can be
   # compared against --previous-version.
