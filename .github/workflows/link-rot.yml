@@ -1,0 +1,65 @@
+name: Link rot
+
+# The link check in validate.yml runs when something here changes, and only over
+# what an agent loads: SKILL.md and references/. A link dies on the target's
+# schedule, not ours, so between pull requests nothing notices — and the repository's
+# own guides (README, CONTRIBUTING, MAINTAINERS, templates/, evaluation/) are not in
+# that check at all. This is the same checker on a timer, with --docs added. Same
+# rules as the PR step: a 404 or 410 fails, an outage or rate limit only warns.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  links:
+    # A fork's copy of the cron would probe the same URLs and open issues nobody reads.
+    if: github.repository == 'intel/skills'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+
+      - name: Link check, skills and docs
+        run: python3 tools/validate_skills.py --check-links --docs
+
+  # A red scheduled run notifies whoever last edited the cron line and nobody else,
+  # so a failure is turned into an issue the maintainers see. One open issue at a
+  # time: a link that stays dead adds a comment to it each week instead of a new
+  # issue. Its own job so the write scope never sits next to the checker.
+  report:
+    needs: links
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the link-rot issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Link rot: dead links found by the weekly check"
+          body="The weekly link check failed: $RUN_URL — the FAIL lines in the log name each file and URL."
+          number=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number')
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
