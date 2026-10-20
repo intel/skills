@@ -150,6 +150,9 @@ jobs:
   scan-skill:
     name: Scan skill
     needs: discover-skills
+    # An empty matrix is not skipped but failed, so a push that changes no skill would
+    # turn the summary red. Same guard as `evaluate` in skillevaluator.yml.
+    if: needs.discover-skills.outputs.skills != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -310,19 +313,27 @@ jobs:
   # the job result explicitly rather than relying on `needs` short-circuiting.
   skillspector:
     name: SkillSpector security scan
-    needs: [scan-skill, upload-sarif]
+    needs: [discover-skills, scan-skill, upload-sarif]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Summarize scan results
         env:
+          DISCOVER_RESULT: ${{ needs.discover-skills.result }}
           SCAN_RESULT: ${{ needs.scan-skill.result }}
           UPLOAD_RESULT: ${{ needs.upload-sarif.result }}
         run: |
+          echo "discover-skills result: $DISCOVER_RESULT"
           echo "scan-skill result: $SCAN_RESULT"
           echo "upload-sarif result: $UPLOAD_RESULT"
-          # "skipped" means the matrix was empty -- no changed skills to scan.
+          # A failed discovery skips scan-skill too, and a skipped scan otherwise reads
+          # as "no skill changed". Only a discovery that succeeded can vouch for that.
+          if [ "$DISCOVER_RESULT" != "success" ]; then
+            echo "Skill discovery did not complete (result: $DISCOVER_RESULT); nothing was scanned." >&2
+            exit 1
+          fi
+          # "skipped" now means discovery selected no skill.
           if [ "$SCAN_RESULT" != "success" ] && [ "$SCAN_RESULT" != "skipped" ]; then
             echo "One or more skills failed the SkillSpector gate, or a scan job did not complete (result: $SCAN_RESULT). See the job summary." >&2
             exit 1
