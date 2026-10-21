@@ -43,7 +43,8 @@ jobs:
   # issue. Its own job so the write scope never sits next to the checker.
   report:
     needs: links
-    if: failure() && github.event_name == 'schedule'
+    # A job that hits timeout-minutes ends cancelled, not failed. Skipped (a fork) stays quiet.
+    if: always() && github.event_name == 'schedule' && (needs.links.result == 'failure' || needs.links.result == 'cancelled')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
