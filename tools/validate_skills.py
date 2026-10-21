@@ -580,7 +580,10 @@ def extract_urls(body: str) -> list[str]:
     urls: list[str] = []
     for raw in URL_RE.findall(prose):
         url = raw
-        while url and url[-1] in ".,;:!?)":
+        # '*' and '_' too: emphasis around a link, **[site](https://…/)**, leaves
+        # its closing markers glued to the URL, and the probe then 404s on a page
+        # that exists.
+        while url and url[-1] in ".,;:!?)*_":
             # A closing paren is only punctuation when it has no opener inside the
             # URL — otherwise it belongs to the target, as in .../Foo_(bar).
             if url[-1] == ")" and url.count("(") >= url.count(")"):
@@ -1573,6 +1576,40 @@ def check_task_dir(
         )
 
 
+# The repository's own documentation, as opposed to the skills it publishes. Globbed
+# rather than listed so a new top-level guide or eval task is covered without an
+# edit here; skills/ is left out because the per-skill loop above already has it.
+DOC_GLOBS = ("*.md", ".github/*.md", "templates/**/*.md", "evaluation/**/*.md")
+
+
+def doc_files() -> list[Path]:
+    """Markdown files outside skills/ that --docs adds to the link check."""
+    found = {p for pattern in DOC_GLOBS for p in REPO_ROOT.glob(pattern) if p.is_file()}
+    return sorted(found)
+
+
+def doc_links(docs: bool, check_links: bool, report: Report) -> list[tuple[str, str, str, bool]]:
+    """The links --docs adds, each failing like a dead link in a skill of our own.
+
+    Not on every pull request: none of these files is what an agent loads, and their
+    links rot on someone else's schedule, so a weekly run finds the same rot without
+    making an unrelated pull request wait on ~100 more probes.
+    """
+    if not docs:
+        return []
+    if not check_links:
+        report.error("--docs needs --check-links")
+        return []
+    links: list[tuple[str, str, str, bool]] = []
+    for path in doc_files():
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        links += [
+            (rel, url, "link", False)
+            for url in extract_urls(path.read_text(encoding="utf-8"))
+        ]
+    return links
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -1584,6 +1621,13 @@ def main() -> int:
         help="also resolve the http(s) links in each SKILL.md, and an imported skill's "
         "upstream repository and pinned commit. Needs network; a 404 fails, a timeout "
         "warns, and a 404 in an imported body warns because the fix belongs upstream.",
+    )
+    parser.add_argument(
+        "--docs",
+        action="store_true",
+        help="with --check-links, also resolve the http(s) links in the repository's "
+        "own markdown outside skills/: README, CONTRIBUTING, MAINTAINERS, templates/ "
+        "and evaluation/. Run weekly by link-rot.yml rather than on every PR.",
     )
     args = parser.parse_args()
 
@@ -1644,6 +1688,7 @@ def main() -> int:
     check_trigger_vocabulary(catalog, descriptions, imported, report)
     check_suites(catalog, skill_types, imported, report)
     check_bundles(catalog, report)
+    links += doc_links(args.docs, args.check_links, report)
     if args.check_links:
         check_links(links, report)
 
