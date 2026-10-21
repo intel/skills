@@ -1588,6 +1588,28 @@ def doc_files() -> list[Path]:
     return sorted(found)
 
 
+def doc_links(docs: bool, check_links: bool, report: Report) -> list[tuple[str, str, str, bool]]:
+    """The links --docs adds, each failing like a dead link in a skill of our own.
+
+    Not on every pull request: none of these files is what an agent loads, and their
+    links rot on someone else's schedule, so a weekly run finds the same rot without
+    making an unrelated pull request wait on ~100 more probes.
+    """
+    if not docs:
+        return []
+    if not check_links:
+        report.error("--docs needs --check-links")
+        return []
+    links: list[tuple[str, str, str, bool]] = []
+    for path in doc_files():
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        links += [
+            (rel, url, "link", False)
+            for url in extract_urls(path.read_text(encoding="utf-8"))
+        ]
+    return links
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -1666,19 +1688,7 @@ def main() -> int:
     check_trigger_vocabulary(catalog, descriptions, imported, report)
     check_suites(catalog, skill_types, imported, report)
     check_bundles(catalog, report)
-    if args.check_links and args.docs:
-        # Written here, so a dead one fails like a dead link in a skill of our own.
-        # Not on every pull request: none of these files is what an agent loads, and
-        # their links rot on someone else's schedule, so a weekly run finds the same
-        # rot without making an unrelated pull request wait on ~100 more probes.
-        for path in doc_files():
-            rel = path.relative_to(REPO_ROOT).as_posix()
-            links += [
-                (rel, url, "link", False)
-                for url in extract_urls(path.read_text(encoding="utf-8"))
-            ]
-    elif args.docs:
-        report.error("--docs needs --check-links")
+    links += doc_links(args.docs, args.check_links, report)
     if args.check_links:
         check_links(links, report)
 
