@@ -1,6 +1,6 @@
 {
   "repo": "https://github.com/intel/gpu-ai-skills",
   "path": "plugins/intel-gpu-ai-skills/skills/model-config-recommend",
-  "commit": "e7d07772c32825ce749c1e3459b9cd80bd1d4da2",
+  "commit": "496c1553d26a8d742541231cee7ef5bdb4a1435c",
   "license": "Apache-2.0"
 }
