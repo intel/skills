@@ -281,7 +281,7 @@
 - name: torch-xpu-run
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
+  external-commit: "4a64a3157c1895ef4b48b861c81c445e4e161bcf"
   external-path: "plugins/intel-gpu-ai-skills/skills/torch-xpu-run"
   external-license: "Apache-2.0"
   intel-products: "Intel GPU"
