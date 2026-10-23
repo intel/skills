@@ -113,6 +113,7 @@ npx github:intel/skills install linux-perf xpu-port --target agents  # several n
 npx github:intel/skills verify linux-perf --path ~/.claude/skills/linux-perf
 npx github:intel/skills verify linux-perf --target claude-code   # same check, by target
 npx github:intel/skills verify --all --path ~/.agents/skills     # every catalog skill, after install --all
+npx github:intel/skills show linux-perf --json                  # name, description, source and files, for a script
 ```
 
 Node 20 or newer, no dependencies, nothing from npm, and no network call after the

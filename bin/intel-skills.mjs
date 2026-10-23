@@ -130,11 +130,12 @@ function files(dir) {
 }
 
 function targetRoot(target, dirOverride) {
-  if (dirOverride) return path.resolve(dirOverride);
   const segments = Object.hasOwn(INSTALL_TARGETS, target) ? INSTALL_TARGETS[target] : null;
-  if (!segments) {
+  // A misspelt --target is an error even when --dir wins, so a typo is not silently ignored.
+  if (!segments && (target || !dirOverride)) {
     throw new Error(`unknown target: ${target} (expected one of ${Object.keys(INSTALL_TARGETS).join(", ")})`);
   }
+  if (dirOverride) return path.resolve(dirOverride);
   return path.join(os.homedir(), ...segments);
 }
 
@@ -190,7 +191,7 @@ function install(name, root, force, dryRun = false) {
  * matches the upstream an imported skill was copied from — that needs the network and
  * is `python3 tools/sync_external.py --check`.
  */
-function verify(name, dir) {
+function verify(name, dir, allProblems = false) {
   const src = skillDir(name);
   const installed = path.resolve(dir);
   if (!fs.existsSync(installed)) throw new Error(`no such directory: ${installed}`);
@@ -213,9 +214,10 @@ function verify(name, dir) {
     problems.push(`${rel} is not part of this skill`);
   }
   if (problems.length > 0) {
+    const shown = allProblems ? problems : problems.slice(0, 4);
     throw new Error(
-      `${name} at ${installed} does not match skills/${name}/: ${problems.slice(0, 4).join("; ")}` +
-        (problems.length > 4 ? ` (+${problems.length - 4} more)` : ""),
+      `${name} at ${installed} does not match skills/${name}/: ${shown.join("; ")}` +
+        (problems.length > shown.length ? ` (+${problems.length - shown.length} more; --all-problems lists them)` : ""),
     );
   }
   console.log(`ok ${name} (${wanted.length} file(s) match skills/${name}/)`);
@@ -279,10 +281,10 @@ function positional(args) {
 function usage(code = 0) {
   console.log(`Usage:
   intel-skills list [--json] [--imported|--own]
-  intel-skills show <skill> [--files]
+  intel-skills show <skill> [--files|--json]
   intel-skills install <skill>...|--all --target ${Object.keys(INSTALL_TARGETS).join("|")} [--dir <path>] [--force] [--dry-run]
   intel-skills uninstall <skill> --target ${Object.keys(INSTALL_TARGETS).join("|")} [--dir <path>]
-  intel-skills verify <skill> --path <installed-skill-dir>
+  intel-skills verify <skill> --path <installed-skill-dir> [--all-problems]
   intel-skills verify <skill> --target ${Object.keys(INSTALL_TARGETS).join("|")} [--dir <path>]
   intel-skills --version
   intel-skills verify --all --path <skills-dir>
@@ -343,10 +345,14 @@ try {
       }
     }
   } else if (command === "show") {
-    const name = args[0];
+    rejectUnknownOptions(args, [], ["--files", "--json"]);
+    const names = positionals(args);
     // Without this, `show` alone reported "invalid skill name: undefined", an error
     // about a value the user never typed. Every other command prints usage instead.
-    if (!name || name.startsWith("--")) usage(1);
+    if (names.length === 0) usage(1);
+    if (names.length > 1) throw new Error(`show takes one skill name (got extra argument ${names[1]})`);
+    const name = names[0];
+    if (args.includes("--files") && args.includes("--json")) throw new Error("--files and --json cannot be combined");
     const src = skillDir(name);
     if (args.includes("--files")) {
       // The exact set `install` would write, so a reviewer can see what lands on disk
@@ -355,6 +361,11 @@ try {
       process.exit(0);
     }
     const origin = source(name);
+    if (args.includes("--json")) {
+      // What a script reads instead of scraping the SKILL.md dump below.
+      console.log(JSON.stringify({ name, description: description(name), source: origin, files: files(src) }, null, 2));
+      process.exit(0);
+    }
     if (origin) {
       console.log(`upstream:  ${origin.repo}/tree/${origin.commit}/${origin.path}`);
       console.log(`pinned:    ${origin.commit}`);
@@ -410,10 +421,11 @@ try {
     if (!name) usage(1);
     uninstall(name, targetRoot(target, dirOverride));
   } else if (command === "verify") {
-    rejectUnknownOptions(args, ["--path", "--target", "--dir"], ["--all"]);
+    rejectUnknownOptions(args, ["--path", "--target", "--dir"], ["--all", "--all-problems"]);
     const target = argValue(args, "--target");
     const dirOverride = argValue(args, "--dir");
     const explicit = argValue(args, "--path");
+    const allProblems = args.includes("--all-problems");
     // `--target` names the place `install` wrote to, so verify can check it without the
     // caller spelling out the per-agent directory.
     if (!explicit && !target && !dirOverride) usage(1);
@@ -427,7 +439,7 @@ try {
       const failures = [];
       for (const name of names) {
         try {
-          verify(name, path.join(root, name));
+          verify(name, path.join(root, name), allProblems);
         } catch (error) {
           failures.push(`${name}: ${error.message}`);
           console.error(`error: ${name}: ${error.message}`);
@@ -438,7 +450,7 @@ try {
     } else {
       const name = positional(args);
       if (!name) usage(1);
-      verify(name, explicit ?? path.join(targetRoot(target, dirOverride), name));
+      verify(name, explicit ?? path.join(targetRoot(target, dirOverride), name), allProblems);
     }
   } else {
     console.error(`error: unknown command: ${command}`);
