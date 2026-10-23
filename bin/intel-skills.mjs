@@ -49,13 +49,33 @@ const INSTALL_TARGETS = {
  */
 const NOT_INSTALLED = new Set(["evals", "perf"]);
 
+const LIST_FLAGS = ["--json", "--imported", "--own"];
+const VALUE_FLAGS = new Set(["--target", "--dir", "--path"]);
+
 const NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 function skillDir(name) {
   if (!NAME.test(String(name))) throw new Error(`invalid skill name: ${name}`);
   const src = path.join(SKILLS_DIR, name);
-  if (!fs.existsSync(path.join(src, "SKILL.md"))) throw new Error(`skill not found: ${name}`);
+  if (!fs.existsSync(path.join(src, "SKILL.md"))) {
+    // A half-remembered name is the usual cause, so point at the catalog entries that
+    // contain it rather than leave the user to run `list` and scan thirty-odd rows.
+    const similar = catalog().filter((candidate) => candidate.includes(name));
+    const hint = similar.length > 0 ? `; did you mean: ${similar.join(", ")}?` : "";
+    throw new Error(`skill not found: ${name}${hint}`);
+  }
   return src;
+}
+
+/** A one-line YAML scalar without its surrounding quotes, so `list` shows the text alone. */
+function unquote(value) {
+  if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+    return value.slice(1, -1).replace(/\\(["\\])/g, "$1");
+  }
+  if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) {
+    return value.slice(1, -1).replace(/''/g, "'");
+  }
+  return value;
 }
 
 /** The description an agent routes on, read from the frontmatter of SKILL.md. */
@@ -69,7 +89,7 @@ function description(name) {
   const index = lines.findIndex((line) => /^description:/.test(line));
   if (index === -1) return "";
   const inline = lines[index].replace(/^description:\s*/, "").trim();
-  if (inline && !/^[>|]-?$/.test(inline)) return inline;
+  if (inline && !/^[>|]-?$/.test(inline)) return unquote(inline);
   const block = [];
   for (let i = index + 1; i < lines.length && /^\s{2,}\S|^\s*$/.test(lines[i]); i += 1) {
     block.push(lines[i].trim());
@@ -136,12 +156,17 @@ function destinationFor(root, name, force) {
  * `scripts/check_runtime_preflight.sh` ships it executable, and a copy that dropped
  * the bit would fail on the first command the skill documents.
  */
-function install(name, root, force) {
+function install(name, root, force, dryRun = false) {
   const src = skillDir(name);
   const dest = destinationFor(root, name, force);
+  const listed = files(src);
+  if (dryRun) {
+    console.log(`would install ${name} -> ${dest} (${listed.length} file(s))`);
+    for (const rel of listed) console.log(`  ${rel}`);
+    return;
+  }
   fs.mkdirSync(root, { recursive: true });
   fs.rmSync(dest, { recursive: true, force: true });
-  const listed = files(src);
   for (const rel of listed) {
     const from = path.join(src, rel);
     const to = path.join(dest, rel);
@@ -169,6 +194,8 @@ function verify(name, dir) {
   const src = skillDir(name);
   const installed = path.resolve(dir);
   if (!fs.existsSync(installed)) throw new Error(`no such directory: ${installed}`);
+  // A file here used to surface as a raw "ENOTDIR: not a directory, scandir" from node.
+  if (!fs.statSync(installed).isDirectory()) throw new Error(`not a directory: ${installed}`);
   const digest = (file) => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 
   const wanted = files(src);
@@ -194,6 +221,26 @@ function verify(name, dir) {
   console.log(`ok ${name} (${wanted.length} file(s) match skills/${name}/)`);
 }
 
+/**
+ * Remove an installed skill from a target root.
+ *
+ * Deliberately narrow: the name must be a catalog-shaped name, the directory must hold a
+ * SKILL.md (so a typo cannot delete an unrelated folder), and it must stay inside the
+ * root. It never touches anything but `<root>/<name>`.
+ */
+function uninstall(name, root) {
+  if (!NAME.test(String(name))) throw new Error(`invalid skill name: ${name}`);
+  const dest = path.join(root, name);
+  if (!path.resolve(dest).startsWith(`${path.resolve(root)}${path.sep}`)) {
+    throw new Error("uninstall path escapes target directory");
+  }
+  if (!fs.existsSync(path.join(dest, "SKILL.md"))) {
+    throw new Error(`not an installed skill: ${dest}`);
+  }
+  fs.rmSync(dest, { recursive: true, force: true });
+  console.log(`removed ${name} from ${dest}`);
+}
+
 function argValue(args, flag) {
   const index = args.indexOf(flag);
   if (index === -1) return null;
@@ -202,12 +249,43 @@ function argValue(args, flag) {
   return value;
 }
 
+/**
+ * Refuse an option the command does not take. A misspelt `--forse` used to be dropped
+ * silently, so the command ran with its default and the user never learned the flag
+ * had not applied.
+ */
+function rejectUnknownOptions(args, valueFlags, switches) {
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (valueFlags.includes(arg)) i += 1;
+    else if (arg.startsWith("-") && !switches.includes(arg)) throw new Error(`unknown option: ${arg}`);
+  }
+}
+
+/** The first argument that is neither a flag nor the value of one, so flags may precede it. */
+function positionals(args) {
+  const found = [];
+  for (let i = 0; i < args.length; i += 1) {
+    if (VALUE_FLAGS.has(args[i])) i += 1;
+    else if (!args[i].startsWith("--") && !found.includes(args[i])) found.push(args[i]);
+  }
+  return found;
+}
+
+function positional(args) {
+  return positionals(args)[0] ?? null;
+}
+
 function usage(code = 0) {
   console.log(`Usage:
-  intel-skills list
-  intel-skills show <skill>
-  intel-skills install <skill>|--all --target ${Object.keys(INSTALL_TARGETS).join("|")} [--dir <path>] [--force]
+  intel-skills list [--json] [--imported|--own]
+  intel-skills show <skill> [--files]
+  intel-skills install <skill>...|--all --target ${Object.keys(INSTALL_TARGETS).join("|")} [--dir <path>] [--force] [--dry-run]
+  intel-skills uninstall <skill> --target ${Object.keys(INSTALL_TARGETS).join("|")} [--dir <path>]
   intel-skills verify <skill> --path <installed-skill-dir>
+  intel-skills verify <skill> --target ${Object.keys(INSTALL_TARGETS).join("|")} [--dir <path>]
+  intel-skills --version
+  intel-skills verify --all --path <skills-dir>
 
 Every command is a local operation on this checkout: no network, and nothing but node
 is required. \`list\` marks which skills are copies of another repository's work, and
@@ -219,18 +297,63 @@ const [, , command, ...args] = process.argv;
 
 try {
   if (!command || command === "-h" || command === "--help") usage(0);
+  // `install --help` is what a user types to learn the flags; without this it fell through
+  // to "invalid skill name: --help" or an exit-1 usage, and `list --help` printed the catalog.
+  // A flag's value is never a help request, so `--dir -h` still means a directory named -h.
+  if (args.some((arg, i) => (arg === "-h" || arg === "--help") && !VALUE_FLAGS.has(args[i - 1]))) {
+    usage(0);
+  }
+
+  if (command === "--version" || command === "-v") {
+    console.log(JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version);
+    process.exit(0);
+  }
 
   if (command === "list") {
+    const unknown = args.find((arg) => !LIST_FLAGS.includes(arg));
+    if (unknown) throw new Error(`unknown option for list: ${unknown}`);
+    const json = args.includes("--json");
+    const imported = args.includes("--imported");
+    const own = args.includes("--own");
+    if (imported && own) throw new Error("--imported and --own cannot be combined");
+    const rows = [];
     for (const name of catalog()) {
       const origin = source(name);
-      const kind = origin
-        ? `imported\t${origin.repo.split("/").slice(-1)[0]}@${String(origin.commit).slice(0, 12)}`
-        : "own\t-";
-      console.log(`${name}\t${kind}\t${description(name).slice(0, 100)}`);
+      if ((imported && !origin) || (own && origin)) continue;
+      rows.push({
+        name,
+        kind: origin ? "imported" : "own",
+        repo: origin ? origin.repo : null,
+        commit: origin ? String(origin.commit) : null,
+        license: origin ? origin.license ?? null : null,
+        description: description(name),
+      });
+    }
+    if (json) {
+      // The tab-separated form truncates the description to 100 characters and is built
+      // for a person; this is the same catalog, whole, for a script that would otherwise
+      // have to split on tabs.
+      console.log(JSON.stringify(rows, null, 2));
+    } else {
+      for (const row of rows) {
+        const kind = row.repo
+          ? `imported\t${row.repo.split("/").slice(-1)[0]}@${row.commit.slice(0, 12)}`
+          : "own\t-";
+        console.log(`${row.name}\t${kind}\t${row.description.slice(0, 100)}`);
+      }
     }
   } else if (command === "show") {
     const name = args[0];
+    // Without this, `show` alone reported "invalid skill name: undefined", an error
+    // about a value the user never typed. Every other command prints usage instead.
+    if (!name || name.startsWith("--")) usage(1);
     const src = skillDir(name);
+    if (args.includes("--files")) {
+      // The exact set `install` would write, so a reviewer can see what lands on disk
+      // without installing it.
+      for (const rel of files(src)) console.log(rel);
+      process.exit(0);
+    }
     const origin = source(name);
     if (origin) {
       console.log(`upstream:  ${origin.repo}/tree/${origin.commit}/${origin.path}`);
@@ -243,44 +366,82 @@ try {
     }
     console.log(fs.readFileSync(path.join(src, "SKILL.md"), "utf8"));
   } else if (command === "install") {
+    rejectUnknownOptions(args, ["--target", "--dir"], ["--force", "--all", "--dry-run"]);
+    if (args.includes("--all") && args.some((arg, i) => !arg.startsWith("-") && !["--target", "--dir"].includes(args[i - 1]))) {
+      throw new Error("--all installs every skill; do not also name one");
+    }
     const target = argValue(args, "--target");
     const dirOverride = argValue(args, "--dir");
     if (!target && !dirOverride) usage(1);
     const root = targetRoot(target, dirOverride);
     const force = args.includes("--force");
-    if (args.includes("--all")) {
-      // One skill's failure must not decide the other thirty-two. Aborting on the
-      // first error left an arbitrary prefix of the catalog installed and said nothing
-      // about the rest, which is the worst of both: partial state, and no list of what
-      // is missing. So each is attempted, every failure is reported, and the exit code
-      // still says the run did not fully succeed.
-      const names = catalog();
+    const dryRun = args.includes("--dry-run");
+    // One skill's failure must not decide the others. Aborting on the first error left an
+    // arbitrary prefix of the catalog installed and said nothing about the rest, which is
+    // the worst of both: partial state, and no list of what is missing. So each is
+    // attempted, every failure is reported, and the exit code still says the run did not
+    // fully succeed.
+    const names = args.includes("--all") ? catalog() : positionals(args);
+    if (names.length === 0) usage(1);
+    if (names.length === 1 && !args.includes("--all")) {
+      install(names[0], root, force, dryRun);
+    } else {
       const failures = [];
       for (const name of names) {
         try {
-          install(name, root, force);
+          install(name, root, force, dryRun);
         } catch (error) {
           failures.push(`${name}: ${error.message}`);
           console.error(`error: ${name}: ${error.message}`);
         }
       }
-      console.log(`${names.length - failures.length}/${names.length} installed to ${root}`);
+      console.log(`${names.length - failures.length}/${names.length} ${dryRun ? "would be installed to" : "installed to"} ${root}`);
       if (failures.length > 0) {
         console.error(`${failures.length} skill(s) not installed:`);
         for (const failure of failures) console.error(`  ${failure}`);
         process.exit(1);
       }
-    } else {
-      const name = args[0];
-      if (!name || name.startsWith("--")) usage(1);
-      install(name, root, force);
     }
+  } else if (command === "uninstall") {
+    const target = argValue(args, "--target");
+    const dirOverride = argValue(args, "--dir");
+    if (!target && !dirOverride) usage(1);
+    const name = positional(args);
+    if (!name) usage(1);
+    uninstall(name, targetRoot(target, dirOverride));
   } else if (command === "verify") {
-    const name = args[0];
-    const dir = argValue(args, "--path");
-    if (!name || !dir) usage(1);
-    verify(name, dir);
+    rejectUnknownOptions(args, ["--path", "--target", "--dir"], ["--all"]);
+    const target = argValue(args, "--target");
+    const dirOverride = argValue(args, "--dir");
+    const explicit = argValue(args, "--path");
+    // `--target` names the place `install` wrote to, so verify can check it without the
+    // caller spelling out the per-agent directory.
+    if (!explicit && !target && !dirOverride) usage(1);
+    if (args.includes("--all")) {
+      // The counterpart of `install --all`: the directory it wrote into, with every
+      // catalog skill checked under it. Each is attempted and every failure is listed,
+      // for the same reason `install --all` does not stop at the first one.
+      const root = path.resolve(explicit ?? targetRoot(target, dirOverride));
+      if (!fs.existsSync(root)) throw new Error(`no such directory: ${root}`);
+      const names = catalog();
+      const failures = [];
+      for (const name of names) {
+        try {
+          verify(name, path.join(root, name));
+        } catch (error) {
+          failures.push(`${name}: ${error.message}`);
+          console.error(`error: ${name}: ${error.message}`);
+        }
+      }
+      console.log(`${names.length - failures.length}/${names.length} verified under ${root}`);
+      if (failures.length > 0) process.exit(1);
+    } else {
+      const name = positional(args);
+      if (!name) usage(1);
+      verify(name, explicit ?? path.join(targetRoot(target, dirOverride), name));
+    }
   } else {
+    console.error(`error: unknown command: ${command}`);
     usage(1);
   }
 } catch (error) {
