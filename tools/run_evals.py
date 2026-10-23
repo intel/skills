@@ -44,8 +44,10 @@ def normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text.casefold())
 
 
-def eval_files() -> list[Path]:
-    return sorted(SKILLS_DIR.glob("*/evals/evals.json"))
+def eval_files(skill: str | None = None) -> list[Path]:
+    """Every skills/*/evals/evals.json, or just the one for `skill`."""
+    pattern = f"{skill}/evals/evals.json" if skill else "*/evals/evals.json"
+    return sorted(SKILLS_DIR.glob(pattern))
 
 
 def validate_file(path: Path) -> list[str]:
@@ -135,14 +137,14 @@ def validate_file(path: Path) -> list[str]:
     return errors
 
 
-def cmd_validate() -> int:
+def cmd_validate(skill: str | None = None) -> int:
     if not SCHEMA_PATH.is_file():
         print(f"FAIL missing schema: {SCHEMA_PATH}", file=sys.stderr)
         return 1
 
-    files = eval_files()
+    files = eval_files(skill)
     if not files:
-        print("FAIL no skills/*/evals/evals.json found", file=sys.stderr)
+        print(f"FAIL no skills/{skill or '*'}/evals/evals.json found", file=sys.stderr)
         return 1
 
     all_errors: list[str] = []
@@ -163,7 +165,7 @@ def cmd_validate() -> int:
     return 0
 
 
-def cmd_score(answers_path: Path, fail_under: float) -> int:
+def cmd_score(answers_path: Path, fail_under: float, skill: str | None = None) -> int:
     answers = json.loads(answers_path.read_text(encoding="utf-8"))
     if not isinstance(answers, dict):
         print("FAIL answers file must be an object of {eval-id: answer}", file=sys.stderr)
@@ -173,7 +175,7 @@ def cmd_score(answers_path: Path, fail_under: float) -> int:
     total = 0
     missing: list[str] = []
 
-    for path in eval_files():
+    for path in eval_files(skill):
         data = json.loads(path.read_text(encoding="utf-8"))
         for case in data["evals"]:
             total += 1
@@ -227,12 +229,15 @@ def main() -> int:
         default=1.0,
         help="minimum pass rate when scoring (default: 1.0)",
     )
+    parser.add_argument(
+        "--skill", help="limit --validate or --answers to skills/<name>/evals/evals.json"
+    )
     args = parser.parse_args()
 
     if args.validate:
-        return cmd_validate()
+        return cmd_validate(args.skill)
     if args.answers:
-        return cmd_score(args.answers, args.fail_under)
+        return cmd_score(args.answers, args.fail_under, args.skill)
 
     parser.error("pass --validate or --answers FILE")
     return 2
