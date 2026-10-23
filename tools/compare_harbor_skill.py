@@ -462,7 +462,7 @@ def format_report(args: argparse.Namespace, tasks: list[str], results: dict, pro
             value = results[arm]["per_task"].get(task)
             cells.append("—" if value is None else f"{value:.3f}")
         baseline = results[BASELINE]["per_task"].get(task)
-        candidate = results["candidate"]["per_task"].get(task)
+        candidate = results.get("candidate", {}).get("per_task", {}).get(task)
         if baseline is None or candidate is None:
             delta = "—"
         else:
