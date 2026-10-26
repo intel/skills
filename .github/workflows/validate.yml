@@ -286,3 +286,10 @@ jobs:
           fi
           test -d "${RUNNER_TEMP}/un/linux-perf"
           test -d "${RUNNER_TEMP}/un/dpnp-quickstart"
+          mkdir -p "${RUNNER_TEMP}/un/my-notes"
+          echo x > "${RUNNER_TEMP}/un/my-notes/SKILL.md"
+          if node bin/intel-skills.mjs uninstall my-notes --dir "${RUNNER_TEMP}/un"; then
+            echo "::error::uninstall removed a skill that is not in the catalog"
+            exit 1
+          fi
+          test -f "${RUNNER_TEMP}/un/my-notes/SKILL.md"

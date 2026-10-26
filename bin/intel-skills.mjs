@@ -226,12 +226,12 @@ function verify(name, dir, allProblems = false) {
 /**
  * Remove an installed skill from a target root.
  *
- * Deliberately narrow: the name must be a catalog-shaped name, the directory must hold a
- * SKILL.md (so a typo cannot delete an unrelated folder), and it must stay inside the
- * root. It never touches anything but `<root>/<name>`.
+ * Deliberately narrow: the name must be in the catalog (so a typo or another hub's skill
+ * cannot delete an unrelated folder), the directory must hold a SKILL.md, and it must stay
+ * inside the root. It never touches anything but `<root>/<name>`.
  */
 function uninstall(name, root) {
-  if (!NAME.test(String(name))) throw new Error(`invalid skill name: ${name}`);
+  skillDir(name);
   const dest = path.join(root, name);
   if (!path.resolve(dest).startsWith(`${path.resolve(root)}${path.sep}`)) {
     throw new Error("uninstall path escapes target directory");
