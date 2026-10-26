@@ -212,6 +212,8 @@ jobs:
           set -euo pipefail
           node bin/intel-skills.mjs install linux-perf --dir "${RUNNER_TEMP}/dry" --dry-run
           test ! -e "${RUNNER_TEMP}/dry"
+          node bin/intel-skills.mjs install --all --dir "${RUNNER_TEMP}/dryall" --dry-run
+          test ! -e "${RUNNER_TEMP}/dryall"
 
       # Several names in one call: every one is written, and a bad name fails the run
       # without stopping the others.
