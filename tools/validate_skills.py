@@ -58,6 +58,14 @@ Checks, in order of what breaks if they fail:
      still checked for structure and still run by the oracle smoke job; what it
      lacks is a capability to count toward, which is a maintainer's judgement and
      warns until 'validated' claims the measurement exists.
+ 14. skills.sh.json and skills.yaml agree: the file follows the skills.sh schema, and
+     every skill a bundle names has a catalog entry, so a removed or renamed skill
+     cannot stay on the skills.sh page under its old name. A skill in no bundle is
+     not a defect -- not every skill belongs with others -- so it is reported as
+     INFO, which never fails a run, --strict included. When the skill is imported
+     and other skills of the same upstream are bundled, the bundle was most likely
+     forgotten; under GitHub Actions that note is also annotated on the skill's
+     skills.yaml line, so it shows on the pull request's diff.
 
 Everything above is offline. `--check-links` adds the guide's "link check": it
 resolves the http(s) links in each SKILL.md, and for an imported skill the upstream
@@ -75,6 +83,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -103,6 +112,19 @@ NOTICE_PATH = REPO_ROOT / "NOTICE"
 SUITES_PATH = REPO_ROOT / "evaluation" / "harbor" / "suites.json"
 TASKS_DIR = REPO_ROOT / "evaluation" / "harbor" / "tasks"
 INSTRUCTIONS_DIR = REPO_ROOT / "evaluation" / "harbor" / "instructions"
+BUNDLES_PATH = REPO_ROOT / "skills.sh.json"
+
+# The limits https://skills.sh/schemas/skills.sh.schema.json sets, mirrored by hand
+# because this module uses nothing outside the standard library. A change to that
+# schema has to be repeated here.
+BUNDLES_TOP_KEYS = {"$schema", "schema", "notGrouped", "groupings"}
+BUNDLE_KEYS = {"title", "description", "skills"}
+NOT_GROUPED = ("top", "bottom")
+BUNDLES_MAX = 50
+BUNDLE_TITLE_MAX = 120
+BUNDLE_DESCRIPTION_MAX = 500
+BUNDLE_SKILLS_MAX = 500
+BUNDLE_SKILL_MAX = 120
 
 TASK_STATUSES = ("implemented", "planned")
 TASK_ROLES = ("smoke", "discriminating")
@@ -318,12 +340,23 @@ class Report:
     def __init__(self) -> None:
         self.errors: list[str] = []
         self.warnings: list[str] = []
+        # Never a failure, --strict included: a fact worth seeing, not a defect.
+        self.infos: list[tuple[str, str | None, int | None]] = []
 
     def error(self, message: str) -> None:
         self.errors.append(message)
 
     def warn(self, message: str) -> None:
         self.warnings.append(message)
+
+    def info(self, message: str, file: str | None = None, line: int | None = None) -> None:
+        """An info with a file is also annotated there when run under GitHub Actions."""
+        self.infos.append((message, file, line))
+
+
+def workflow_data(text: str) -> str:
+    """Escape a GitHub workflow command's message, which ends at the first newline."""
+    return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
 def split_frontmatter(text: str, where: str, report: Report) -> tuple[dict, str]:
@@ -547,7 +580,10 @@ def extract_urls(body: str) -> list[str]:
     urls: list[str] = []
     for raw in URL_RE.findall(prose):
         url = raw
-        while url and url[-1] in ".,;:!?)":
+        # '*' and '_' too: emphasis around a link, **[site](https://…/)**, leaves
+        # its closing markers glued to the URL, and the probe then 404s on a page
+        # that exists.
+        while url and url[-1] in ".,;:!?)*_":
             # A closing paren is only punctuation when it has no opener inside the
             # URL — otherwise it belongs to the target, as in .../Foo_(bar).
             if url[-1] == ")" and url.count("(") >= url.count(")"):
@@ -733,6 +769,16 @@ def parse_catalog(report: Report) -> dict[str, dict[str, str]]:
             report.error(f"skills.yaml: duplicate entry for {name!r}")
         catalog[name] = entry
     return catalog
+
+
+def catalog_line(name: str) -> int | None:
+    """The 1-based line of a skill's '- name:' entry in skills.yaml."""
+    entry = re.compile(rf"-\s+name:\s*[\"']?{re.escape(name)}[\"']?$")
+    lines = CATALOG_PATH.read_text(encoding="utf-8").splitlines()
+    for number, line in enumerate(lines, start=1):
+        if entry.fullmatch(line.strip()):
+            return number
+    return None
 
 
 def check_perf_subject(name: str, skill_dir: Path, report: Report) -> None:
@@ -1133,6 +1179,123 @@ def check_trigger_vocabulary(
             )
 
 
+def check_bundles(catalog: dict[str, dict[str, str]], report: Report) -> None:
+    """Cross-check skills.sh.json, the bundles on the skills.sh page, with skills.yaml.
+
+    A bundle naming a skill the catalog lacks is an error: the page would list a
+    skill that is gone, or miss the one it was renamed to. A skill in no bundle is
+    only INFO, because skills.sh still lists it among the ungrouped skills and not
+    every skill belongs with others. The one case said louder is an import whose
+    upstream's other skills are bundled, where the entry was most likely forgotten.
+    """
+    where = "skills.sh.json"
+    if not BUNDLES_PATH.is_file():
+        report.error(f"{where}: missing — the skills.sh page groups the catalog from it")
+        return
+    try:
+        data = json.loads(BUNDLES_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        report.error(f"{where}: not valid JSON: {exc}")
+        return
+    if not isinstance(data, dict):
+        report.error(f"{where}: must be a JSON object")
+        return
+
+    for key in sorted(set(data) - BUNDLES_TOP_KEYS):
+        report.error(
+            f"{where}: unknown key {key!r} — the skills.sh schema allows only "
+            f"{sorted(BUNDLES_TOP_KEYS)}"
+        )
+    not_grouped = data.get("notGrouped", "bottom")
+    if not_grouped not in NOT_GROUPED:
+        report.error(
+            f"{where}: notGrouped must be one of {list(NOT_GROUPED)}, got {not_grouped!r}"
+        )
+    groupings = data.get("groupings")
+    if not isinstance(groupings, list) or not groupings:
+        report.error(f"{where}: groupings must be a non-empty list")
+        return
+    if len(groupings) > BUNDLES_MAX:
+        report.error(f"{where}: {len(groupings)} bundles, the skills.sh limit is {BUNDLES_MAX}")
+
+    bundles_of: dict[str, list[str]] = {}
+    for index, group in enumerate(groupings):
+        if not isinstance(group, dict):
+            report.error(f"{where}: groupings[{index}] must be an object")
+            continue
+        title = group.get("title")
+        named = isinstance(title, str) and bool(title)
+        readable = named and len(title) <= BUNDLE_TITLE_MAX
+        label = f"bundle {title!r}" if readable else f"groupings[{index}]"
+        for key in sorted(set(group) - BUNDLE_KEYS):
+            report.error(
+                f"{where}: {label}: unknown key {key!r} — a bundle carries only "
+                f"{sorted(BUNDLE_KEYS)}"
+            )
+        if not named:
+            report.error(f"{where}: {label}: title is required")
+        elif len(title) > BUNDLE_TITLE_MAX:
+            report.error(
+                f"{where}: {label}: title is {len(title)} chars, limit is {BUNDLE_TITLE_MAX}"
+            )
+        description = group.get("description")
+        if description is not None and (
+            not isinstance(description, str) or len(description) > BUNDLE_DESCRIPTION_MAX
+        ):
+            report.error(
+                f"{where}: {label}: description must be a string of at most "
+                f"{BUNDLE_DESCRIPTION_MAX} chars"
+            )
+
+        skills = group.get("skills")
+        if not isinstance(skills, list) or not skills:
+            report.error(f"{where}: {label}: skills must be a non-empty list")
+            continue
+        if len(skills) > BUNDLE_SKILLS_MAX:
+            report.error(
+                f"{where}: {label}: {len(skills)} skills, the skills.sh limit is "
+                f"{BUNDLE_SKILLS_MAX}"
+            )
+        seen: set[str] = set()
+        for skill in skills:
+            if not isinstance(skill, str) or not skill or len(skill) > BUNDLE_SKILL_MAX:
+                report.error(f"{where}: {label}: {skill!r} is not a skill name")
+                continue
+            if skill in seen:
+                report.error(f"{where}: {label} lists {skill!r} twice")
+                continue
+            seen.add(skill)
+            if skill not in catalog:
+                report.error(
+                    f"{where}: {label} names {skill!r}, which skills.yaml has no entry "
+                    "for — a removed or renamed skill has to leave its bundle too"
+                )
+                continue
+            bundles_of.setdefault(skill, []).append(title if named else label)
+
+    for name in sorted(set(catalog) - set(bundles_of)):
+        repo = catalog[name].get("external-repo")
+        siblings = [
+            other
+            for other, entry in catalog.items()
+            if repo and other in bundles_of and entry.get("external-repo") == repo
+        ]
+        if not siblings:
+            report.info(
+                f"{where}: {name} is in no bundle; skills.sh lists it among the "
+                "ungrouped skills. Fine if no bundle fits"
+            )
+            continue
+        titles = sorted({title for other in siblings for title in bundles_of[other]})
+        report.info(
+            f"{where}: {name} is in no bundle, but {len(siblings)} other skill(s) from "
+            f"{repo} are in {', '.join(repr(title) for title in titles)} — it probably "
+            "belongs there too.",
+            file=CATALOG_PATH.relative_to(REPO_ROOT).as_posix(),
+            line=catalog_line(name),
+        )
+
+
 def check_suites(
     catalog: dict[str, dict[str, str]],
     skill_types: dict[str, str],
@@ -1413,6 +1576,40 @@ def check_task_dir(
         )
 
 
+# The repository's own documentation, as opposed to the skills it publishes. Globbed
+# rather than listed so a new top-level guide or eval task is covered without an
+# edit here; skills/ is left out because the per-skill loop above already has it.
+DOC_GLOBS = ("*.md", ".github/*.md", "templates/**/*.md", "evaluation/**/*.md")
+
+
+def doc_files() -> list[Path]:
+    """Markdown files outside skills/ that --docs adds to the link check."""
+    found = {p for pattern in DOC_GLOBS for p in REPO_ROOT.glob(pattern) if p.is_file()}
+    return sorted(found)
+
+
+def doc_links(docs: bool, check_links: bool, report: Report) -> list[tuple[str, str, str, bool]]:
+    """The links --docs adds, each failing like a dead link in a skill of our own.
+
+    Not on every pull request: none of these files is what an agent loads, and their
+    links rot on someone else's schedule, so a weekly run finds the same rot without
+    making an unrelated pull request wait on ~100 more probes.
+    """
+    if not docs:
+        return []
+    if not check_links:
+        report.error("--docs needs --check-links")
+        return []
+    links: list[tuple[str, str, str, bool]] = []
+    for path in doc_files():
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        links += [
+            (rel, url, "link", False)
+            for url in extract_urls(path.read_text(encoding="utf-8"))
+        ]
+    return links
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -1424,6 +1621,13 @@ def main() -> int:
         help="also resolve the http(s) links in each SKILL.md, and an imported skill's "
         "upstream repository and pinned commit. Needs network; a 404 fails, a timeout "
         "warns, and a 404 in an imported body warns because the fix belongs upstream.",
+    )
+    parser.add_argument(
+        "--docs",
+        action="store_true",
+        help="with --check-links, also resolve the http(s) links in the repository's "
+        "own markdown outside skills/: README, CONTRIBUTING, MAINTAINERS, templates/ "
+        "and evaluation/. Run weekly by link-rot.yml rather than on every PR.",
     )
     args = parser.parse_args()
 
@@ -1483,9 +1687,17 @@ def main() -> int:
     check_imports(catalog, sources, report)
     check_trigger_vocabulary(catalog, descriptions, imported, report)
     check_suites(catalog, skill_types, imported, report)
+    check_bundles(catalog, report)
+    links += doc_links(args.docs, args.check_links, report)
     if args.check_links:
         check_links(links, report)
 
+    in_actions = bool(os.environ.get("GITHUB_ACTIONS"))
+    for message, file, line in report.infos:
+        print(f"INFO {message}")
+        if in_actions and file:
+            location = f"file={file}" + (f",line={line}" if line else "")
+            print(f"::warning {location}::{workflow_data(message)}")
     for warning in report.warnings:
         print(f"WARN {warning}")
     for error in report.errors:

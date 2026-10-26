@@ -2,11 +2,14 @@
 name: onetbb-quickstart
 description: >-
   Getting started with Intel oneTBB for C++ parallelism on Intel CPUs. Use when a
-  C++ loop or reduction should run on multiple threads with oneTBB, when the user
-  needs the headers, namespace, or CMake wiring for a first oneTBB program, when a
-  parallel_for body has a data race, or when a reduction is accumulating into a
-  shared variable. Covers parallel_for and parallel_reduce over blocked_range, the
-  build setup, and the pitfalls of the task-based model.
+  C++ loop or reduction should run on multiple threads with oneTBB, including a
+  request to make an existing loop or function use all cores with oneTBB or TBB;
+  when the user needs the headers, namespace, or CMake wiring for a first oneTBB
+  program; when a parallel_for body has a data race; or when a reduction is
+  accumulating into a shared variable. Covers parallel_for and parallel_reduce over
+  blocked_range, the build setup, and the pitfalls of the task-based model. Not for
+  tuning grain size or partitioners in a working oneTBB program, OpenMP,
+  std::thread, or GPU offload.
 license: Apache-2.0
 compatibility: "Requires oneTBB and a C++17 compiler. CMake examples need the TBB package config that ships with oneTBB."
 metadata:

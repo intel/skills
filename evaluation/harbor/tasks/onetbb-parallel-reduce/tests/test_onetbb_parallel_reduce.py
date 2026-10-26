@@ -10,7 +10,10 @@ BINARY = Path("/app/reduce_tbb")
 SERIAL = Path("/app/reduce_serial")
 TARGET_SOURCE = Path("/app/reduce_tbb.cpp")
 ARGS = ['4000000']
-KEYWORDS = ['parallel_reduce', 'oneapi/tbb']
+KEYWORDS = ['parallel_reduce']
+# oneTBB ships its headers under both spellings, <tbb/...> and <oneapi/tbb/...>,
+# and instruction.md names no header path, so the include check accepts both.
+TBB_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"](?:oneapi/)?tbb[/.]', re.M)
 TIMEOUT_SEC = 8.0
 
 
@@ -51,5 +54,8 @@ def test_binary_matches_serial_reference():
 def test_source_uses_required_onetbb_api():
     assert TARGET_SOURCE.exists(), f"{TARGET_SOURCE} not found"
     text = TARGET_SOURCE.read_text(errors="replace")
+    assert TBB_INCLUDE.search(text), (
+        f"no oneTBB header (<tbb/...> or <oneapi/tbb/...>) included in {TARGET_SOURCE}"
+    )
     missing = [kw for kw in KEYWORDS if kw not in text]
     assert not missing, f"missing required oneTBB/source markers {missing} in {TARGET_SOURCE}"

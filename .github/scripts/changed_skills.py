@@ -48,6 +48,7 @@ DEFAULT_SKILLS_DIR = REPO_ROOT / "skills"
 
 # Paths that, when touched, force a full re-scan of every skill because they
 # change the scanning machinery itself rather than a single skill's content.
+# These are SkillSpector's; another workflow passes its own with --infra-path.
 INFRA_PATHS = (
     ".github/workflows/skillspector.yml",
     ".github/scripts/skillspector_baseline.py",
@@ -101,7 +102,9 @@ def changed_paths(base: str) -> list[str]:
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
 
-def select_skills(base: str | None, skills_dir: Path) -> list[str]:
+def select_skills(
+    base: str | None, skills_dir: Path, infra_paths: tuple[str, ...] = INFRA_PATHS
+) -> list[str]:
     """Pick the skills to scan for the given diff base.
 
     Returns every skill when the base is unusable or when infra changed, and
@@ -125,8 +128,8 @@ def select_skills(base: str | None, skills_dir: Path) -> list[str]:
         )
         return all_skills
 
-    if any(p in INFRA_PATHS for p in paths):
-        print("SkillSpector infra changed; scanning all skills.", file=sys.stderr)
+    if any(p in infra_paths for p in paths):
+        print("Infra changed; scanning all skills.", file=sys.stderr)
         return all_skills
 
     prefix = f"{skills_dir.relative_to(REPO_ROOT).as_posix()}/"
@@ -159,9 +162,18 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_SKILLS_DIR,
         help=f"Directory containing skill folders (default: {DEFAULT_SKILLS_DIR}).",
     )
+    parser.add_argument(
+        "--infra-path",
+        action="append",
+        default=None,
+        help="A path whose change forces every skill to be scanned. Repeatable; "
+        "when given, replaces the SkillSpector defaults, so a second workflow "
+        "(skillevaluator.yml) can name its own machinery.",
+    )
     args = parser.parse_args(argv)
 
-    skills = select_skills(args.base, args.skills_dir.resolve())
+    infra = tuple(args.infra_path) if args.infra_path else INFRA_PATHS
+    skills = select_skills(args.base, args.skills_dir.resolve(), infra)
     print(json.dumps(skills, separators=(",", ":")))
     return 0
 

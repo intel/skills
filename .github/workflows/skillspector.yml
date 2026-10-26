@@ -98,7 +98,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # Nothing to cache: the scripts declare their dependencies inline and
           # skillspector comes from a pinned git ref, so uv's dependency-glob
@@ -150,6 +150,9 @@ jobs:
   scan-skill:
     name: Scan skill
     needs: discover-skills
+    # An empty matrix is not skipped but failed, so a push that changes no skill would
+    # turn the summary red. Same guard as `evaluate` in skillevaluator.yml.
+    if: needs.discover-skills.outputs.skills != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -165,7 +168,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # Nothing to cache: the scripts declare their dependencies inline and
           # skillspector comes from a pinned git ref, so uv's dependency-glob
@@ -238,7 +241,7 @@ jobs:
 
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: skillspector-report-${{ matrix.skill }}
           path: |
@@ -268,7 +271,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           # Nothing to cache: the scripts declare their dependencies inline and
           # skillspector comes from a pinned git ref, so uv's dependency-glob
@@ -276,7 +279,7 @@ jobs:
           enable-cache: false
 
       - name: Download per-skill reports
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: skillspector-report-*
           path: downloads
@@ -294,7 +297,7 @@ jobs:
             --input-dir downloads --output skillspector.sarif --expect "$expect"
 
       - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d
         with:
           sarif_file: skillspector.sarif
           # Its own category, so this upload and CodeQL's do not overwrite each
@@ -310,19 +313,27 @@ jobs:
   # the job result explicitly rather than relying on `needs` short-circuiting.
   skillspector:
     name: SkillSpector security scan
-    needs: [scan-skill, upload-sarif]
+    needs: [discover-skills, scan-skill, upload-sarif]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Summarize scan results
         env:
+          DISCOVER_RESULT: ${{ needs.discover-skills.result }}
           SCAN_RESULT: ${{ needs.scan-skill.result }}
           UPLOAD_RESULT: ${{ needs.upload-sarif.result }}
         run: |
+          echo "discover-skills result: $DISCOVER_RESULT"
           echo "scan-skill result: $SCAN_RESULT"
           echo "upload-sarif result: $UPLOAD_RESULT"
-          # "skipped" means the matrix was empty -- no changed skills to scan.
+          # A failed discovery skips scan-skill too, and a skipped scan otherwise reads
+          # as "no skill changed". Only a discovery that succeeded can vouch for that.
+          if [ "$DISCOVER_RESULT" != "success" ]; then
+            echo "Skill discovery did not complete (result: $DISCOVER_RESULT); nothing was scanned." >&2
+            exit 1
+          fi
+          # "skipped" now means discovery selected no skill.
           if [ "$SCAN_RESULT" != "success" ] && [ "$SCAN_RESULT" != "skipped" ]; then
             echo "One or more skills failed the SkillSpector gate, or a scan job did not complete (result: $SCAN_RESULT). See the job summary." >&2
             exit 1

@@ -1,0 +1,31 @@
+# SkillEvaluator policy overlay for github.com/intel/skills
+#
+# Passed as `skillevaluator validate --external --policy .skillevaluator-policy.yaml`.
+# It overlays SkillEvaluator's own `external` profile rather than replacing it, so
+# every override the upstream profile carries (LICENSE.* critical, author_format high)
+# still applies; only the keys below differ. See .github/workflows/skillevaluator.yml.
+#
+# This file changes how severe a *kind* of finding is, everywhere. It cannot say "this
+# finding in this skill is accepted" — SkillEvaluator's policy is keyed on
+# CATEGORY.check_name and nothing finer. Per-skill acceptances live in
+# .skillevaluator-baseline.yaml, which the gate script reads. So an entry belongs here
+# only when the check is wrong for this catalog as a whole, never to quiet one skill.
+#
+# A new key also has to be added to SAFE_OVERRIDES in .github/scripts/skillevaluator_gate.py,
+# which fails any override it does not list: an override that changes a finding makes
+# SkillEvaluator rebuild that validator's errors from severity alone, and that can turn
+# an error-level MEDIUM into a warning.
+
+profile: intel-skills
+
+severity_overrides:
+  # The external profile raises a missing `metadata.author` to HIGH. This repository
+  # records who maintains a skill in skills.yaml (`maintainer:`, a GitHub handle), not
+  # in SKILL.md, so that frontmatter stays conformant to the agentskills.io spec and
+  # portable across agent platforms — see the header of skills.yaml. An imported skill
+  # is upstream's bytes and cannot gain the field here either. tools/validate_skills.py
+  # already fails an entry with no maintainer, which is the check this one duplicates.
+  #
+  # INFO rather than removing the check, so the report still says the field is absent.
+  # author_format stays HIGH: a skill that does write an author is held to the shape.
+  SCHEMA.author_missing: info
