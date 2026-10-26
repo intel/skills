@@ -414,11 +414,14 @@ try {
       }
     }
   } else if (command === "uninstall") {
+    rejectUnknownOptions(args, ["--target", "--dir"], []);
     const target = argValue(args, "--target");
     const dirOverride = argValue(args, "--dir");
     if (!target && !dirOverride) usage(1);
-    const name = positional(args);
-    if (!name) usage(1);
+    const names = positionals(args);
+    if (names.length === 0) usage(1);
+    if (names.length > 1) throw new Error(`uninstall takes one skill name (got extra argument ${names[1]})`);
+    const name = names[0];
     uninstall(name, targetRoot(target, dirOverride));
   } else if (command === "verify") {
     rejectUnknownOptions(args, ["--path", "--target", "--dir"], ["--all", "--all-problems"]);

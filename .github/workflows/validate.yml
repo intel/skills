@@ -274,3 +274,15 @@ jobs:
             echo "::error::uninstall accepted a path-like name"
             exit 1
           fi
+          node bin/intel-skills.mjs install linux-perf dpnp-quickstart --dir "${RUNNER_TEMP}/un"
+          if node bin/intel-skills.mjs uninstall linux-perf --dir "${RUNNER_TEMP}/un" --dry-run; then
+            echo "::error::uninstall accepted an option it does not take"
+            exit 1
+          fi
+          test -d "${RUNNER_TEMP}/un/linux-perf"
+          if node bin/intel-skills.mjs uninstall linux-perf dpnp-quickstart --dir "${RUNNER_TEMP}/un"; then
+            echo "::error::uninstall accepted a second skill name"
+            exit 1
+          fi
+          test -d "${RUNNER_TEMP}/un/linux-perf"
+          test -d "${RUNNER_TEMP}/un/dpnp-quickstart"
