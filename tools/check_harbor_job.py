@@ -184,6 +184,13 @@ def main() -> int:
                 problems.append(f"{name} errored: {kind}")
             continue
 
+        raw = rewards_of(trial).get(REWARD_KEY)
+        if reward is None and isinstance(raw, (int, float)):
+            # Present but NaN, infinite, or too large for a float.
+            say(f"ERROR {name}: reward is not a finite number ({raw!r})")
+            problems.append(f"{name} reported a non-finite reward ({raw!r})")
+            continue
+
         if reward is None:
             say(f"ERROR {name}: verifier reported no '{REWARD_KEY}'")
             problems.append(

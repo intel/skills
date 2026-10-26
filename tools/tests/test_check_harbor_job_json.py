@@ -216,6 +216,19 @@ class CheckHarborJobJsonTest(unittest.TestCase):
         self.assertEqual([t["reward"] for t in data["trials"]], [None, None])
         self.assertIs(data["ok"], False)
 
+    def test_text_mode_nan_reward_is_named_non_finite(self):
+        result = make_job(self.tmp, {"a": 1.0, "b": 1.0})
+        write_trial_text(
+            result,
+            '{"task_name": "b", "verifier_result": {"rewards": {"reward": NaN}}}',
+        )
+        for extra in ((), ("--allow-errors",)):
+            with self.subTest(extra=extra):
+                proc = run(result, *extra)
+                self.assertEqual(proc.returncode, 1)
+                self.assertIn("non-finite", proc.stdout)
+                self.assertNotIn("reward.txt", proc.stdout + proc.stderr)
+
     def test_json_huge_int_reward_is_null_and_strict(self):
         result = make_job(self.tmp, {"a": 1.0, "b": 1.0})
         # 400 digits parse as an int but cannot convert to float.
@@ -233,7 +246,7 @@ class CheckHarborJobJsonTest(unittest.TestCase):
                 data = strict_loads(proc.stdout)
                 self.assertIsNone(data["trials"][1]["reward"])
                 self.assertTrue(
-                    any("b produced no reward" in p for p in data["problems"])
+                    any("b reported a non-finite reward" in p for p in data["problems"])
                 )
 
     def test_text_mode_huge_int_reward_has_no_traceback(self):
@@ -246,7 +259,7 @@ class CheckHarborJobJsonTest(unittest.TestCase):
         proc = run(result)
         self.assertEqual(proc.returncode, 1)
         self.assertNotIn("Traceback", proc.stderr)
-        self.assertIn("b produced no reward", proc.stdout)
+        self.assertIn("b reported a non-finite reward", proc.stdout)
 
     def test_json_huge_int_reward_with_allow_errors_still_fails(self):
         result = make_job(self.tmp, {"a": 1.0, "b": 1.0})
