@@ -293,3 +293,9 @@ jobs:
             exit 1
           fi
           test -f "${RUNNER_TEMP}/un/my-notes/SKILL.md"
+          mkdir "${RUNNER_TEMP}/un/xpu-discover"
+          if node bin/intel-skills.mjs uninstall xpu-discover --dir "${RUNNER_TEMP}/un"; then
+            echo "::error::uninstall removed a catalog-named directory with no SKILL.md"
+            exit 1
+          fi
+          test -d "${RUNNER_TEMP}/un/xpu-discover"
