@@ -274,10 +274,6 @@ function positionals(args) {
   return found;
 }
 
-function positional(args) {
-  return positionals(args)[0] ?? null;
-}
-
 function usage(code = 0) {
   console.log(`Usage:
   intel-skills list [--json] [--imported|--own]
@@ -432,15 +428,18 @@ try {
     // `--target` names the place `install` wrote to, so verify can check it without the
     // caller spelling out the per-agent directory.
     if (!explicit && !target && !dirOverride) usage(1);
+    const names = positionals(args);
+    if (names.length > 1) throw new Error(`verify takes one skill name (got extra argument ${names[1]})`);
     if (args.includes("--all")) {
+      if (names.length > 0) throw new Error("--all verifies every skill; do not also name one");
       // The counterpart of `install --all`: the directory it wrote into, with every
       // catalog skill checked under it. Each is attempted and every failure is listed,
       // for the same reason `install --all` does not stop at the first one.
       const root = path.resolve(explicit ?? targetRoot(target, dirOverride));
       if (!fs.existsSync(root)) throw new Error(`no such directory: ${root}`);
-      const names = catalog();
+      const all = catalog();
       const failures = [];
-      for (const name of names) {
+      for (const name of all) {
         try {
           verify(name, path.join(root, name), allProblems);
         } catch (error) {
@@ -448,10 +447,10 @@ try {
           console.error(`error: ${name}: ${error.message}`);
         }
       }
-      console.log(`${names.length - failures.length}/${names.length} verified under ${root}`);
+      console.log(`${all.length - failures.length}/${all.length} verified under ${root}`);
       if (failures.length > 0) process.exit(1);
     } else {
-      const name = positional(args);
+      const name = names[0];
       if (!name) usage(1);
       verify(name, explicit ?? path.join(targetRoot(target, dirOverride), name), allProblems);
     }
