@@ -59,6 +59,18 @@ class ReportOnlyTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("candidate − no_skill = +0.500", result.stdout)
 
+    def test_malformed_trial_result_is_one_fail_line(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            jobs = Path(tmp)
+            job = jobs / f"{SKILL}-no-skill"
+            (job / "task__a").mkdir(parents=True)
+            (job / "result.json").write_text(json.dumps({"stats": {}}), encoding="utf-8")
+            (job / "task__a" / "result.json").write_text("{bad", encoding="utf-8")
+            result = report_only(jobs)
+            self.assertEqual(result.returncode, 1)
+            self.assertTrue(result.stderr.startswith("FAIL"), result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -55,7 +55,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from check_harbor_job import collect_trials, reward_of
+from check_harbor_job import LoadError, collect_trials, reward_of
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SUITES_PATH = REPO_ROOT / "evaluation" / "harbor" / "suites.json"
@@ -312,7 +312,11 @@ def summarize(job_dir: Path) -> dict:
     effort: dict = {}
     per_task_effort: dict[str, dict] = {}
     scored = 0
-    for trial in collect_trials(result_path):
+    try:
+        trials = collect_trials(result_path)
+    except LoadError as exc:
+        die(str(exc))
+    for trial in trials:
         name = trial.get("task_name") or "<unnamed>"
         if trial.get("exception_info"):
             kind = (trial["exception_info"] or {}).get("exception_type") or "unknown"
