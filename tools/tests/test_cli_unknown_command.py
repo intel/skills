@@ -1,5 +1,6 @@
 """An unrecognised installer command names itself instead of only printing usage."""
 
+import shutil
 import subprocess
 import sys
 import unittest
@@ -14,6 +15,7 @@ def run(*args):
     )
 
 
+@unittest.skipIf(shutil.which("node") is None, "node not installed")
 class UnknownCommandTest(unittest.TestCase):
     def test_unknown_command_is_named_on_stderr(self):
         result = run("instal", "linux-perf")

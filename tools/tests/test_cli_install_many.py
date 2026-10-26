@@ -17,6 +17,7 @@ def run(*args):
     )
 
 
+@unittest.skipIf(shutil.which("node") is None, "node not installed")
 class InstallManyTest(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp())

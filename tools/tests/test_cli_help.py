@@ -1,5 +1,6 @@
 """`--help` after any installer subcommand prints usage and exits 0."""
 
+import shutil
 import subprocess
 import unittest
 from pathlib import Path
@@ -13,6 +14,7 @@ def run(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+@unittest.skipIf(shutil.which("node") is None, "node not installed")
 class SubcommandHelpTest(unittest.TestCase):
     def test_subcommand_help_prints_usage(self) -> None:
         for args in (
