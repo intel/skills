@@ -14,3 +14,7 @@ GPUs. If the query found the device through another source, an `xpu-smi` failure
 
 **Integrated GPUs share system RAM.** The query caps their memory at what the OS has free.
 Treat it as an upper bound; other processes compete for the same pool.
+
+**A `null` memory is a question, not a default.** When no tool on the host reports memory, ask
+the user before anything is sized. A `null` must not reach **model-can-it-fit** or
+**xpu-deploy-plan**, which would substitute a default card of their own.

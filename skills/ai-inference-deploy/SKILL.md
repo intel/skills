@@ -56,13 +56,15 @@ each one owns a different set of skills.
 | The user wants | Verb | Go to |
 |---|---|---|
 | A machine prepared from bare metal | setup | **xpu-system-setup**, then stage 5. Done |
-| To know whether it fits, or the best config | plan | **model-can-it-fit**, **model-config-recommend**. Done |
+| To know whether it fits, or the best config | plan | Stage 2's query, then **model-can-it-fit** / **model-config-recommend** with the queried memory and count. Done |
 | To actually serve or run the model | run | Stage 2 |
-| A number for how fast it is | bench | **vllm-xpu-bench** / **sglang-xpu-bench** / **torch-xpu-bench**. Done |
+| A number for how fast it is | bench | Stage 2's query, then **vllm-xpu-bench** / **sglang-xpu-bench** / **torch-xpu-bench**. Done |
 | To know why it is slow | profile | **torch-xpu-profile** / **vllm-xpu-profile** / **xpu-profile-unitrace**. Done |
 | To move a CUDA repo over | migrate | **cuda-to-xpu-migration** (assess) or **xpu-port** (execute). Done |
 
-Only the **run** verb continues. Everything else is one hand-off and this skill is finished.
+Only the **run** verb continues through every stage. `plan` and `bench` still take stage 2's
+query first, because the skills they hand to fall back to a default card when no memory is
+passed. Everything else is one hand-off and this skill is finished.
 
 ## Stage 2 — which GPU, then which runtime
 
@@ -71,6 +73,13 @@ the host, or inside the runtime's container if the host has none. It prints each
 name, memory and `class`: `dgpu`, `igpu` (shares system RAM), or `unknown`. On `unknown`, say
 so and ask; do not guess. A `state` other than `normal` means the GPU itself needs attention:
 report it and stop.
+
+If `memory_bytes` is `null`, no tool on this host reported it (common on Windows). Ask the
+user — on Windows, Task Manager → Performance → GPU shows it — and never fill it from a
+default.
+
+If the query lists both an `igpu` and a `dgpu`, route on the `dgpu` and pass only its memory
+and count. Tell the user the integrated GPU is being left out unless they ask for it.
 
 | Signal | dgpu | igpu |
 |---|---|---|
@@ -109,7 +118,8 @@ is stage 5's question, not a reason to compile.
 
 ## Stage 5 — is the host ready
 
-Skip only if a preflight has already run in this session.
+Skip when a preflight has already run in this session, or when the user reports a recent
+clean preflight and asks for nothing further. A host nobody has checked gets one.
 
 | State | Route |
 |---|---|
@@ -127,7 +137,7 @@ user wants the whole chain written down as a plan:
 |---|---|
 | Model id or local path | **Ask.** This is the one thing never to guess |
 | Runtime | Stage 2's pick |
-| Target GPU, memory, count | From the query. Pass them explicitly to **model-can-it-fit** and **xpu-deploy-plan**; never rely on their defaults |
+| Target GPU, memory, count | From the query; where it returned `null`, from the user. Pass them explicitly to **model-can-it-fit** and **xpu-deploy-plan**; never rely on their defaults |
 | Context length | The runtime skill's own default |
 | Concurrency | One, for a first boot |
 

@@ -1,6 +1,6 @@
-# Route five inference requests to the catalog
+# Route six inference requests to the catalog
 
-`/app/cases/` holds five directories. Each is one support request, and each contains:
+`/app/cases/` holds six directories. Each is one support request, and each contains:
 
 - `request.txt` — what the user asked for, in their words
 - `host.json` — what is known about the machine they asked about
