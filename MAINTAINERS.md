@@ -284,7 +284,7 @@ request the annotation is for.
 
 | Workflow | Job | Runs on | Blocks? |
 |---|---|---|---|
-| `validate.yml` | `validate` — `validate_skills.py`, `run_evals.py --validate`, task leakage and its self-test, the overlap self-test, the staleness detector's self-test, link check | every PR | yes |
+| `validate.yml` | `validate` — `validate_skills.py` and its self-test, `run_evals.py --validate`, the tool unit tests under `tools/tests`, task leakage and its self-test, the overlap self-test, the staleness detector's self-test, link check | every PR | yes |
 | `validate.yml` | `validate` — skill overlap, `--advisory` | every PR | only on containment 1.0 |
 | `validate.yml` | `install` — the installer resolves, lists, and installs from the catalog | every PR | yes |
 | `harbor-smoke.yml` | the oracle arm over every task in `tasks/` | PRs touching tasks or skills | yes |
@@ -339,7 +339,7 @@ Everything else runs offline.
 
 | Script | What it does |
 |---|---|
-| `validate_skills.py` | Level 1: every structural check, the catalog ↔ tree bijection, and `skills.sh.json` against the catalog |
+| `validate_skills.py` | Level 1: every structural check, the catalog ↔ tree bijection, and `skills.sh.json` against the catalog; `--self-test` asserts that a non-string skills.sh schema field is rejected |
 | `run_evals.py` | validates eval files against their schema; scores recorded answers |
 | `compare_harbor_skill.py` | runs and reports the three-arm differential, with cost and time |
 | `check_harbor_job.py` | asserts a harbor run's trial count and reward floor |
