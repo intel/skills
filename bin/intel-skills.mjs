@@ -227,17 +227,23 @@ function verify(name, dir, allProblems = false) {
  * Remove an installed skill from a target root.
  *
  * Deliberately narrow: the name must be in the catalog (so a typo or another hub's skill
- * cannot delete an unrelated folder), the directory must hold a SKILL.md, and it must stay
- * inside the root. It never touches anything but `<root>/<name>`.
+ * cannot delete an unrelated folder) unless `force` is set, for a skill since dropped from
+ * it; the directory must hold a SKILL.md, and it must stay inside the root. It never
+ * touches anything but `<root>/<name>`.
  */
-function uninstall(name, root) {
-  skillDir(name);
+function uninstall(name, root, force = false) {
+  if (!NAME.test(String(name))) throw new Error(`invalid skill name: ${name}`);
+  const inCatalog = fs.existsSync(path.join(SKILLS_DIR, name, "SKILL.md"));
   const dest = path.join(root, name);
   if (!path.resolve(dest).startsWith(`${path.resolve(root)}${path.sep}`)) {
     throw new Error("uninstall path escapes target directory");
   }
   if (!fs.existsSync(path.join(dest, "SKILL.md"))) {
+    if (!inCatalog) skillDir(name);
     throw new Error(`not an installed skill: ${dest}`);
+  }
+  if (!inCatalog && !force) {
+    throw new Error(`skill not found: ${name} is not in the catalog; pass --force to remove ${dest} anyway`);
   }
   fs.rmSync(dest, { recursive: true, force: true });
   console.log(`removed ${name} from ${dest}`);
@@ -279,7 +285,7 @@ function usage(code = 0) {
   intel-skills list [--json] [--imported|--own]
   intel-skills show <skill> [--files|--json]
   intel-skills install <skill>...|--all --target ${Object.keys(INSTALL_TARGETS).join("|")} [--dir <path>] [--force] [--dry-run]
-  intel-skills uninstall <skill> --target ${Object.keys(INSTALL_TARGETS).join("|")} [--dir <path>]
+  intel-skills uninstall <skill> --target ${Object.keys(INSTALL_TARGETS).join("|")} [--dir <path>] [--force]
   intel-skills verify <skill> --path <installed-skill-dir> [--all-problems]
   intel-skills verify <skill> --target ${Object.keys(INSTALL_TARGETS).join("|")} [--dir <path>]
   intel-skills --version
@@ -410,7 +416,7 @@ try {
       }
     }
   } else if (command === "uninstall") {
-    rejectUnknownOptions(args, ["--target", "--dir"], []);
+    rejectUnknownOptions(args, ["--target", "--dir"], ["--force"]);
     const target = argValue(args, "--target");
     const dirOverride = argValue(args, "--dir");
     if (!target && !dirOverride) usage(1);
@@ -418,7 +424,7 @@ try {
     if (names.length === 0) usage(1);
     if (names.length > 1) throw new Error(`uninstall takes one skill name (got extra argument ${names[1]})`);
     const name = names[0];
-    uninstall(name, targetRoot(target, dirOverride));
+    uninstall(name, targetRoot(target, dirOverride), args.includes("--force"));
   } else if (command === "verify") {
     rejectUnknownOptions(args, ["--path", "--target", "--dir"], ["--all", "--all-problems"]);
     const target = argValue(args, "--target");

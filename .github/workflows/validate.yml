@@ -299,3 +299,15 @@ jobs:
             exit 1
           fi
           test -d "${RUNNER_TEMP}/un/xpu-discover"
+          node bin/intel-skills.mjs uninstall my-notes --dir "${RUNNER_TEMP}/un" --force
+          test ! -e "${RUNNER_TEMP}/un/my-notes"
+          mkdir "${RUNNER_TEMP}/un/not-mine"
+          if node bin/intel-skills.mjs uninstall not-mine --dir "${RUNNER_TEMP}/un" --force; then
+            echo "::error::uninstall --force removed a directory with no SKILL.md"
+            exit 1
+          fi
+          test -d "${RUNNER_TEMP}/un/not-mine"
+          if node bin/intel-skills.mjs uninstall ../un --dir "${RUNNER_TEMP}/un" --force; then
+            echo "::error::uninstall --force accepted a path-like name"
+            exit 1
+          fi
