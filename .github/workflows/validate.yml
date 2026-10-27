@@ -46,6 +46,24 @@ jobs:
       - name: Eval schema
         run: python3 tools/run_evals.py --validate
 
+      # Standard library only. Counting before running matters: unittest reports a
+      # directory with no collected tests as a pass, so a rename that stops discovery
+      # would read exactly like a green suite.
+      - name: Tool tests
+        run: |
+          python3 - <<'PY'
+          import sys
+          import unittest
+
+          suite = unittest.defaultTestLoader.discover("tools/tests", top_level_dir="tools/tests")
+          count = suite.countTestCases()
+          if count == 0:
+              sys.exit("no tests collected under tools/tests")
+          print(f"collected {count} tests")
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          sys.exit(0 if result.wasSuccessful() else 1)
+          PY
+
       # First, because a gate is worth what the detector behind it is worth and every way
       # this one can break is silent: a regex that stops matching reports a clean zero for
       # every task, which reads exactly like a repository whose tasks are all sound. So it
@@ -78,6 +96,9 @@ jobs:
       # a skill cannot redden this.
       - name: Overlap detector still detects
         run: python3 tools/lint_skill_overlap.py --self-test
+
+      - name: skills.sh schema field types are checked
+        run: python3 tools/validate_skills.py --self-test
 
       # Advisory: which of two overlapping skills should win is a judgement a reviewer makes
       # with the contributor. One finding blocks anyway - containment 1.0 on a pair with a

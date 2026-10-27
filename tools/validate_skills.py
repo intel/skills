@@ -209,6 +209,23 @@ REWRITE_NOTE = (
 )
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 
+# The keys a skills.yaml entry may carry, and the values intel-hw-class may take, as
+# the header of skills.yaml documents them. parse_catalog keeps any key it is given, so
+# without this a misspelt `intel-hw-clas` or `intel-product` is read, ignored, and
+# reported as nothing: the field the author meant to set is simply absent.
+CATALOG_KEYS = {
+    "name",
+    "maintainer",
+    "status",
+    "license",
+    "intel-products",
+    "intel-hw-class",
+    "intel-hw-validated-on",
+    "intel-source-ledger",
+    *EXTERNAL_KEYS,
+}
+HW_CLASSES = ("cpu", "gpu", "npu", "accelerator")
+
 NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 DESCRIPTION_MAX = 1024
 LINES_WARN = 250
@@ -851,6 +868,19 @@ def check_catalog(
             )
         if not entry.get("maintainer"):
             report.error(f"skills.yaml: {name}: maintainer is required")
+        for key in sorted(set(entry) - CATALOG_KEYS):
+            report.error(
+                f"skills.yaml: {name}: unknown key {key!r}, which nothing reads — "
+                f"known keys are {sorted(CATALOG_KEYS)}"
+            )
+        # An empty value means "does not apply", per the header, so only a value that
+        # is present has to be one of the classes.
+        hw_class = entry.get("intel-hw-class") or ""
+        if hw_class and hw_class not in HW_CLASSES:
+            report.error(
+                f"skills.yaml: {name}: intel-hw-class must be one of {list(HW_CLASSES)}, "
+                f"got {hw_class!r}"
+            )
 
         has_perf = has_files(skill_dir / "perf")
 
@@ -1206,6 +1236,17 @@ def check_bundles(catalog: dict[str, dict[str, str]], report: Report) -> None:
             f"{where}: unknown key {key!r} — the skills.sh schema allows only "
             f"{sorted(BUNDLES_TOP_KEYS)}"
         )
+    # skills.sh types both autocomplete fields as string. A number or a list is
+    # not a URL, and leaving them unchecked made a bad file read as OK.
+    # format: uri is not asserted here.
+    for field in ("$schema", "schema"):
+        if field not in data:
+            continue
+        value = data[field]
+        if not isinstance(value, str):
+            report.error(
+                f"{where}: {field} must be a string, got {type(value).__name__}"
+            )
     not_grouped = data.get("notGrouped", "bottom")
     if not_grouped not in NOT_GROUPED:
         report.error(
@@ -1610,10 +1651,58 @@ def doc_links(docs: bool, check_links: bool, report: Report) -> list[tuple[str, 
     return links
 
 
+def self_test_bundle_schema_types() -> int:
+    """A non-string skills.sh schema field must fail; a string must not.
+
+    The published skills.sh schema types ``$schema`` and ``schema`` as string.
+    This does not assert ``format: uri``.
+    """
+    import tempfile
+
+    global BUNDLES_PATH
+    saved = BUNDLES_PATH
+    failures: list[str] = []
+    try:
+        live = json.loads(saved.read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            good = root / "good.json"
+            good.write_text(json.dumps(live), encoding="utf-8")
+            BUNDLES_PATH = good
+            report = Report()
+            check_bundles({}, report)
+            if any("must be a string" in error for error in report.errors):
+                failures.append("a string $schema was rejected")
+
+            bad_data = dict(live)
+            bad_data["$schema"] = 1
+            bad_data["schema"] = ["not-a-uri"]
+            bad = root / "bad.json"
+            bad.write_text(json.dumps(bad_data), encoding="utf-8")
+            BUNDLES_PATH = bad
+            report = Report()
+            check_bundles({}, report)
+            for field in ("$schema", "schema"):
+                if not any(f"{field} must be a string" in error for error in report.errors):
+                    failures.append(f"non-string {field} was accepted")
+    finally:
+        BUNDLES_PATH = saved
+    if failures:
+        print("FAIL --self-test: " + "; ".join(failures), file=sys.stderr)
+        return 1
+    print("PASS --self-test: non-string skills.sh schema fields are rejected")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--strict", action="store_true", help="treat warnings as failures"
+    )
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help="assert that a non-string skills.sh $schema or schema field fails",
     )
     parser.add_argument(
         "--check-links",
@@ -1630,6 +1719,8 @@ def main() -> int:
         "and evaluation/. Run weekly by link-rot.yml rather than on every PR.",
     )
     args = parser.parse_args()
+    if args.self_test:
+        return self_test_bundle_schema_types()
 
     report = Report()
     skill_dirs = sorted(p for p in SKILLS_DIR.iterdir() if p.is_dir())
