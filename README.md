@@ -104,10 +104,16 @@ for the case where what matters is that the bytes are exactly the ones a reviewe
 
 ```bash
 npx github:intel/skills list                                     # the catalog, and which kind
+npx github:intel/skills list --json                              # the same, whole, for a script
+npx github:intel/skills list --imported                          # only copies of another repository's skills
 npx github:intel/skills install linux-perf --target claude-code  # -> ~/.claude/skills
 npx github:intel/skills install --all --target agents            # -> ~/.agents/skills
 npx github:intel/skills install xpu-port --dir .agents/skills    # into a project, to commit
+npx github:intel/skills install linux-perf xpu-port --target agents  # several named skills at once
 npx github:intel/skills verify linux-perf --path ~/.claude/skills/linux-perf
+npx github:intel/skills verify linux-perf --target claude-code   # same check, by target
+npx github:intel/skills verify --all --path ~/.agents/skills     # every catalog skill, after install --all
+npx github:intel/skills show linux-perf --json                  # name, description, source and files, for a script
 ```
 
 Node 20 or newer, no dependencies, nothing from npm, and no network call after the

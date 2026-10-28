@@ -167,6 +167,33 @@ jobs:
       - name: Catalog is listable
         run: node bin/intel-skills.mjs list
 
+      - name: Catalog lists as JSON
+        run: |
+          set -euo pipefail
+          node bin/intel-skills.mjs list --json > "${RUNNER_TEMP}/catalog.json"
+          test "$(node -p "JSON.parse(require('fs').readFileSync(process.argv[1])).length" "${RUNNER_TEMP}/catalog.json")" = \
+            "$(node bin/intel-skills.mjs list | wc -l | tr -d ' ')"
+
+      # `show --files` must name exactly what install writes: SKILL.md in, evals/ out.
+      - name: show --files matches what install writes
+        run: |
+          set -euo pipefail
+          node bin/intel-skills.mjs install linux-perf --dir "${RUNNER_TEMP}/showfiles"
+          node bin/intel-skills.mjs show linux-perf --files > "${RUNNER_TEMP}/shown.txt"
+          (cd "${RUNNER_TEMP}/showfiles/linux-perf" && find . -type f | sed 's|^\./||' | LC_ALL=C sort) |
+            diff - "${RUNNER_TEMP}/shown.txt"
+
+      - name: Catalog list filters partition the catalog
+        run: |
+          set -euo pipefail
+          all=$(node bin/intel-skills.mjs list | wc -l)
+          imported=$(node bin/intel-skills.mjs list --imported | wc -l)
+          own=$(node bin/intel-skills.mjs list --own | wc -l)
+          test "$((imported + own))" -eq "${all}"
+          node bin/intel-skills.mjs list --imported | cut -f2 | grep -x imported > /dev/null
+          if node bin/intel-skills.mjs list --imported --own; then exit 1; fi
+          if node bin/intel-skills.mjs list --bogus; then exit 1; fi
+
       # An imported skill, end to end: installed, then verified offline from disk. An
       # import is where the file list is longest and where a copy that dropped
       # something would be least obvious, so it is the single-skill case worth pinning.
@@ -175,6 +202,8 @@ jobs:
           set -euo pipefail
           node bin/intel-skills.mjs install linux-perf --dir "${RUNNER_TEMP}/skills"
           node bin/intel-skills.mjs verify linux-perf --path "${RUNNER_TEMP}/skills/linux-perf"
+          # `--target` resolves the same directory `install` wrote, here through --dir.
+          node bin/intel-skills.mjs verify linux-perf --dir "${RUNNER_TEMP}/skills"
           test -s "${RUNNER_TEMP}/skills/linux-perf/SKILL.md"
           test -s "${RUNNER_TEMP}/skills/linux-perf/.source.json"
 
@@ -189,6 +218,41 @@ jobs:
             while read -r name; do
               node bin/intel-skills.mjs verify "${name}" --path "${RUNNER_TEMP}/all/${name}"
             done
+          # The same check in one call, and it must fail when one skill is altered.
+          node bin/intel-skills.mjs verify --all --path "${RUNNER_TEMP}/all"
+          echo "altered" >> "${RUNNER_TEMP}/all/linux-perf/SKILL.md"
+          if node bin/intel-skills.mjs verify --all --path "${RUNNER_TEMP}/all"; then
+            echo "::error::verify --all accepted an installed skill that differs from the catalog"
+            exit 1
+          fi
+
+      # `--dry-run` promises nothing is written, so a regression that ignores the flag
+      # would install silently. Assert the target directory is still absent.
+      - name: Install --dry-run writes nothing
+        run: |
+          set -euo pipefail
+          node bin/intel-skills.mjs install linux-perf --dir "${RUNNER_TEMP}/dry" --dry-run
+          test ! -e "${RUNNER_TEMP}/dry"
+          node bin/intel-skills.mjs install --all --dir "${RUNNER_TEMP}/dryall" --dry-run
+          test ! -e "${RUNNER_TEMP}/dryall"
+
+      # Several names in one call: every one is written, and a bad name fails the run
+      # without stopping the others.
+      - name: Install several named skills
+        run: |
+          set -euo pipefail
+          node bin/intel-skills.mjs install linux-perf dpnp-quickstart --dir "${RUNNER_TEMP}/many"
+          test -s "${RUNNER_TEMP}/many/linux-perf/SKILL.md"
+          test -s "${RUNNER_TEMP}/many/dpnp-quickstart/SKILL.md"
+          if node bin/intel-skills.mjs install no-such-skill linux-perf --dir "${RUNNER_TEMP}/partial"; then
+            echo "::error::install exited 0 although one named skill does not exist"
+            exit 1
+          fi
+          test -s "${RUNNER_TEMP}/partial/linux-perf/SKILL.md"
+          # A repeated name is one install, so it must not trip "destination already exists".
+          node bin/intel-skills.mjs install linux-perf linux-perf --dir "${RUNNER_TEMP}/twice" |
+            grep -q '^installed linux-perf '
+          test "$(find "${RUNNER_TEMP}/twice" -maxdepth 1 -mindepth 1 | wc -l)" -eq 1
 
       # `verify` noticing is the property the rest rests on, so it is asserted rather
       # than assumed: an installed skill edited after the fact must fail. A regression
@@ -205,5 +269,66 @@ jobs:
           touch "${RUNNER_TEMP}/altered/linux-perf/references/extra.md"
           if node bin/intel-skills.mjs verify linux-perf --path "${RUNNER_TEMP}/altered/linux-perf"; then
             echo "::error::verify accepted a file no skill in the catalog ships"
+            exit 1
+          fi
+
+      # Argument handling the steps above never reach, such as `show` with no skill name or `verify --path` on a file.
+      # Stdlib unittest, so nothing is installed; the tests skip themselves without node.
+      - name: CLI argument tests
+        run: python3 -m unittest discover -s tools/tests -p 'test_cli_*.py'
+
+      # The inverse of install: removes exactly the named skill, and refuses a directory
+      # that is not an installed skill or a name that would leave the target root.
+      - name: Uninstall removes only an installed skill
+        run: |
+          set -euo pipefail
+          node bin/intel-skills.mjs install linux-perf --dir "${RUNNER_TEMP}/un"
+          mkdir "${RUNNER_TEMP}/un/not-a-skill"
+          node bin/intel-skills.mjs uninstall linux-perf --dir "${RUNNER_TEMP}/un"
+          test ! -e "${RUNNER_TEMP}/un/linux-perf"
+          if node bin/intel-skills.mjs uninstall not-a-skill --dir "${RUNNER_TEMP}/un"; then
+            echo "::error::uninstall removed a directory that is not an installed skill"
+            exit 1
+          fi
+          test -d "${RUNNER_TEMP}/un/not-a-skill"
+          if node bin/intel-skills.mjs uninstall ../un --dir "${RUNNER_TEMP}/un"; then
+            echo "::error::uninstall accepted a path-like name"
+            exit 1
+          fi
+          node bin/intel-skills.mjs install linux-perf dpnp-quickstart --dir "${RUNNER_TEMP}/un"
+          if node bin/intel-skills.mjs uninstall linux-perf --dir "${RUNNER_TEMP}/un" --dry-run; then
+            echo "::error::uninstall accepted an option it does not take"
+            exit 1
+          fi
+          test -d "${RUNNER_TEMP}/un/linux-perf"
+          if node bin/intel-skills.mjs uninstall linux-perf dpnp-quickstart --dir "${RUNNER_TEMP}/un"; then
+            echo "::error::uninstall accepted a second skill name"
+            exit 1
+          fi
+          test -d "${RUNNER_TEMP}/un/linux-perf"
+          test -d "${RUNNER_TEMP}/un/dpnp-quickstart"
+          mkdir -p "${RUNNER_TEMP}/un/my-notes"
+          echo x > "${RUNNER_TEMP}/un/my-notes/SKILL.md"
+          if node bin/intel-skills.mjs uninstall my-notes --dir "${RUNNER_TEMP}/un"; then
+            echo "::error::uninstall removed a skill that is not in the catalog"
+            exit 1
+          fi
+          test -f "${RUNNER_TEMP}/un/my-notes/SKILL.md"
+          mkdir "${RUNNER_TEMP}/un/xpu-discover"
+          if node bin/intel-skills.mjs uninstall xpu-discover --dir "${RUNNER_TEMP}/un"; then
+            echo "::error::uninstall removed a catalog-named directory with no SKILL.md"
+            exit 1
+          fi
+          test -d "${RUNNER_TEMP}/un/xpu-discover"
+          node bin/intel-skills.mjs uninstall my-notes --dir "${RUNNER_TEMP}/un" --force
+          test ! -e "${RUNNER_TEMP}/un/my-notes"
+          mkdir "${RUNNER_TEMP}/un/not-mine"
+          if node bin/intel-skills.mjs uninstall not-mine --dir "${RUNNER_TEMP}/un" --force; then
+            echo "::error::uninstall --force removed a directory with no SKILL.md"
+            exit 1
+          fi
+          test -d "${RUNNER_TEMP}/un/not-mine"
+          if node bin/intel-skills.mjs uninstall ../un --dir "${RUNNER_TEMP}/un" --force; then
+            echo "::error::uninstall --force accepted a path-like name"
             exit 1
           fi
