@@ -230,7 +230,7 @@
 - name: model-config-recommend
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "e7d07772c32825ce749c1e3459b9cd80bd1d4da2"
+  external-commit: "6e7bce819e2e44a4aac692b0a49253f39c0f6957"
   external-path: "plugins/intel-gpu-ai-skills/skills/model-config-recommend"
   external-license: "Apache-2.0"
   intel-products: "Intel GPU"
