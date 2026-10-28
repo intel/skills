@@ -301,7 +301,7 @@
 - name: vllm-xpu-profile
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
+  external-commit: "6e7bce819e2e44a4aac692b0a49253f39c0f6957"
   external-path: "plugins/intel-gpu-ai-skills/skills/vllm-xpu-profile"
   external-license: "Apache-2.0"
   # Empty by construction, see the note above: upstream's description names the
