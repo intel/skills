@@ -1,4 +1,4 @@
-# Intel Agent Skills
+# Agent Skills
 
 **Official Intel-maintained expert workflows for AI coding agents.**
 
