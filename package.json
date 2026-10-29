@@ -2,7 +2,7 @@
   "name": "intel-skills",
   "version": "0.1.0",
   "private": true,
-  "description": "Intel agent skills catalog: install a catalogued skill into Claude Code, Codex, or any .agents-compatible harness",
+  "description": "Agent skills catalog: install a catalogued skill into Claude Code, Codex, or any .agents-compatible harness",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
