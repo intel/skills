@@ -1,6 +1,6 @@
 {
   "repo": "https://github.com/intel/gpu-ai-skills",
   "path": "plugins/intel-gpu-ai-skills/skills/xpu-container-run",
-  "commit": "31534d956d9cb5f548fb8f36c767f1494a559fbb",
+  "commit": "d0f47fcf262560b06fea1684c70d80c877e04854",
   "license": "Apache-2.0"
 }
