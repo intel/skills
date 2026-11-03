@@ -45,6 +45,19 @@
       ]
     },
     {
+      "title": "Geti computer vision models",
+      "description": "Build computer vision models with Geti and the getitune library: discover and prepare datasets, train, run inference, export to OpenVINO, optimize, and drive the Geti application pipeline.",
+      "skills": [
+        "geti-using-the-pipeline",
+        "getitune-discovering-models",
+        "getitune-preparing-datasets",
+        "getitune-training-a-model",
+        "getitune-running-inference",
+        "getitune-exporting-a-model",
+        "getitune-optimizing-a-model"
+      ]
+    },
+    {
       "title": "Linux CPU performance & benchmarking",
       "description": "Profile and optimize on Linux with perf, apply x86/C++ performance patterns, and run or tune Phoronix Test Suite benchmarks.",
       "skills": [

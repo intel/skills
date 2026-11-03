@@ -28,6 +28,14 @@ under:
              xpu-discover, xpu-model-type-detect, xpu-port, xpu-profile-unitrace,
              xpu-runtime-preflight, xpu-system-setup
 
+  open-edge-platform/geti — https://github.com/open-edge-platform/geti
+    Commit:  deae360f46f81b3722bafe4fcdb22f9d84ba5483
+    Licence: Apache-2.0 (the same terms as this repository; see LICENSE)
+    Skills:  geti-using-the-pipeline, getitune-discovering-models,
+             getitune-exporting-a-model, getitune-optimizing-a-model,
+             getitune-preparing-datasets, getitune-running-inference,
+             getitune-training-a-model
+
   intel/intel-performance-skills — https://github.com/intel/intel-performance-skills
     Commit:  e9d0b6410fb1ad7a50fb81e0868fd23ae886882c
     Licence: MIT
