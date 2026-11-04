@@ -29,7 +29,7 @@ under:
              xpu-runtime-preflight, xpu-system-setup
 
   open-edge-platform/geti — https://github.com/open-edge-platform/geti
-    Commit:  deae360f46f81b3722bafe4fcdb22f9d84ba5483
+    Commit:  0ccbfe93b2e4a8fe230716661efde8446e922f3a
     Licence: Apache-2.0 (the same terms as this repository; see LICENSE)
     Skills:  geti-using-the-pipeline, getitune-discovering-models,
              getitune-exporting-a-model, getitune-optimizing-a-model,

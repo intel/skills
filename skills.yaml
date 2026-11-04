@@ -424,7 +424,7 @@
 - name: geti-using-the-pipeline
   maintainer: "yvolokitin"
   external-repo: "https://github.com/open-edge-platform/geti"
-  external-commit: "deae360f46f81b3722bafe4fcdb22f9d84ba5483"
+  external-commit: "0ccbfe93b2e4a8fe230716661efde8446e922f3a"
   external-path: "skills/application/geti-using-the-pipeline"
   external-license: "Apache-2.0"
   intel-products: "Geti"
@@ -432,7 +432,7 @@
 - name: getitune-discovering-models
   maintainer: "yvolokitin"
   external-repo: "https://github.com/open-edge-platform/geti"
-  external-commit: "deae360f46f81b3722bafe4fcdb22f9d84ba5483"
+  external-commit: "0ccbfe93b2e4a8fe230716661efde8446e922f3a"
   external-path: "skills/getitune/getitune-discovering-models"
   external-license: "Apache-2.0"
   intel-products: "Geti, getitune"
@@ -440,7 +440,7 @@
 - name: getitune-preparing-datasets
   maintainer: "yvolokitin"
   external-repo: "https://github.com/open-edge-platform/geti"
-  external-commit: "deae360f46f81b3722bafe4fcdb22f9d84ba5483"
+  external-commit: "0ccbfe93b2e4a8fe230716661efde8446e922f3a"
   external-path: "skills/getitune/getitune-preparing-datasets"
   external-license: "Apache-2.0"
   intel-products: "Geti, getitune"
@@ -448,7 +448,7 @@
 - name: getitune-training-a-model
   maintainer: "yvolokitin"
   external-repo: "https://github.com/open-edge-platform/geti"
-  external-commit: "deae360f46f81b3722bafe4fcdb22f9d84ba5483"
+  external-commit: "0ccbfe93b2e4a8fe230716661efde8446e922f3a"
   external-path: "skills/getitune/getitune-training-a-model"
   external-license: "Apache-2.0"
   intel-products: "Geti, getitune"
@@ -456,7 +456,7 @@
 - name: getitune-running-inference
   maintainer: "yvolokitin"
   external-repo: "https://github.com/open-edge-platform/geti"
-  external-commit: "deae360f46f81b3722bafe4fcdb22f9d84ba5483"
+  external-commit: "0ccbfe93b2e4a8fe230716661efde8446e922f3a"
   external-path: "skills/getitune/getitune-running-inference"
   external-license: "Apache-2.0"
   intel-products: "Geti, getitune"
@@ -464,7 +464,7 @@
 - name: getitune-exporting-a-model
   maintainer: "yvolokitin"
   external-repo: "https://github.com/open-edge-platform/geti"
-  external-commit: "deae360f46f81b3722bafe4fcdb22f9d84ba5483"
+  external-commit: "0ccbfe93b2e4a8fe230716661efde8446e922f3a"
   external-path: "skills/getitune/getitune-exporting-a-model"
   external-license: "Apache-2.0"
   intel-products: "Geti, getitune, OpenVINO"
@@ -472,7 +472,7 @@
 - name: getitune-optimizing-a-model
   maintainer: "yvolokitin"
   external-repo: "https://github.com/open-edge-platform/geti"
-  external-commit: "deae360f46f81b3722bafe4fcdb22f9d84ba5483"
+  external-commit: "0ccbfe93b2e4a8fe230716661efde8446e922f3a"
   external-path: "skills/getitune/getitune-optimizing-a-model"
   external-license: "Apache-2.0"
   intel-products: "Geti, getitune, OpenVINO"
