@@ -4,8 +4,9 @@
   "groupings": [
     {
       "title": "Deploy models on Intel GPUs",
-      "description": "A collection of Agent Skills for setting up, running, benchmarking, and profiling arbitrary Hugging Face safetensors and GGUF models on Intel GPUs (Arc, Arc Pro, Battlemage). Covers the PyTorch + Transformers, vLLM-XPU, SGLang-XPU, and llama.cpp-SYCL stacks, plus CUDA to XPU migration.",
+      "description": "A collection of Agent Skills for setting up, running, benchmarking, and profiling arbitrary Hugging Face safetensors and GGUF models on Intel GPUs, discrete and integrated. Covers the PyTorch + Transformers, vLLM-XPU, SGLang-XPU, llama.cpp-SYCL and OpenVINO Model Server stacks, plus CUDA to XPU migration.",
       "skills": [
+        "ai-inference-deploy",
         "xpu-system-setup",
         "xpu-discover",
         "xpu-runtime-preflight",
@@ -18,6 +19,7 @@
         "vllm-xpu-run",
         "sglang-xpu-run",
         "llamacpp-xpu-run",
+        "openvino-gpu-run",
         "torch-xpu-bench",
         "vllm-xpu-bench",
         "sglang-xpu-bench",
