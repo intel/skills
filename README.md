@@ -1,4 +1,4 @@
-# Intel Agent Skills — catalog page (site source)
+# Agent Skills — catalog page (site source)
 
 This branch holds **only** the Astro project that builds the public catalog UI.
 The skill registry (`skills.yaml`, `skills/*`) lives on **`main`**.
