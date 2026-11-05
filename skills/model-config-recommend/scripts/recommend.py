@@ -25,11 +25,21 @@ from pathlib import Path
 
 from common import (
     ModelDims,
+    active_params,
     count_params,
+    per_rank_weight_bytes,
     fetch_config,
     is_local_model,
+    kv_bytes,
     kv_bytes_per_token,
+    kv_shards,
+    max_in_flight_tokens,
     parse_model_dims,
+    state_reserved_bytes,
+    tp_problems,
+    usable_bytes,
+    vllm_block_tokens,
+    vllm_reservation,
 )
 from roofline import factors_from_dict, peak_ops_s, phase_roofline
 
@@ -190,6 +200,7 @@ class FitResult:
     fits: bool
     weights_gb: float
     kv_at_target_gb: float
+    state_gb: float          # recurrent (state-space) pool, 0 for attention-only
     activations_gb: float
     framework_gb: float
     total_gb: float
@@ -213,32 +224,63 @@ class Candidate:
     caveats: list[str]
 
 
-FRAMEWORK_OVERHEAD_GB = {"vllm-xpu": 2.0}
-
-
 def evaluate_fit(d: ModelDims, params: int, quant: str, kv_dtype: str,
                  ctx: int, concurrency: int, tp: int,
                  device_vram_gb: float, framework: str,
                  gpu_memory_utilization: float = 1.0) -> FitResult:
     bpp = HW["quants"][quant]["bytes_per_param"]
-    weights = (params * bpp) / tp
-    kv_per_tok = kv_bytes_per_token(d, _kv_bytes(kv_dtype)) / tp
-    kv = kv_per_tok * ctx * concurrency
-    # Activation buffer: bounded estimate (residual + scratch).
-    act = 2 * concurrency * ctx * d.hidden * 2 + 512 * 1024 ** 2
-    fw = FRAMEWORK_OVERHEAD_GB[framework] * GB
-    total = weights + kv + act + fw
-    device_b = device_vram_gb * GB * gpu_memory_utilization
+    # Not simply params/tp: an encoder tower whose head count does not divide
+    # TP is replicated whole on every rank, so dividing it undercharges.
+    weights = per_rank_weight_bytes(d, params, bpp, tp)
+    in_flight = max_in_flight_tokens(device_vram_gb)
+    kv_b = _kv_bytes(kv_dtype)
+    # A hybrid's attention block grows to hold a state page, and the state
+    # is reserved as padded pages -- two per layer under default prefix
+    # caching -- not one bare copy.
+    block = vllm_block_tokens(d, tp, kv_b) if framework.startswith("vllm") else 0
+    state_per_request = state_reserved_bytes(d, tp, framework, kv_b)
+
+    def cache_for(ctx_: int, conc_: int) -> tuple[float, float]:
+        kv_ = kv_bytes(d, ctx_, conc_, kv_b, framework,
+                       in_flight, block) / kv_shards(d, tp)
+        state_ = state_per_request * conc_
+        return kv_, state_
+
+    kv, state = cache_for(ctx, concurrency)
+    # vLLM reserves what its startup profiling pass measured -- a runtime
+    # floor, any encoder buffers it keeps, and the pass's transient peak --
+    # whatever the context and concurrency served, out of
+    # gpu_memory_utilization x the total the driver reports.
+    floor, held, act = vllm_reservation(d, bpp, device_vram_gb, None, ctx)
+    fw = floor + held
+    total = weights + kv + state + act + fw
+    device_b = usable_bytes(device_vram_gb, gpu_memory_utilization)
     headroom = device_b - total
 
-    # Capacity: how many requests fit at this context, OR how much context at this concurrency.
+    # Capacity: how many requests fit at this context, OR how much context at
+    # this concurrency. Both are searched rather than divided out: a windowed
+    # layer's cache stops growing past the window and a recurrent state never
+    # grows with context at all, so neither curve is a straight line through
+    # the origin.
     free = device_b - weights - act - fw
-    max_conc = max(0, int(free / max(kv_per_tok * ctx, 1)))
-    max_ctx = max(0, int(free / max(kv_per_tok * max(concurrency, 1), 1)))
+    max_conc = _largest_fitting(
+        lambda n: sum(cache_for(ctx, n)) <= free, 1 << 20)
+
+    def reserve_delta(ctx_: int) -> float:
+        # An InternVL-style tower is profiled with a video whose frame count
+        # follows the context, so the reservation moves with it.
+        if d.vision_naming != "intern":
+            return 0.0
+        return sum(vllm_reservation(d, bpp, device_vram_gb, None, ctx_)[1:]) - (held + act)
+
+    max_ctx = _largest_fitting(
+        lambda n: sum(cache_for(n, max(concurrency, 1))) + reserve_delta(n) <= free,
+        1 << 24)
     return FitResult(
         fits=total <= device_b,
         weights_gb=weights / GB,
         kv_at_target_gb=kv / GB,
+        state_gb=state / GB,
         activations_gb=act / GB,
         framework_gb=fw / GB,
         total_gb=total / GB,
@@ -246,6 +288,22 @@ def evaluate_fit(d: ModelDims, params: int, quant: str, kv_dtype: str,
         max_concurrency=max_conc,
         max_context=max_ctx,
     )
+
+
+def _largest_fitting(fits: callable, upper: int) -> int:
+    """Largest n in [0, upper] with fits(n) true, assuming fits is monotone."""
+    if not fits(1):
+        return 0
+    if fits(upper):
+        return upper
+    low, high = 1, upper
+    while high - low > 1:
+        mid = (low + high) // 2
+        if fits(mid):
+            low = mid
+        else:
+            high = mid
+    return low
 
 
 def _kv_bytes(kv_dtype: str) -> float:
@@ -314,6 +372,10 @@ def rank_candidates(d: ModelDims, params: int, ctx: int, concurrency: int,
         kv_dtype = "fp8" if quant != "bf16" else "bfloat16"
 
         for tp in _tp_options(num_devices):
+            # vLLM refuses a TP that splits a head, so no memory figure for
+            # it describes a launch that can happen.
+            if tp_problems(d, tp):
+                continue
             dp = max(1, num_devices // tp)
             fit = evaluate_fit(d, params, quant, kv_dtype, ctx, concurrency,
                                tp, device["vram_gb"], framework,
@@ -322,9 +384,11 @@ def rank_candidates(d: ModelDims, params: int, ctx: int, concurrency: int,
                 continue
 
             qmeta = HW["quants"][quant]
-            params_per_rank = params / tp
+            # The roofline wants what a token reads, not what sits in memory:
+            # on an MoE only the active experts, and never the vision tower.
+            params_per_rank = active_params(d) / tp
             weights_per_rank = params_per_rank * qmeta["bytes_per_param"]
-            kv_per_tok = kv_bytes_per_token(d, _kv_bytes(kv_dtype)) / tp
+            kv_per_tok = kv_bytes_per_token(d, _kv_bytes(kv_dtype)) / kv_shards(d, tp)
             roof_kwargs = {
                 "params": params_per_rank,
                 "weight_bytes": weights_per_rank,
@@ -386,7 +450,8 @@ def emit_launch_line(model_id: str, quant: str, kv_dtype: str, tp: int,
                      ctx: int, available_variants: dict, cfg: dict,
                      dp: int = 1, gpu_memory_utilization: float = 0.85,
                      trust_remote_code: bool = False,
-                     revision: str | None = None) -> str:
+                     revision: str | None = None,
+                     enforce_eager: bool = False) -> str:
     """Emit a copy-pasteable Docker launch for the image's serve entrypoint.
 
     ``trust_remote_code`` is the caller's explicit opt-in. It is deliberately
@@ -496,7 +561,11 @@ def emit_launch_line(model_id: str, quant: str, kv_dtype: str, tp: int,
 
     flags = " \\\n        ".join(filter(None, [
         "--dtype bfloat16" if quant in ("bf16", "fp16") else "",
-        "--enforce-eager",
+        # Graphs stay on unless the caller opts out. vLLM-XPU v0.31.0+ captures
+        # XPU graphs by default; --enforce-eager disables that and costs roughly
+        # 2x decode (measured TPOT 64 ms vs 36 ms, 4x Arc Pro B70 at
+        # concurrency 8) while leaving TTFT unchanged.
+        "--enforce-eager" if enforce_eager else "",
         "--block-size=64",
         trc_flag,
         rev_flag,
@@ -564,21 +633,54 @@ def quant_label(quant: str) -> str:
     return f"--quantization {quant}"
 
 
+def describe_layout(d: ModelDims) -> str:
+    """One line on a non-uniform layer layout, empty for plain full attention.
+
+    Worth printing because it changes which lever helps: a recurrent state
+    scales with concurrency and not context, and a windowed layer's cache
+    stops growing once the context passes the window.
+    """
+    if d.attn_on_recurrent_layers:
+        return (f"{d.num_layers} total: attention and an SSM in every layer -- "
+                f"each layer holds both a KV cache and a recurrent state")
+    parts = []
+    if d.num_recurrent_layers:
+        parts.append(f"{d.num_recurrent_layers} recurrent")
+    if d.num_sliding_attn_layers:
+        parts.append(f"{d.num_sliding_attn_layers} windowed "
+                     f"(window {d.sliding_window} tok)")
+    if not parts:
+        return ""
+    parts.insert(0, f"{d.num_full_attn_layers} full attention")
+    detail = ", ".join(parts)
+    note = ("recurrent state scales with concurrency, not context"
+            if d.num_recurrent_layers else
+            "windowed layers hold a bounded cache")
+    return f"{d.num_layers} total: {detail} -- {note}"
+
+
 def render(model_id: str, d: ModelDims, params: int, device: dict, framework: str,
            ctx: int, concurrency: int, candidates: list[Candidate],
            available_variants: dict, cfg: dict,
            gpu_memory_utilization: float,
            trust_remote_code: bool = False,
-           revision: str | None = None) -> str:
+           revision: str | None = None,
+           enforce_eager: bool = False) -> str:
     out = []
-    out.append(f"Model:     {model_id}  ({params/1e9:.2f} B params, {d.family})")
+    active = active_params(d)
+    per_token = (f", {active/1e9:.2f} B read per token" if active < 0.9 * params
+                 else "")
+    out.append(f"Model:     {model_id}  ({params/1e9:.2f} B params{per_token}, {d.family})")
     out.append(f"Device:    {device['name']}  ({device['vram_gb']} GB GDDR6, "
                f"{device['memory_bandwidth_gbs']} GB/s)")
-    out.append(f"Memory:    {device['vram_gb'] * gpu_memory_utilization:.1f} GB usable "
+    out.append(f"Memory:    {usable_bytes(device['vram_gb'], gpu_memory_utilization) / GB:.1f} GB usable "
                f"per GPU (gpu_memory_utilization={gpu_memory_utilization:.2f})")
     out.append(f"Runtime:   {framework} (vLLM-XPU launch/verification)")
     out.append(f"Devices:   {device.get('num_devices', 1)} x {device['name']}")
     out.append(f"Targets:   concurrency={concurrency}, context={ctx} tok")
+    layout = describe_layout(d)
+    if layout:
+        out.append(f"Layers:    {layout}")
     out.append("")
     quant_candidates = {k: v for k, v in available_variants.items()
                         if k not in ("bf16", "fp8")}
@@ -600,12 +702,14 @@ def render(model_id: str, d: ModelDims, params: int, device: dict, framework: st
         layout = f"dp={c.dp}, tp={c.tp}"
         out.append(f"--- Candidate {i}: {quant_label(c.quant)}, --kv-cache-dtype "
                    f"{c.kv_dtype}, {layout} ---")
+        state_term = (f"{f.state_gb:.1f} GB state + " if f.state_gb else "")
         out.append(f"  Fit:       {f.weights_gb:.1f} GB weights + "
                    f"{f.kv_at_target_gb:.1f} GB KV + "
+                   f"{state_term}"
                    f"{f.activations_gb:.1f} GB act + "
                    f"{f.framework_gb:.1f} GB framework "
                    f"= {f.total_gb:.1f} GB / "
-                   f"{device['vram_gb'] * gpu_memory_utilization:.1f} GB usable per GPU "
+                   f"{usable_bytes(device['vram_gb'], gpu_memory_utilization) / GB:.1f} GB usable per GPU "
                    f"(headroom {f.headroom_gb:.1f} GB)")
         out.append(f"  Capacity:  up to {f.max_concurrency} concurrent at "
                    f"{ctx} tok per replica; {f.max_concurrency * c.dp} "
@@ -632,7 +736,8 @@ def render(model_id: str, d: ModelDims, params: int, device: dict, framework: st
     out.append(emit_launch_line(model_id, top.quant, top.kv_dtype, top.tp,
                                 ctx, available_variants, cfg, top.dp,
                                 gpu_memory_utilization,
-                                trust_remote_code, revision))
+                                trust_remote_code, revision,
+                                enforce_eager))
     out.append("")
     out.append("=== Verify before trusting ===")
     out.append("These are roofline-bounded predictions. Run vllm-xpu-bench against the launched")
@@ -670,6 +775,13 @@ def main(argv: list[str] | None = None) -> int:
                    choices=("recommend",))
     p.add_argument("--no-hub-search", action="store_true",
                    help="Skip live HF Hub query for quant variants (offline mode).")
+    p.add_argument("--enforce-eager", action="store_true",
+                   help="Add --enforce-eager to the emitted launch line, "
+                        "disabling XPU graph capture. Only for images before "
+                        "vLLM v0.31.0, where capture was experimental. From "
+                        "v0.31.0 graphs capture by default and disabling them "
+                        "costs roughly 2x decode, so the flag is omitted "
+                        "unless you pass this.")
     p.add_argument("--trust-remote-code", action="store_true",
                    help="Security opt-in. Add --trust-remote-code to the emitted "
                         "launch line for models whose config.json declares "
@@ -740,10 +852,29 @@ def main(argv: list[str] | None = None) -> int:
                 return p.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
                 return ""
-        candidates = [p for p in cache.glob(f"{args.device}__*.json")
-                      if digest_part in p.name
-                      or args.use_calibration in _cache_text(p)]
+        # Only anchor to factors measured in the same mode as the emitted
+        # launch line. Files without the key predate graphs-on calibration and
+        # were always measured eager. An unparseable file is kept so the
+        # corrupt-cache error below still reports it.
+        def _cal_is_eager(p: _P) -> bool:
+            try:
+                return bool(json.loads(_cache_text(p)).get("enforce_eager", True))
+            except (json.JSONDecodeError, AttributeError):
+                return args.enforce_eager
+        matches = [p for p in cache.glob(f"{args.device}__*.json")
+                   if digest_part in p.name
+                   or args.use_calibration in _cache_text(p)]
+        candidates = [p for p in matches
+                      if _cal_is_eager(p) == args.enforce_eager]
         if not candidates:
+            if matches:
+                mode = "eager" if args.enforce_eager else "graphs-on"
+                other = "graphs-on" if args.enforce_eager else "eager"
+                sys.exit(f"Only {other} calibration cached for "
+                         f"({args.device}, {args.use_calibration}), but this "
+                         f"launch line is {mode}. Re-run scripts/calibrate.py"
+                         f"{' --enforce-eager' if args.enforce_eager else ''} "
+                         f"to measure the mode you will serve.")
             sys.exit(f"No calibration cached at {cache} for "
                      f"({args.device}, {args.use_calibration}). "
                      f"Run scripts/calibrate.py first.")
@@ -786,7 +917,8 @@ def main(argv: list[str] | None = None) -> int:
     print(render(args.model, d, params, device, args.runtime,
                  args.ctx, args.concurrency, candidates, available, cfg,
                  args.gpu_memory_utilization,
-                 args.trust_remote_code, args.revision))
+                 args.trust_remote_code, args.revision,
+                 args.enforce_eager))
     return 0
 
 
