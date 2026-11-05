@@ -84,7 +84,7 @@ jobs:
   # resulting JSON array may be empty, in which case scan-skill is skipped.
   discover-skills:
     name: Discover skills
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'intel' && github.event_name == 'pull_request' && 'dokimi-ec2' || 'ubuntu-latest' }}
     timeout-minutes: 10
     outputs:
       skills: ${{ steps.discover.outputs.skills }}
@@ -153,7 +153,7 @@ jobs:
     # An empty matrix is not skipped but failed, so a push that changes no skill would
     # turn the summary red. Same guard as `evaluate` in skillevaluator.yml.
     if: needs.discover-skills.outputs.skills != '[]'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'intel' && github.event_name == 'pull_request' && 'dokimi-ec2' || 'ubuntu-latest' }}
     timeout-minutes: 15
     strategy:
       # Don't cancel the other skills when one fails; we want to see every
@@ -259,7 +259,7 @@ jobs:
     name: Upload to code scanning
     needs: [discover-skills, scan-skill]
     if: always() && needs.discover-skills.outputs.sarif == 'true' && needs.discover-skills.outputs.skills != '[]'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'intel' && github.event_name == 'pull_request' && 'dokimi-ec2' || 'ubuntu-latest' }}
     timeout-minutes: 10
     permissions:
       contents: read
@@ -315,7 +315,7 @@ jobs:
     name: SkillSpector security scan
     needs: [discover-skills, scan-skill, upload-sarif]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'intel' && github.event_name == 'pull_request' && 'dokimi-ec2' || 'ubuntu-latest' }}
     timeout-minutes: 5
     steps:
       - name: Summarize scan results

@@ -98,7 +98,7 @@ env:
 jobs:
   discover-skills:
     name: Discover skills
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'intel' && github.event_name == 'pull_request' && 'dokimi-ec2' || 'ubuntu-latest' }}
     timeout-minutes: 10
     outputs:
       skills: ${{ steps.discover.outputs.skills }}
@@ -161,7 +161,7 @@ jobs:
     name: Evaluate skills
     needs: discover-skills
     if: needs.discover-skills.outputs.skills != '[]'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'intel' && github.event_name == 'pull_request' && 'dokimi-ec2' || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
       - name: Check out repository
@@ -297,7 +297,7 @@ jobs:
     name: SkillEvaluator validation
     needs: [discover-skills, evaluate]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'intel' && github.event_name == 'pull_request' && 'dokimi-ec2' || 'ubuntu-latest' }}
     timeout-minutes: 5
     steps:
       - name: Summarize

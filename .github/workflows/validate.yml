@@ -25,7 +25,7 @@ concurrency:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'intel' && github.event_name == 'pull_request' && 'dokimi-ec2' || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -143,7 +143,7 @@ jobs:
   # this asks whether `npx github:intel/skills install` puts the right bytes on a
   # machine and notices when what is there is not them.
   install:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'intel' && github.event_name == 'pull_request' && 'dokimi-ec2' || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
