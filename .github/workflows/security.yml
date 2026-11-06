@@ -42,7 +42,7 @@ concurrency:
 jobs:
   # Workflow syntax, expressions, and action references.
   actionlint:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'intel' && github.event_name == 'pull_request' && 'dokimi-ec2' || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -57,7 +57,7 @@ jobs:
   # Workflow security audit: unpinned actions, injectable expressions, excessive
   # permissions, credential and artifact leaks.
   zizmor:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'intel' && github.event_name == 'pull_request' && 'dokimi-ec2' || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
