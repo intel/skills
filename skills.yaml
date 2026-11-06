@@ -220,7 +220,7 @@
 - name: model-can-it-fit
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "0b4fafd09c5eb4cc5daf532d915ef5984a919775"
+  external-commit: "d5ba1d777366ffe5f0c02e37acc4bb6de5f7dca6"
   external-path: "plugins/intel-gpu-ai-skills/skills/model-can-it-fit"
   external-license: "Apache-2.0"
   intel-products: "Intel GPU"
