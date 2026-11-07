@@ -1,11 +1,13 @@
 ---
 name: dpnp-quickstart
 description: >-
-  NumPy-compatible array operations optimized for Intel hardware. Use when the user
-  wants to migrate or port NumPy code to dpnp, asks whether a NumPy hot path can run
-  on an Intel CPU or GPU, needs to check dpnp installation or SYCL device selection
-  with dpctl, hits a NumPy API dpnp does not implement, or wants to compare dpnp
-  against NumPy. Covers install, device control, fallback patterns, and profiling.
+  Getting started with new dpnp code on Intel CPUs and GPUs: installing dpnp,
+  listing dpctl devices and choosing a device or queue, pinning work to the CPU or
+  a GPU, timing dpnp against NumPy, and profiling a dpnp loop. Use when the user
+  is setting up dpnp for the first time, wants to see which devices are visible,
+  or wants a benchmark of dpnp against NumPy. Not for porting an existing codebase
+  (dpnp-migration) or for errors that appear after the port
+  (dpnp-troubleshooting).
 license: Apache-2.0
 compatibility: "Requires dpnp and dpctl. GPU execution requires the Intel GPU driver stack and a SYCL-visible device."
 metadata:
@@ -30,11 +32,14 @@ dispatch overhead that a small array cannot amortize.
 
 Use this skill when:
 
-- The user is migrating or porting NumPy code to Intel CPU or GPU execution.
+- The user is trying `dpnp` for the first time on Intel CPU or GPU execution.
 - The user asks whether a NumPy hot path can run on an Intel GPU.
 - The user needs to check a `dpnp` install, or which SYCL device will be used.
-- The user hit a NumPy API that `dpnp` does not implement.
 - The user wants to compare `dpnp` against NumPy.
+
+Porting an existing NumPy or CuPy codebase is `dpnp-migration`; an error that
+appears after the port, such as a NumPy API `dpnp` does not implement, is
+`dpnp-troubleshooting`.
 
 Use `dpnp` for:
 

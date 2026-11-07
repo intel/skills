@@ -1,14 +1,13 @@
 ---
 name: dpnp-migration
 description: >-
-  Porting an existing NumPy or CuPy program to dpnp on Intel CPUs and GPUs. Use
-  when deciding whether a codebase can run on dpnp at all, when a call raises
-  NotImplementedError or AttributeError after the import was swapped, when the
-  user asks whether dpnp supports a specific NumPy function or family, or when
-  CuPy code has to move to Intel hardware. Covers probing the installed release
-  for what it actually implements, the families that have no device counterpart,
-  the fallback wrapper for the ones that do not, and where CuPy's device model
-  differs from dpnp's.
+  Porting an existing NumPy or CuPy program to dpnp on Intel CPUs and GPUs:
+  deciding whether a codebase can run on dpnp at all, probing the installed
+  release for whether a named NumPy function or family is implemented, the
+  families with no device counterpart and their fallback wrapper, and where CuPy's
+  device model differs from dpnp's. Use when the user plans a port or asks what
+  dpnp covers. Not for a call that already fails after the port
+  (dpnp-troubleshooting) or for first-time setup (dpnp-quickstart).
 license: Apache-2.0
 compatibility: "Requires dpnp. The fallback path needs numpy. Device examples need a SYCL device; the probe itself runs anywhere dpnp imports."
 metadata:
@@ -36,12 +35,13 @@ Use this skill when:
 
 - A NumPy or CuPy codebase has to run on Intel hardware and the question is
   whether it can.
-- A call raises `NotImplementedError` or `AttributeError` after the import swap.
+- The user wants to know, before the import swap, which calls will raise
+  `NotImplementedError` or `AttributeError` after it.
 - The user asks whether `dpnp` supports a specific function or family.
 - CuPy code needs the `dpnp` spelling of device selection or of a host copy.
 
-Do **not** use this skill to diagnose a broken install or a missing SYCL runtime
-(`dpnp-troubleshooting`), to hand arrays to pandas, scikit-learn, PyTorch, or
+Do **not** use this skill to diagnose a call that already fails after the port,
+a broken install or a missing SYCL runtime (`dpnp-troubleshooting`), to hand arrays to pandas, scikit-learn, PyTorch, or
 TensorFlow (`dpnp-interop`), to choose a device or manage buffers
 (`dpnp-memory`), to decide whether the workload belongs on a device at all
 (`dpnp-quickstart`), or to migrate a CUDA-based AI repository — model code,
