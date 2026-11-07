@@ -1,11 +1,13 @@
 ---
 name: dpnp-quickstart
 description: >-
-  NumPy-compatible array operations optimized for Intel hardware. Use when the user
-  wants to migrate or port NumPy code to dpnp, asks whether a NumPy hot path can run
-  on an Intel CPU or GPU, needs to check dpnp installation or SYCL device selection
-  with dpctl, hits a NumPy API dpnp does not implement, or wants to compare dpnp
-  against NumPy. Covers install, device control, fallback patterns, and profiling.
+  Getting started with new dpnp code on Intel CPUs and GPUs: installing dpnp,
+  listing dpctl devices and choosing a device or queue, pinning work to the CPU or
+  a GPU, timing dpnp against NumPy, and profiling a dpnp loop. Use when the user
+  is setting up dpnp for the first time, wants to see which devices are visible,
+  or wants a benchmark of dpnp against NumPy. Not for porting an existing codebase
+  (dpnp-migration) or for errors that appear after the port
+  (dpnp-troubleshooting).
 license: Apache-2.0
 compatibility: "Requires dpnp and dpctl. GPU execution requires the Intel GPU driver stack and a SYCL-visible device."
 metadata:
