@@ -35,12 +35,13 @@ Use this skill when:
 
 - A NumPy or CuPy codebase has to run on Intel hardware and the question is
   whether it can.
-- A call raises `NotImplementedError` or `AttributeError` after the import swap.
+- The user wants to know, before the import swap, which calls will raise
+  `NotImplementedError` or `AttributeError` after it.
 - The user asks whether `dpnp` supports a specific function or family.
 - CuPy code needs the `dpnp` spelling of device selection or of a host copy.
 
-Do **not** use this skill to diagnose a broken install or a missing SYCL runtime
-(`dpnp-troubleshooting`), to hand arrays to pandas, scikit-learn, PyTorch, or
+Do **not** use this skill to diagnose a call that already fails after the port,
+a broken install or a missing SYCL runtime (`dpnp-troubleshooting`), to hand arrays to pandas, scikit-learn, PyTorch, or
 TensorFlow (`dpnp-interop`), to choose a device or manage buffers
 (`dpnp-memory`), to decide whether the workload belongs on a device at all
 (`dpnp-quickstart`), or to migrate a CUDA-based AI repository — model code,

@@ -38,7 +38,7 @@ Use this skill when:
 - `dpnp` code is slower than the NumPy it replaced.
 - Another library rejects a `dpnp` array.
 
-Do **not** use this skill to plan a migration (`dpnp-quickstart`), to size a
+Do **not** use this skill to plan a migration (`dpnp-migration`), to size a
 workload against device memory (`dpnp-memory`), or as a source of speedup
 figures.
 

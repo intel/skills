@@ -32,11 +32,14 @@ dispatch overhead that a small array cannot amortize.
 
 Use this skill when:
 
-- The user is migrating or porting NumPy code to Intel CPU or GPU execution.
+- The user is trying `dpnp` for the first time on Intel CPU or GPU execution.
 - The user asks whether a NumPy hot path can run on an Intel GPU.
 - The user needs to check a `dpnp` install, or which SYCL device will be used.
-- The user hit a NumPy API that `dpnp` does not implement.
 - The user wants to compare `dpnp` against NumPy.
+
+Porting an existing NumPy or CuPy codebase is `dpnp-migration`; an error that
+appears after the port, such as a NumPy API `dpnp` does not implement, is
+`dpnp-troubleshooting`.
 
 Use `dpnp` for:
 
