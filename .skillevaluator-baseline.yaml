@@ -84,20 +84,19 @@ findings:
       TRACKED: write metadata.version as "1.0.0". Left for its own pull request because
       it edits ten SKILL.md bodies, and this one only adds the gate.
 
-  # An XML-looking placeholder in the frontmatter description — `<path>` in xpu-port,
-  # `<testname>`-style tokens in phoronix-test-suite. Descriptions are loaded into the
-  # agent's system prompt, where Claude's skill spec forbids XML tags, so this is real.
-  # The schema check and the quality scorer both report it, hence two entries each.
+  # `<testname>`-style tokens in phoronix-test-suite's frontmatter description.
+  # Descriptions are loaded into the agent's system prompt, where Claude's skill spec
+  # forbids XML tags, so this is real. The schema check and the quality scorer both
+  # report it, hence two entries.
   - check: "SCHEMA.frontmatter_field"
-    skills: ["xpu-port", "phoronix-test-suite"]
+    skills: ["phoronix-test-suite"]
     path: "SKILL.md"
     message: "*must not contain XML tags*"
     reason: >-
-      TRACKED: imported body. Upstream (intel/gpu-ai-skills for xpu-port,
-      intel/intel-performance-skills for phoronix-test-suite) to drop the angle-bracket
-      placeholders from the description; arrives with the next pin bump.
+      TRACKED: imported body. Upstream (intel/intel-performance-skills) to drop the
+      angle-bracket placeholders from the description; arrives with the next pin bump.
   - check: "QUALITY.quality_correctness"
-    skills: ["xpu-port", "phoronix-test-suite"]
+    skills: ["phoronix-test-suite"]
     path: "SKILL.md"
     message: "Description contains XML tags"
     reason: >-

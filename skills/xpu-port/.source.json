@@ -1,6 +1,6 @@
 {
   "repo": "https://github.com/intel/gpu-ai-skills",
   "path": "plugins/intel-gpu-ai-skills/skills/xpu-port",
-  "commit": "0b4fafd09c5eb4cc5daf532d915ef5984a919775",
+  "commit": "f7ccdae0721c0039519cbd5b57613e7e595a287b",
   "license": "Apache-2.0"
 }
