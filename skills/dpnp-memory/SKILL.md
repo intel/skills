@@ -1,12 +1,13 @@
 ---
 name: dpnp-memory
 description: >-
-  Device memory management for dpnp arrays on Intel CPUs and GPUs. Use when a dpnp
-  script grows in memory until it fails, when a dataset does not fit in device
-  memory, when an array turns out to be on a different device than expected, or
-  when a loop allocates a new array on every iteration. Covers USM allocation,
-  inspecting placement and queues with dpctl, reusing an output buffer, chunking a
-  workload larger than the device, and the tools that report device memory use.
+  Device memory for dpnp arrays on Intel CPUs and GPUs: USM allocation kinds,
+  checking which device and queue an array lives on with dpctl, reusing an output
+  buffer inside a loop, chunking an in-memory workload that is larger than the
+  device, and tools that report device memory use. Use when a dpnp script grows in
+  memory until it fails, when an array lands on a device other than the one
+  expected, or when a loop allocates a new array every iteration. Not for reading
+  or writing files (dpnp-io).
 license: Apache-2.0
 compatibility: "Requires dpnp and dpctl. Device memory reporting needs xpu-smi (data center GPUs) or intel_gpu_top (client GPUs)."
 metadata:

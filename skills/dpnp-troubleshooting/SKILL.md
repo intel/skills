@@ -1,13 +1,13 @@
 ---
 name: dpnp-troubleshooting
 description: >-
-  Diagnosing dpnp failures on Intel CPUs and GPUs. Use when dpnp raises
-  NotImplementedError or an unexpected TypeError, when the import fails or a SYCL
-  runtime library is missing, when no SYCL device is visible, when dpctl reports a
-  device the user did not expect, or when dpnp code runs slower than the NumPy it
-  replaced. Covers the fallback pattern for unimplemented APIs, install repair,
-  forcing CPU execution, and the handoff to libraries that only accept NumPy
-  arrays.
+  Diagnosing dpnp failures that appear once dpnp code runs on Intel CPUs and GPUs:
+  NotImplementedError, AttributeError or a TypeError about a keyword raised by a
+  dpnp call, import failures from a missing SYCL runtime library, no SYCL device
+  visible, a dpctl device the user did not expect, dpnp code slower than the NumPy
+  it replaced, and another library rejecting a dpnp array. Use when one of these
+  symptoms shows up. Not for planning a port (dpnp-migration) or for first-time
+  setup (dpnp-quickstart).
 license: Apache-2.0
 compatibility: "Requires dpnp and dpctl. Install commands assume conda or pip with the Intel channel or index."
 metadata:
@@ -38,7 +38,7 @@ Use this skill when:
 - `dpnp` code is slower than the NumPy it replaced.
 - Another library rejects a `dpnp` array.
 
-Do **not** use this skill to plan a migration (`dpnp-quickstart`), to size a
+Do **not** use this skill to plan a migration (`dpnp-migration`), to size a
 workload against device memory (`dpnp-memory`), or as a source of speedup
 figures.
 
