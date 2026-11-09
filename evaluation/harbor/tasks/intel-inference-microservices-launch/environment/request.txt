@@ -1,0 +1,3 @@
+Serve Qwen/Qwen3-4B on this Intel Xeon host.
+Clients need an OpenAI-compatible chat API on port 8000.
+Leave engine selection to the image.

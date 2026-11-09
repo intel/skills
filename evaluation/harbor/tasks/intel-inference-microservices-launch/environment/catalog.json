@@ -1,0 +1,15 @@
+{
+  "base_image": "intel/inference-xeon-base:0.1.0",
+  "models": [
+    {
+      "model_id": "Qwen/Qwen3-4B",
+      "image": "intel/inference-xeon-qwen-qwen3-4b:0.1.0",
+      "hf_token_required": false
+    },
+    {
+      "model_id": "meta-llama/Llama-3.2-3B-Instruct",
+      "image": "intel/inference-xeon-meta-llama-llama-3.2-3b-instruct:0.1.0",
+      "hf_token_required": true
+    }
+  ]
+}
