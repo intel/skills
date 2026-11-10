@@ -290,6 +290,7 @@ request the annotation is for.
 | `harbor-smoke.yml` | the oracle arm over every task in `tasks/` | PRs touching tasks or skills | yes |
 | `security.yml` | `actionlint`, `zizmor` | every PR | yes |
 | `skillevaluator.yml` | SkillEvaluator Tier 1 on each changed skill, gated by `skillevaluator_gate.py` against `.skillevaluator-baseline.yaml` | PRs touching skills or its own machinery, push, weekly | yes |
+| `skills-check.yml` | dokimi's free checks: every skill and Harbor task loads, plus static plan, instruction, size, setup and lexical routing reports merged by `dokimi_summary.py` into `skills-check.json` | PRs touching skills, tasks or its own machinery, push | only when a skill or task cannot load |
 | `codeql.yml` | code scanning, Python | PRs, push, weekly | reports |
 | `link-rot.yml` | `validate_skills.py --check-links --docs`: the PR link check plus the repository's own markdown outside `skills/`; a failure opens or comments on one "Link rot" issue | Mondays, or by hand | opens an issue |
 | `upstream-sync.yml` | `check_upstream.py --open-pr`: one pull request per skill whose pinned directory moved | Sundays and Wednesdays, or by hand | opens PRs |

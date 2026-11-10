@@ -1,0 +1,96 @@
+name: Skills check
+
+# Free dokimi checks: no model, no secret, no cost. Only step 1 can fail the run.
+# Results: run summary table, and skills-check.json in the skills-check-reports artifact.
+
+on:
+  pull_request:
+    paths:
+      - 'skills/**'
+      - 'skills.yaml'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - 'evaluation/harbor/**'
+      - '.github/workflows/skills-check.yml'
+      - '.github/scripts/dokimi_summary.py'
+  push:
+    branches: [main]
+    paths:
+      - 'skills/**'
+      - 'skills.yaml'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - 'evaluation/harbor/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  skills-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DOKIMI_REF: b30a1a200ceb126b0e9cd3c9c7ea34019981db6c
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: intel/dokimi/actions/setup@b30a1a200ceb126b0e9cd3c9c7ea34019981db6c
+        with:
+          dokimi-ref: ${{ env.DOKIMI_REF }}
+      - name: Prepare output folder
+        shell: bash
+        run: mkdir -p "$RUNNER_TEMP/out/routing"
+      - name: "1. Skills and Harbor tasks load (fails only on a skill that cannot load)"
+        shell: bash
+        run: >-
+          dokimi catalog check --root . --kind all --tasks-subdir evaluation/harbor/tasks
+          --skip-nested --strict --format json > "$RUNNER_TEMP/out/check.json"
+      - name: "2. Skill formats by ecosystem (report only)"
+        if: always()
+        shell: bash
+        run: dokimi catalog formats --root . --json > "$RUNNER_TEMP/out/formats.json"
+      - name: "3. Static plan and receipts for every skill (report only)"
+        if: always()
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          dokimi catalog eval . --tier static --out-dir "$RUNNER_TEMP/out/catalog-eval" || true
+          if [ -n "$BASE_SHA" ]; then
+            dokimi catalog eval . --tier static --changed-from "$BASE_SHA" --out-dir "$RUNNER_TEMP/out/catalog-eval-changed" || true
+          fi
+      - name: "4. Instruction files: do named paths, links and commands exist? (report only)"
+        if: always()
+        shell: bash
+        run: dokimi repo scan . --out "$RUNNER_TEMP/out/scan.json"
+      - name: "5. Instruction size: how much text loads at start (report only)"
+        if: always()
+        shell: bash
+        run: dokimi repo budget . --out "$RUNNER_TEMP/out/budget.json"
+      - name: "6. Repository agent setup: build, test and instruction risks (report only)"
+        if: always()
+        shell: bash
+        run: dokimi repo inspect . --out "$RUNNER_TEMP/out/inspect.json"
+      - name: "7. Skill routing, lexical floor from each skill's headings (report only)"
+        if: always()
+        shell: bash
+        run: |
+          for d in skills/*/; do
+            n=$(basename "$d")
+            dokimi novelty routing --artifact "skill:skills/$n" --catalog skills               --queries-from-headings --out "$RUNNER_TEMP/out/routing/$n.json" || true
+          done
+      - name: Merge results into skills-check.json and the run summary
+        if: always()
+        shell: bash
+        run: |
+          python3 .github/scripts/dokimi_summary.py "$RUNNER_TEMP/out" --dokimi-ref "$DOKIMI_REF"
+          cat "$RUNNER_TEMP/out/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        if: always()
+        with:
+          name: skills-check-reports
+          path: ${{ runner.temp }}/out
+          if-no-files-found: ignore
