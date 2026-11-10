@@ -332,8 +332,8 @@ def vendored(
         if relative.split("/")[0] in NOT_VENDORED_DIRS:
             raise SyncError(
                 f"{name}: upstream ships {relative}, and {relative.split('/')[0]}/ is "
-                "where this repository keeps its own eval and measurement data. Renaming "
-                "either would hide one behind the other"
+                "where this repository keeps its own measurement data. Renaming either "
+                "would hide one behind the other"
             )
         rewritten, was_changed = rewrite_paths(name, root, names, relative, blob)
         if was_changed:
@@ -371,8 +371,9 @@ def manifest(entry: dict[str, str], changed: list[str]) -> bytes:
 def on_disk(skill_dir: Path) -> dict[str, bytes]:
     """The bytes the skill directory holds now, keyed the same way `vendored` keys.
 
-    This repository's own evals/ and perf/ are excluded: they are not upstream's and
-    are not part of the comparison. Everything else under the directory is, which is
+    This repository's own perf/ is excluded: it is not upstream's and is not part of
+    the comparison. evals/ is compared, so an eval file an import holds and upstream
+    does not shows up as drift: an import's evals come from upstream. Everything else under the directory is, which is
     what makes a file nobody vendored show up as drift rather than survive quietly.
     """
     out: dict[str, bytes] = {}

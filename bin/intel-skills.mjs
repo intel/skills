@@ -42,7 +42,7 @@ const INSTALL_TARGETS = {
 /**
  * Directories a skill keeps in the catalog and does not install.
  *
- * `evals/` is this repository's test fixtures — and an eval case is allowed to name a
+ * `evals/` is the skill's test fixtures — and an eval case is allowed to name a
  * phrase precisely because a skill must not contain it, so shipping it into an agent's
  * skills directory puts that phrase in the agent's reach. `perf/` is measurement
  * provenance for reviewers. Neither is something the agent loads.

@@ -13,7 +13,7 @@ catalog a user browses. Do not rename it back.
 |---|---|---|
 | [`SKILL.template.md`](SKILL.template.md) | `skills/<name>/SKILL.md` | every skill |
 | [`task_example.md`](task_example.md) | reference, not a file to copy | a skill written here, not imported |
-| [`evals.json`](evals.json) | `skills/<name>/evals/evals.json` | optional |
+| [`evals.json`](evals.json) | `skills/<name>/evals/evals.json` | every skill written here; an import's come from upstream |
 | [`perf/hw-results.json`](perf/hw-results.json) | `skills/<name>/perf/hw-results.json` | `validated` |
 | [`perf/summary.md`](perf/summary.md) | `skills/<name>/perf/summary.md` | `validated` |
 | [`perf/benchmark_config.json`](perf/benchmark_config.json) | `skills/<name>/perf/benchmark_config.json` | `validated` |
