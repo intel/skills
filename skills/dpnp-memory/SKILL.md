@@ -1,13 +1,14 @@
 ---
 name: dpnp-memory
 description: >-
-  Device memory for dpnp arrays on Intel CPUs and GPUs: USM allocation kinds,
-  checking which device and queue an array lives on with dpctl, reusing an output
-  buffer inside a loop, chunking an in-memory workload that is larger than the
-  device, and tools that report device memory use. Use when a dpnp script grows in
-  memory until it fails, when an array lands on a device other than the one
-  expected, or when a loop allocates a new array every iteration. Not for reading
-  or writing files (dpnp-io).
+  Device memory and placement for dpnp arrays on Intel CPUs and GPUs: USM
+  allocation kinds, which device and queue an array lives on (dpctl), arrays on more than
+  one device or queue and where an operation on them runs, reusing an output
+  buffer in a loop, chunking an in-memory workload larger than the device, and
+  tools that report device memory use. Use when a dpnp script grows in memory
+  until it fails, an array lands on an unexpected device, work is split across
+  GPUs or queues, or a loop allocates every iteration. Not for reading or writing
+  files (dpnp-io).
 license: Apache-2.0
 compatibility: "Requires dpnp and dpctl. Device memory reporting needs xpu-smi (data center GPUs) or intel_gpu_top (client GPUs)."
 metadata:
@@ -36,6 +37,9 @@ Use this skill when:
 - Memory use climbs over the life of a script or a notebook session.
 - A dataset is larger than the device and has to be processed in pieces.
 - The user needs to confirm which device or queue an array is on.
+- Arrays live on more than one device or queue, and the user needs each
+  operation to run where its data is, or combining them raises an error about
+  the queue.
 - A tight loop allocates a new array per iteration.
 - The user asks how to see device memory use from outside Python.
 
@@ -84,7 +88,49 @@ print(arr.sycl_device.global_mem_size / 1e9, "GB")      # capacity, not free spa
    shared = dpnp.arange(1000, sycl_queue=queue)
    ```
 
-3. **Reuse the output buffer in loops.** Universal functions take `out=`, which
+3. **On several devices or queues, compute follows data.** An operation runs on
+   the queue its inputs share; there is no separate "run this on GPU 1" switch.
+   All inputs must be on the same queue. Arrays created with the same `device=`
+   share one cached queue, so they combine; two `dpctl.SyclQueue` objects that
+   the code made separately are different queues, even for one GPU. Mixing
+   those fails, with an error that depends on the operation:
+
+   - element-wise operations: `ExecutionPlacementError: Execution placement can
+     not be unambiguously inferred from input arguments`;
+   - `matmul`, `dot`, `linalg.solve`: `ValueError: Input arrays must be
+     allocated on the same SYCL queue`;
+   - `concatenate`, `stack`: `ValueError: All the input arrays must have same
+     sycl queue`.
+
+   ```python
+   import dpctl
+   import dpnp
+
+   gpus = dpctl.get_devices(backend="level_zero", device_type="gpu")  # each card once
+   q0, q1 = dpctl.SyclQueue(gpus[0]), dpctl.SyclQueue(gpus[-1])
+
+   a0 = dpnp.ones(1_000_000, sycl_queue=q0)        # data on the first GPU
+   a1 = dpnp.ones(1_000_000, sycl_queue=q1)        # data on the last one
+   r0 = a0 * 2                                     # runs on q0
+   r1 = a1 * 2                                     # runs on q1
+
+   b0 = dpnp.zeros_like(a0)                        # inherits a0's queue
+   c0 = dpnp.empty(10, sycl_queue=a0.sycl_queue)   # or pass it explicitly
+   total = r0.sum() + r1.sum().to_device(a0.sycl_queue)   # reduce first, move the scalar
+   ```
+
+   To fix the error, create the second array with `sycl_queue=x.sycl_queue`
+   (or `*_like`), or move one operand with `.to_device(...)` before combining
+   them. What `.to_device` costs depends on the SYCL context, not the device:
+   a target queue in the array's own context gets a view, with no copy, and
+   only a target in another context, such as `opencl:cpu` from a Level Zero GPU,
+   is copied through the host. `dpctl` queues use their platform's default
+   context, which holds every device of that platform, so two Level Zero GPUs
+   share one: the view then makes one GPU read memory on the other, which needs
+   peer access between the cards. Move as little as possible, once, outside the
+   loop.
+
+4. **Reuse the output buffer in loops.** Universal functions take `out=`, which
    writes into an existing allocation instead of making one:
 
    ```python
@@ -100,12 +146,12 @@ print(arr.sycl_device.global_mem_size / 1e9, "GB")      # capacity, not free spa
    overwritten anyway, and pre-allocate the output of `dpnp.matmul(A, B, out=C)`
    the same way.
 
-4. **Keep conversions out of the loop body.** `dpnp.asnumpy()` copies device to
+5. **Keep conversions out of the loop body.** `dpnp.asnumpy()` copies device to
    host and `dpnp.array()` copies host to device. Calling a NumPy function on a
    `dpnp` array, or mixing the two in one expression, does the same thing
    implicitly. Hoist the conversion above the loop.
 
-5. **Chunk a workload that does not fit.** Size each chunk so the input and the
+6. **Chunk a workload that does not fit.** Size each chunk so the input and the
    intermediates together stay under the device capacity — roughly half to two
    thirds of it is a workable starting point — then release the arrays before the
    next iteration:
@@ -125,7 +171,7 @@ print(arr.sycl_device.global_mem_size / 1e9, "GB")      # capacity, not free spa
        gc.collect()
    ```
 
-6. **Watch the device while it runs** rather than reasoning about it afterwards:
+7. **Watch the device while it runs** rather than reasoning about it afterwards:
    `xpu-smi dump -m 1` on data center GPUs, `intel_gpu_top` on client GPUs,
    `clinfo` for OpenCL limits, `ze_info` for Level Zero. Steadily climbing memory
    is the signature of a leak.
@@ -159,8 +205,9 @@ worth it depends on array size, device, and driver, so measure the specific case
 - **A leak looks like a slowdown first.** Device memory fills, then the run
   either falls back or fails. If a script degrades over hours, check memory
   before profiling compute.
-- Not covered: multi-process or multi-device sharing of one allocation, and USM
-  allocation kinds (`device`, `host`, `shared`) beyond the default.
+- Not covered: sharing one allocation between processes or between devices
+  (peer access), and USM allocation kinds (`device`, `host`, `shared`) beyond the
+  default.
 
 ## References
 

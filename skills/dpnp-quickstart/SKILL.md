@@ -1,12 +1,14 @@
 ---
 name: dpnp-quickstart
 description: >-
-  Getting started with new dpnp code on Intel CPUs and GPUs: installing dpnp,
-  listing dpctl devices and choosing a device or queue, pinning work to the CPU or
-  a GPU, timing dpnp against NumPy, and profiling a dpnp loop. Use when the user
-  is setting up dpnp for the first time, wants to see which devices are visible,
-  or wants a benchmark of dpnp against NumPy. Not for porting an existing codebase
-  (dpnp-migration) or for errors that appear after the port
+  Getting started with dpnp on Intel CPUs and GPUs: installing it, deciding
+  whether the arrays are large enough for dpnp to pay off, moving one NumPy
+  script or hot function onto a device and checking it against NumPy, listing
+  and choosing dpctl devices or queues, pinning work to the CPU or one GPU in
+  code or with ONEAPI_DEVICE_SELECTOR, and timing and profiling dpnp against
+  NumPy. Use for trying dpnp for the first time, one script on a GPU, forcing
+  the CPU, or a benchmark. Not for porting a whole codebase (dpnp-migration),
+  or for errors after the port or a device that is not visible
   (dpnp-troubleshooting).
 license: Apache-2.0
 compatibility: "Requires dpnp and dpctl. GPU execution requires the Intel GPU driver stack and a SYCL-visible device."
@@ -21,8 +23,9 @@ metadata:
 
 Runs NumPy-style array operations on Intel CPUs and GPUs through `dpnp`, which
 mirrors the NumPy API over SYCL device memory. Covers installation, SYCL device
-selection with `dpctl`, migrating existing NumPy code, falling back to NumPy for
-unimplemented APIs, and measuring whether the move actually paid off.
+selection with `dpctl`, moving one existing NumPy script or hot function onto a
+device, falling back to NumPy for unimplemented APIs, and measuring whether the
+move actually paid off.
 
 Prefer this over plain NumPy when the arrays are large and the work is math-heavy
 on Intel hardware. Prefer plain NumPy when the arrays are small — `dpnp` has
@@ -33,11 +36,14 @@ dispatch overhead that a small array cannot amortize.
 Use this skill when:
 
 - The user is trying `dpnp` for the first time on Intel CPU or GPU execution.
-- The user asks whether a NumPy hot path can run on an Intel GPU.
+- The user asks whether a NumPy hot path, one script or one function, can run on
+  an Intel GPU, and how to check it still gives the same answer.
 - The user needs to check a `dpnp` install, or which SYCL device will be used.
+- The user wants to force the CPU (or one GPU), in code or without changing it.
 - The user wants to compare `dpnp` against NumPy.
 
-Porting an existing NumPy or CuPy codebase is `dpnp-migration`; an error that
+Porting a whole NumPy or CuPy codebase, or checking which NumPy calls `dpnp`
+implements, is `dpnp-migration`; an error that
 appears after the port, such as a NumPy API `dpnp` does not implement, is
 `dpnp-troubleshooting`.
 
@@ -161,6 +167,25 @@ device — the default SYCL device is the GPU only when one is visible.
 
    y = dpnp.zeros(x.size, sycl_queue=x.sycl_queue)         # keep the next one beside it
    ```
+
+   To restrict the whole program without changing its code, set
+   `ONEAPI_DEVICE_SELECTOR` before it starts. The SYCL runtime then only sees the
+   devices the selector names, so the default device and every `device=` lookup
+   resolve among them:
+
+   ```bash
+   ONEAPI_DEVICE_SELECTOR=opencl:cpu python my_script.py         # CPU only
+   ONEAPI_DEVICE_SELECTOR=level_zero:1 python my_script.py       # second Level Zero device only
+   ONEAPI_DEVICE_SELECTOR=opencl:cpu python -c "import dpctl; print(dpctl.get_devices())"
+   ```
+
+   The last line shows what the selector leaves visible; `dpctl.get_devices()`
+   works wherever dpnp imports, where `sycl-ls` is often missing from pip
+   installs. The selector replaced the older `SYCL_DEVICE_FILTER`, which no
+   longer has an effect on current runtimes. Code that also runs under a
+   selector should name a device by type (`device="gpu"`) rather than by index,
+   since the devices left visible may not keep their numbers. Print
+   `x.sycl_device` once to confirm the selector took.
 
 7. **Validate, then measure.** Compare against NumPy with
    `numpy.testing.assert_allclose()` for critical math before making any
