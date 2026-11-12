@@ -57,8 +57,11 @@ if sys.version_info < (3, 11):
 import tomllib  # noqa: E402  -- after the version guard, deliberately
 from pathlib import Path
 
+from harbor_suite import skill_names
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TASKS_DIR = REPO_ROOT / "evaluation" / "harbor" / "tasks"
+SUITES_PATH = REPO_ROOT / "evaluation" / "harbor" / "suites.json"
 SKILLS_DIR = REPO_ROOT / "skills"
 # --self-test reads the gate's budget out of the workflow rather than carrying a second
 # copy of the number, so the two cannot drift apart.
@@ -184,36 +187,44 @@ def skill_text(skill: str) -> str | None:
     return "\n".join(parts)
 
 
-def task_skill(task_dir: Path) -> str | None:
+def task_skills(task_dir: Path) -> list[str]:
     config = task_dir / "task.toml"
-    if not config.is_file():
-        return None
-    try:
-        document = tomllib.loads(config.read_text(encoding="utf-8"))
-    except tomllib.TOMLDecodeError:
-        return None
-    return (document.get("metadata") or {}).get("skill")
+    document = tomllib.loads(config.read_text(encoding="utf-8"))
+    names = set(skill_names(document.get("metadata") or {}))
+    if SUITES_PATH.is_file():
+        suites = json.loads(SUITES_PATH.read_text(encoding="utf-8"))
+        for suite in suites.get("suites") or []:
+            if any(task.get("name") == task_dir.name for task in suite.get("tasks") or []):
+                names.update(skill_names(suite))
+    return sorted(names)
 
 
 def audit(task_dir: Path, allow: set[str]) -> dict | None:
-    skill = task_skill(task_dir)
-    if not skill:
-        return None
-    text = skill_text(skill)
-    if text is None:
-        return {"task": task_dir.name, "skill": skill, "error": f"no skills/{skill}/SKILL.md"}
+    try:
+        names = task_skills(task_dir)
+    except (OSError, ValueError) as exc:
+        return {"task": task_dir.name, "skill": "?", "error": str(exc)}
+    skill = ",".join(names)
+    taught: set[str] = set()
+    taught_lines: set[str] = set()
+    for name in names:
+        text = skill_text(name)
+        if text is None:
+            return {"task": task_dir.name, "skill": skill, "error": f"no skills/{name}/SKILL.md"}
+        taught.update(symbols(text))
+        taught_lines.update(code_lines(text))
     instruction_path = task_dir / "instruction.md"
     if not instruction_path.is_file():
         return {"task": task_dir.name, "skill": skill, "error": "no instruction.md"}
     instruction = instruction_path.read_text(encoding="utf-8")
 
-    taught = symbols(text)
     given = symbols(instruction)
     leaked = sorted((taught & given) - allow)
-    shared_lines = sorted(code_lines(text) & code_lines(instruction))
+    shared_lines = sorted(taught_lines & code_lines(instruction))
     return {
         "task": task_dir.name,
         "skill": skill,
+        "skills": names,
         "taught_symbols": len(taught),
         "leaked_symbols": leaked,
         "shared_code_lines": shared_lines,
@@ -299,8 +310,9 @@ def self_test() -> int:
     # more given-away symbol crosses it.
     worst = max(reports, key=lambda report: report["score"])
     instruction = (TASKS_DIR / worst["task"] / "instruction.md").read_text(encoding="utf-8")
-    skill = skill_text(worst["skill"]) or ""
-    taught, taught_lines = symbols(skill), code_lines(skill)
+    texts = [skill_text(name) or "" for name in worst["skills"]]
+    taught = set().union(*(symbols(text) for text in texts))
+    taught_lines = set().union(*(code_lines(text) for text in texts))
     base = _score(taught, taught_lines, instruction)
     check(f"{worst['task']} scores the same in memory", base == worst["score"],
           f"on disk {worst['score']}, in memory {base}")
@@ -411,6 +423,8 @@ def main() -> int:
         print("answer out of the prompt and the task cannot discriminate. A zero score is")
         print("necessary but not sufficient: screen with a no-skill arm before trusting it.")
 
+    if any("error" in report for report in reports):
+        return 1
     if args.fail_on_leak is not None:
         over = [r for r in reports if r.get("score", 0) > args.fail_on_leak]
         if over:

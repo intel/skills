@@ -42,9 +42,9 @@ GPU is needed to run this suite.
 ```text
 evaluation/harbor/
   suites.json                    which tasks evaluate which skill, and the gate
-  instructions/use-<skill>.md    treatment instruction, used by the skill arms
+  instructions/use-<suite-id>.md treatment instruction, used by the skill arms
   tasks/<task-name>/             one Harbor task each
-    task.toml                    [metadata] skill = "<skill-name>" links it to a skill
+    task.toml                    [metadata] skills = ["<skill-name>"] declares coverage
     instruction.md               the prompt the agent receives
     environment/Dockerfile       the container
     solution/solve.sh            oracle solution — proves the task is solvable
@@ -52,7 +52,9 @@ evaluation/harbor/
     tests/rubric.json            instead of pytest, when the task scores prose
 ```
 
-A task links to a skill through `[metadata] skill`, **not** through the path.
+A task links to one or more skills through `[metadata] skills = ["name", ...]`,
+**not** through the path. The legacy `skill = "name"` is still accepted; use only
+one of these fields. Skill lists must be non-empty, unique, and name catalog skills.
 `harbor run --path evaluation/harbor/tasks` needs one discovery root, so tasks
 cannot live under `skills/<name>/`.
 
@@ -90,6 +92,40 @@ first pull request does not need one. The gap has to be written down as a
 agree in every direction. A task directory no suite claims is checked for structure
 and run by the oracle job like any other; it warns, because the capability it counts
 toward is a maintainer's decision, and errors once the skill claims `validated`.
+
+## Bundle suites
+
+A suite can use `"id": "my-bundle"` and `"skills": ["skill-one", "skill-two"]` instead of
+the legacy `"skill"` field. The ID is unique across all suites; a legacy suite's ID
+is its skill name. Evaluation suites are independent of the display groupings in
+`skills.sh.json`.
+
+Each suite lists one or more implemented tasks and has an
+`instructions/use-<suite-id>.md` treatment instruction. Each task's declared skills
+must be a subset of the suite's supplied skills. A task may appear in several
+suites, but only once within each suite. Its `covers` must still match its task
+metadata and resolve to capabilities declared in each claiming suite. Capabilities
+and rewards belong to the suite: bundle coverage is not individual evidence for
+promoting a member skill to `validated`. Oracle CI still discovers physical task
+directories, so sharing a task does not run its oracle twice.
+
+```bash
+python3 tools/compare_harbor_skill.py --suite my-bundle \
+  --model "<model>" --attempts 3 --dry-run
+```
+
+Replace the example names with a suite and skills you have registered. Omit
+`--dry-run` to execute (with the same agent/network prerequisites below).
+The runner snapshots every member and injects the snapshot directory into each
+skill arm; the baseline receives neither skills nor a treatment instruction.
+`--previous-ref` uses the same member list at that ref and skips the whole previous
+arm if any member is absent. Existing `--skill dpnp-quickstart` commands still work.
+The report names the supplied set and includes the suite's optional `note`.
+As before, `--report-only` reads the current suite configuration, so retain that
+configuration with the run when interpreting historical reports.
+
+Leakage checking audits the union of skills supplied by suites using a task,
+counting shared symbols once.
 
 ## Oracle smoke — no credentials
 

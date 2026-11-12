@@ -104,6 +104,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from behavior_digest import DIGEST_FIELD, behavior_digest
+from harbor_suite import skill_names, suite_id
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO_ROOT / "skills"
@@ -1382,16 +1383,30 @@ def check_suites(
     min_tasks = policy.get("minimum_tasks_per_skill") or 0
     min_discriminating = policy.get("minimum_discriminating_tasks_per_skill") or 0
 
-    claimed_tasks: dict[str, str] = {}  # task name -> skill that claims it
+    claimed_tasks: set[str] = set()
+    seen_suites: set[str] = set()
+    individual_skills: set[str] = set()
+    bundled_skills: set[str] = set()
 
     for suite in suites:
-        skill = suite.get("skill")
-        if not skill:
-            report.error(f"{where}: a suite has no 'skill'")
+        try:
+            skill = suite_id(suite)
+            members = skill_names(suite)
+        except ValueError as exc:
+            report.error(f"{where}: {exc}")
             continue
-        if skill not in skill_types:
-            report.error(f"{where}: suite {skill!r} has no skills/{skill}/ directory")
+        if skill in seen_suites:
+            report.error(f"{where}: duplicate suite id {skill!r}")
             continue
+        seen_suites.add(skill)
+        unknown = set(members) - set(skill_types)
+        if unknown:
+            report.error(f"{where}: suite {skill!r} names unknown skills: {sorted(unknown)}")
+            continue
+        if len(members) == 1:
+            individual_skills.update(members)
+        else:
+            bundled_skills.update(members)
 
         capabilities = {
             capability.get("id"): capability for capability in suite.get("capabilities") or []
@@ -1405,7 +1420,7 @@ def check_suites(
                 )
 
         tasks = suite.get("tasks") or []
-        if suite.get("evaluated_here") is False or skill in imported:
+        if suite.get("evaluated_here") is False or (len(members) == 1 and members[0] in imported):
             if tasks or capabilities:
                 report.error(
                     f"{where}: {skill}: an entry evaluated elsewhere must declare no "
@@ -1414,6 +1429,7 @@ def check_suites(
             continue
 
         implemented: list[str] = []
+        seen_tasks: set[str] = set()
         discriminating = 0
         covered_classes: set[str] = set()
 
@@ -1422,12 +1438,11 @@ def check_suites(
             if not name:
                 report.error(f"{where}: {skill}: a task has no 'name'")
                 continue
-            if name in claimed_tasks:
-                report.error(
-                    f"{where}: task {name!r} is claimed by both {claimed_tasks[name]!r} "
-                    f"and {skill!r}; a reward can only count for one skill"
-                )
-            claimed_tasks[name] = skill
+            if name in seen_tasks:
+                report.error(f"{where}: {skill}: duplicate task {name!r}")
+                continue
+            seen_tasks.add(name)
+            claimed_tasks.add(name)
 
             status = task.get("status")
             role = task.get("role")
@@ -1474,7 +1489,7 @@ def check_suites(
                     f"evaluation/harbor/tasks/{name}/ does not exist"
                 )
                 continue
-            check_task_dir(task_dir, skill, set(covers), set(skill_types), report)
+            check_task_dir(task_dir, set(members), set(covers), set(skill_types), report)
 
         treatment = INSTRUCTIONS_DIR / f"use-{skill}.md"
         if implemented and not treatment.is_file():
@@ -1483,7 +1498,7 @@ def check_suites(
                 "missing — the skill arms would have no treatment instruction"
             )
 
-        status = (catalog.get(skill) or {}).get("status")
+        status = (catalog.get(members[0]) or {}).get("status") if len(members) == 1 else None
         promoting = status == "validated"
         shortfalls = []
         if len(implemented) < min_tasks:
@@ -1507,9 +1522,13 @@ def check_suites(
     # portfolio in view, and demanding it in a first pull request asks the author to
     # design an evaluation for a skill nobody has reviewed yet. It becomes a hard
     # requirement exactly where a measurement is being claimed: at 'validated'.
-    for name in sorted(set(skill_types) - {suite.get("skill") for suite in suites}):
+    for name in sorted(set(skill_types) - individual_skills):
         status = (catalog.get(name) or {}).get("status")
+        if name in bundled_skills and status != "validated":
+            continue
         message = f"{where}: no suite for skills/{name}/ — the skill cannot be measured"
+        if name in bundled_skills:
+            message = f"{where}: skills/{name}/ has bundle coverage only, not individual evidence"
         if status == "validated":
             report.error(f"{message}, which status {status!r} claims it has been")
         else:
@@ -1524,14 +1543,17 @@ def check_suites(
         on_disk = {p.name for p in TASKS_DIR.iterdir() if p.is_dir()}
         for name in sorted(on_disk - set(claimed_tasks)):
             task_dir = TASKS_DIR / name
-            declared = ((read_task(task_dir) or {}).get("metadata") or {}).get("skill")
-            status = (catalog.get(declared) or {}).get("status")
+            try:
+                declared = skill_names((read_task(task_dir) or {}).get("metadata") or {})
+            except ValueError:
+                declared = []
+            promoting = any((catalog.get(member) or {}).get("status") == "validated" for member in declared)
             message = (
                 f"evaluation/harbor/tasks/{name}/: no suite lists this task, so its "
                 "reward counts toward no capability"
             )
-            if status == "validated":
-                report.error(f"{message} — required at status {status!r}")
+            if promoting:
+                report.error(f"{message} — required at status 'validated'")
             else:
                 report.warn(f"{message} until a maintainer adds one")
             check_task_dir(task_dir, None, None, set(skill_types), report)
@@ -1550,14 +1572,14 @@ def read_task(task_dir: Path) -> dict | None:
 
 def check_task_dir(
     task_dir: Path,
-    skill: str | None,
+    skills: set[str] | None,
     covers: set[str] | None,
     known_skills: set[str],
     report: Report,
 ) -> None:
     """The task on disk must be runnable, and agree with whatever claims it.
 
-    skill and covers are what suites.json says about the task, or None when no
+    skills and covers are what suites.json says about the task, or None when no
     suite lists it. In that case the task's own declaration is all there is, so it
     is checked for being well-formed rather than for agreeing with a second source.
     """
@@ -1583,23 +1605,15 @@ def check_task_dir(
         report.error(f"{where}/task.toml: schema_version is required")
 
     metadata = task.get("metadata") or {}
-    declared_skill = metadata.get("skill")
-    if skill is None:
-        if not declared_skill:
-            report.error(
-                f"{where}/task.toml: [metadata] skill is required — it is what says "
-                "which skill the task exercises"
-            )
-        elif declared_skill not in known_skills:
-            report.error(
-                f"{where}/task.toml: [metadata] skill is {declared_skill!r}, which is "
-                "not a skill under skills/"
-            )
-    elif declared_skill != skill:
-        report.error(
-            f"{where}/task.toml: [metadata] skill is {declared_skill!r} but suites.json "
-            f"lists this task under {skill!r}"
-        )
+    try:
+        declared_skills = set(skill_names(metadata))
+    except ValueError as exc:
+        report.error(f"{where}/task.toml: [metadata] {exc}")
+    else:
+        if declared_skills - known_skills:
+            report.error(f"{where}/task.toml: unknown skills: {sorted(declared_skills - known_skills)}")
+        if skills is not None and not declared_skills <= skills:
+            report.error(f"{where}/task.toml: skills {sorted(declared_skills)} are not all supplied by suite {sorted(skills)}")
 
     declared_covers = metadata.get("covers")
     if isinstance(declared_covers, str):

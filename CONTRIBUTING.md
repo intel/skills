@@ -289,7 +289,9 @@ locally, run the `evaluate` job's steps from
 ## 5. If you are writing a new skill, add a Harbor task
 
 One task under [`evaluation/harbor/tasks/`](evaluation/harbor/tasks): a `task.toml` naming
-your skill, a container, an instruction, an oracle solution, and a verifier. CI runs the
+your skill (or several skills via `[metadata] skills = ["name", ...]`), a container,
+an instruction, an oracle solution, and a verifier. A shared task can exercise a
+bundle of related skills; each skill it covers must be named. CI runs the
 oracle arm — no model and no API key, so it works on a pull request from a fork — and
 requires only that the task is solvable and its verifier emits a reward.
 
@@ -301,6 +303,9 @@ the floor; a skill reaching `validated` needs five, two of which discriminate �
 is in [`evaluation/harbor/suites.json`](evaluation/harbor/suites.json).
 
 Layout and a worked example: [`templates/task_example.md`](templates/task_example.md).
+For a multi-skill differential, declare a named bundle suite and treatment instruction
+as described in [Harbor evaluation](evaluation/harbor/README.md#bundle-suites).
+Its result measures the bundle, not each member's individual contribution.
 
 Before you push, check that the task can still tell the arms apart:
 
