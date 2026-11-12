@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the three-arm Level 2 differential for one skill and report the delta.
+"""Run the three-arm Level 2 differential for a skill or bundle suite.
 
     python3 tools/compare_harbor_skill.py --skill dpnp-quickstart \\
         --model "<model>" --attempts 3 --previous-ref main
@@ -56,6 +56,7 @@ from datetime import datetime
 from pathlib import Path
 
 from check_harbor_job import LoadError, collect_trials, reward_of
+from harbor_suite import skill_names, suite_id
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SUITES_PATH = REPO_ROOT / "evaluation" / "harbor" / "suites.json"
@@ -138,30 +139,23 @@ def git(*arguments: str, binary: bool = False):
     return result.stdout if binary else result.stdout.strip()
 
 
-def suite_tasks(skill: str) -> list[str]:
-    """Implemented task names for a skill, from the manifest rather than the disk.
-
-    Reading the manifest and not tasks/ is deliberate: a task directory that no
-    suite claims must not quietly join a measurement. validate_skills.py already
-    fails when the two disagree.
-    """
+def load_suite(name: str) -> dict:
+    """Select one treatment and its tasks from the evaluation manifest."""
     try:
         document = json.loads(SUITES_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         die(f"cannot read {SUITES_PATH.name}: {exc}")
-    for suite in document.get("suites") or []:
-        if suite.get("skill") != skill:
-            continue
-        if suite.get("evaluated_here") is False:
-            die(f"{skill} is evaluated elsewhere; suites.json says so")
-        names = [
-            task["name"] for task in suite.get("tasks") or [] if task.get("status") == "implemented"
-        ]
-        if not names:
-            die(f"{skill} has no implemented tasks in suites.json")
-        return names
-    die(f"no suite for {skill!r} in {SUITES_PATH.name}")
-    return []
+    try:
+        matches = [suite for suite in document.get("suites") or [] if suite_id(suite) == name]
+        if len(matches) != 1:
+            die(f"expected one suite for {name!r} in {SUITES_PATH.name}, found {len(matches)}")
+        suite = matches[0]
+        skill_names(suite)
+    except ValueError as exc:
+        die(f"{SUITES_PATH.name}: {exc}")
+    if suite.get("evaluated_here") is False:
+        die(f"{name} is evaluated elsewhere; suites.json says so")
+    return suite
 
 
 def snapshot_candidate(skill: str, destination: Path) -> None:
@@ -234,7 +228,7 @@ def build_command(
             "--skill",
             rel(skill_dir),
             "--extra-instruction-path",
-            rel(INSTRUCTIONS_DIR / f"use-{args.skill}.md"),
+            rel(INSTRUCTIONS_DIR / f"use-{args.suite}.md"),
         ]
     return command
 
@@ -445,8 +439,10 @@ def cost_section(present: list[str], results: dict, tasks: list[str]) -> list[st
 def format_report(args: argparse.Namespace, tasks: list[str], results: dict, provenance: dict) -> str:
     present = [arm for arm in ARMS if arm in results]
     lines = [
-        f"# {args.skill} — Level 2 differential",
+        f"# {args.suite} — Level 2 differential",
         "",
+        "- supplied skills: " + ", ".join(f"`{name}`" for name in args.skills),
+        *([f"- scope: {args.scope_note}"] if args.scope_note else []),
         f"- agent `{args.agent}`, model `{args.model}`, {args.attempts} attempt(s) per task",
         f"- tasks from `evaluation/harbor/suites.json`: {len(tasks)}",
         f"- repository at `{provenance['head']}`"
@@ -525,6 +521,7 @@ def format_report(args: argparse.Namespace, tasks: list[str], results: dict, pro
         "told the skill is present. This isolates the skill's body and deliberately",
         "excludes whether the `description` would have led the agent to it unprompted.",
         "A green delta here is not evidence that the skill is discoverable.",
+        "For a bundle, the delta measures the supplied set, not any member's individual contribution.",
         "",
     ]
     return "\n".join(lines) + "\n"
@@ -532,7 +529,9 @@ def format_report(args: argparse.Namespace, tasks: list[str], results: dict, pro
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--skill", required=True, help="skill name, as in skills/<name>/")
+    selection = parser.add_mutually_exclusive_group(required=True)
+    selection.add_argument("--skill", help="legacy single-skill suite name")
+    selection.add_argument("--suite", help="suite id from evaluation/harbor/suites.json")
     parser.add_argument("--model", required=True, help="model identifier passed to harbor")
     parser.add_argument("--agent", default="claude-code", help="harbor agent (default claude-code)")
     parser.add_argument("--attempts", type=int, default=3, help="attempts per task, per arm")
@@ -542,7 +541,7 @@ def main() -> int:
         help="git ref for the 'previous' arm. Omit on a skill's first evaluation.",
     )
     parser.add_argument("--jobs-dir", default="harbor-jobs")
-    parser.add_argument("--job-prefix", default=None, help="default: the skill name")
+    parser.add_argument("--job-prefix", default=None, help="default: the suite id")
     parser.add_argument("--n-concurrent", type=int, default=2)
     parser.add_argument("--harbor", default="harbor", help="path to the harbor executable")
     parser.add_argument(
@@ -589,15 +588,23 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    skill_dir = REPO_ROOT / "skills" / args.skill
-    if not (skill_dir / "SKILL.md").is_file():
-        die(f"no skills/{args.skill}/SKILL.md")
-    treatment = INSTRUCTIONS_DIR / f"use-{args.skill}.md"
+    args.suite = args.suite or args.skill
+    suite = load_suite(args.suite)
+    args.skills = skill_names(suite)
+    if args.skill and args.skills != [args.skill]:
+        die("use --suite to select a bundle")
+    args.scope_note = suite.get("note")
+    for skill in args.skills:
+        if not (REPO_ROOT / "skills" / skill / "SKILL.md").is_file():
+            die(f"no skills/{skill}/SKILL.md")
+    treatment = INSTRUCTIONS_DIR / f"use-{args.suite}.md"
     if not treatment.is_file():
         die(f"no treatment instruction at {rel(treatment)}")
 
-    tasks = suite_tasks(args.skill)
-    prefix = args.job_prefix or args.skill
+    tasks = [task["name"] for task in suite.get("tasks") or [] if task.get("status") == "implemented"]
+    if not tasks or len(set(tasks)) != len(tasks):
+        die(f"{args.suite}: expected a non-empty list of unique implemented tasks")
+    prefix = args.job_prefix or args.suite
     jobs_dir = REPO_ROOT / args.jobs_dir
     arms_dir = jobs_dir / f"{prefix}-arms"
 
@@ -611,7 +618,7 @@ def main() -> int:
                 die(f"no {rel(job_dir)}/result.json — nothing to report on")
         provenance = {
             "head": git("rev-parse", "HEAD") or "unknown",
-            "dirty": bool(git("status", "--porcelain", "--", f"skills/{args.skill}")),
+            "dirty": bool(git("status", "--porcelain", "--", *(f"skills/{skill}" for skill in args.skills))),
             # The working tree has moved on since the run, so it cannot be read as the
             # provenance of these jobs. Say so rather than implying it was checked.
             "previous": "read from existing job directories; --report-only does not"
@@ -629,27 +636,31 @@ def main() -> int:
     # cannot change what was compared.
     remove_tree(arms_dir)
     (arms_dir / "candidate").mkdir(parents=True)
-    snapshot_candidate(args.skill, arms_dir / "candidate")
+    for skill in args.skills:
+        snapshot_candidate(skill, arms_dir / "candidate")
 
     previous_note = "not run (no --previous-ref given; treat as a first evaluation)"
     have_previous = False
     if args.previous_ref:
+        resolved = git("rev-parse", "--verify", f"{args.previous_ref}^{{commit}}")
+        if not resolved:
+            die(f"cannot resolve --previous-ref {args.previous_ref!r}")
         (arms_dir / "previous").mkdir(parents=True)
-        have_previous = snapshot_previous(args.skill, args.previous_ref, arms_dir / "previous")
+        missing = [skill for skill in args.skills if not snapshot_previous(skill, resolved, arms_dir / "previous")]
+        have_previous = not missing
         if have_previous:
-            resolved = git("rev-parse", args.previous_ref) or args.previous_ref
             previous_note = f"`{args.previous_ref}` ({resolved[:12]})"
         else:
             remove_tree(arms_dir / "previous")
             previous_note = (
-                f"not run — skills/{args.skill}/ does not exist at `{args.previous_ref}`, "
-                "so this is the skill's first evaluation"
+                f"not run — {', '.join(missing)} absent at `{args.previous_ref}`; "
+                "the previous arm requires every member of the selected skill set"
             )
             print(f"NOTE {previous_note}")
 
     provenance = {
         "head": git("rev-parse", "HEAD") or "unknown",
-        "dirty": bool(git("status", "--porcelain", "--", f"skills/{args.skill}")),
+        "dirty": bool(git("status", "--porcelain", "--", *(f"skills/{skill}" for skill in args.skills))),
         "previous": previous_note,
     }
 
