@@ -3,10 +3,11 @@ name: dpnp-io
 description: >-
   Reading and writing files from dpnp code on Intel CPUs and GPUs: loading .npy,
   .npz, HDF5, Zarr, CSV or text into dpnp arrays and saving dpnp results back to
-  disk, incremental writes, and choosing a file format by dataset size. Use when
-  the user needs to load a file into dpnp or save a result, or when a file is too
-  large to read at once and must be streamed. Not for chunking an in-memory
-  workload against device capacity (dpnp-memory).
+  disk, incremental writes, choosing a file format by dataset size, and telling
+  whether reading the files, rather than the device compute, limits a job. Use
+  when the user needs to load a file into dpnp or save a result, or when a file
+  is too large to read at once and must be streamed. Not for chunking an
+  in-memory workload against device capacity (dpnp-memory).
 license: Apache-2.0
 compatibility: "Requires dpnp and NumPy. HDF5 needs h5py, Zarr needs zarr, CSV parsing examples use pandas."
 metadata:
