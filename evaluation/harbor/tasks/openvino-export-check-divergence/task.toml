@@ -1,0 +1,33 @@
+schema_version = "1.3"
+
+[metadata]
+# The task -> skill link is this field, not the directory path: `harbor run` needs
+# a single discovery root, so tasks cannot nest under skills/.
+skill = "openvino-export-check"
+# Named by the author; no suite claims them yet, so a maintainer reconciles the names
+# when the suite is written.
+covers = ["divergence-localization", "export-repair"]
+author_name = "Rahman Bazarov"
+author_email = "96785952+JustRahman@users.noreply.github.com"
+difficulty = "medium"
+difficulty_explanation = "The exported IR differs from the source model for more than one reason, and fixing only the first one found still fails the tolerance"
+category = "programming"
+tags = ["python", "openvino", "export", "conversion", "debugging", "intel", "cpu"]
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+# The build installs openvino from PyPI and generates a small model. No compile step.
+# Err high: CI shares a Docker daemon and starts with no layer cache.
+build_timeout_sec = 600.0
+# Network is for the image build. The agent and the verifier run without it.
+network_mode = "no-network"
+cpus = 2
+memory_mb = 2048
+storage_mb = 4096
+# Inference runs on the CPU plugin, so the task runs in CI.
+gpus = 0
