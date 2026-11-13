@@ -12,12 +12,18 @@ There are two ways in, and they ask for different things.
 | | You are bringing an existing skill | You are writing a new skill |
 |---|---|---|
 | Where it came from | it already lives in an Intel project repository | you are writing it here, now |
-| What is required | `SKILL.md` + two lines in `skills.yaml` | the same, plus one Harbor task |
+| What is required | `SKILL.md` and `evals/evals.json`, both from upstream, + two lines in `skills.yaml` | `SKILL.md`, `evals/evals.json` and two lines in `skills.yaml`, plus one Harbor task |
 | Why | it has been used and reviewed where it was written; re-proving that here buys nothing | a skill nobody has exercised needs one runnable check that it describes something real |
 
-Everything else this repository can do — `evals/evals.json`, `perf/` measurements, a
-capability suite, the three-arm differential — is available to you and required of nobody.
-Add it when you want the stronger claim.
+Every skill carries `evals/evals.json`: real requests, what a correct answer to each
+contains, and literal terms a check can look for. Without it nothing states what the skill
+is for in a form anyone can check, and a differential run has nothing to score. An imported
+skill's evals are upstream's, like the rest of its files: upstream is where the skill is
+developed, and this repository is where it is published.
+
+Everything else this repository can do — `perf/` measurements, a capability suite, the
+three-arm differential — is available to you and required of nobody. Add it when you want
+the stronger claim.
 
 ## What makes a skill worth merging
 
@@ -130,18 +136,18 @@ excluded, because an eval case has to be able to name the phrase it tests for.
 
 Worked example: [`skills/dpnp-quickstart/SKILL.md`](skills/dpnp-quickstart/SKILL.md).
 
-### Optional directories
+### Other directories
 
 | Path | What goes in it |
 |---|---|
 | `references/` | detail the skill loads on demand, so the body stays short |
 | `scripts/` | helpers the skill runs. Keep them readable; they are instructions too |
-| `evals/evals.json` | cases recording what a correct answer contains |
+| `evals/evals.json` | **required.** Cases recording what a correct answer contains; [`templates/evals.json`](templates/evals.json) is a starting point |
 | `evals/trigger_eval_set.json` | messages that should and should not make an agent load the skill — `[{"query", "should_trigger"}]`, the format [skill-creator](https://github.com/anthropics/skills/tree/main/skills/skill-creator)'s `run_eval.py` reads |
 | `perf/` | hardware measurements. Three files together — see `templates/perf/` |
 
-None of these is required to merge. They are how a skill earns `validated` later, which is
-[MAINTAINERS.md](MAINTAINERS.md).
+Only `evals/evals.json` is required to merge. The rest are how a skill earns `validated`
+later, which is [MAINTAINERS.md](MAINTAINERS.md).
 
 ## 3. Add the catalog entry
 
@@ -199,6 +205,11 @@ Editing their document to satisfy our validator would break the thing that makes
 worth having — that the text has already been used and measured where it was written. The
 content rules do not relax: every file an import ships is scanned like every other.
 
+Upstream's `evals/` is part of the copy too, so an import's eval cases are written and kept
+upstream and arrive here with the pin; `sync_external.py --check` fails an `evals/` added
+here beside an import. `perf/` is the one directory that is never copied: it is this
+repository's own measurement of the skill.
+
 ### Add it to a bundle
 
 [`skills.sh.json`](skills.sh.json) groups the catalog into bundles on this repository's
@@ -225,7 +236,7 @@ install:
 ```bash
 python3 tools/validate_skills.py                 # every offline check CI blocks on
 python3 tools/validate_skills.py --check-links   # also checks external URLs; needs network
-python3 tools/run_evals.py --validate            # only if you wrote evals/evals.json
+python3 tools/run_evals.py --validate            # every evals/evals.json against its schema
 python3 tools/lint_task_leakage.py --fail-on-leak 5   # only if you wrote a Harbor task
 python3 tools/sync_external.py --check           # only if you imported a skill
 python3 tools/lint_skill_overlap.py --max-overlap 0.75 --min-shared 8 --advisory
@@ -344,6 +355,10 @@ Blocking, keyless, and runnable on a fork:
   install script, a destructive delete, an instruction aimed at the agent's operator, a
   route for a secret out, or a way to switch a protection off
 - `skills.yaml` has an entry with a maintainer, and the catalog and the tree agree
+- every skill has an `evals/evals.json` that follows
+  [`schemas/evals.schema.json`](schemas/evals.schema.json). The imports that arrived before
+  this was required are listed in `EVALS_PENDING` in `tools/validate_skills.py` until their
+  upstream adds the file; a listed skill that has it fails, so the list only shrinks
 - `skills.sh.json` follows the skills.sh schema, and every skill a bundle names has a
   `skills.yaml` entry
 - the workflows themselves lint clean (`actionlint`, `zizmor`)
@@ -408,7 +423,7 @@ differential — is in [MAINTAINERS.md](MAINTAINERS.md).
 
 | Status | What it means | What it requires |
 |---|---|---|
-| `published` | in the catalog, and agents load it | `SKILL.md`, a catalog entry, and — for a skill written here — a Harbor task |
+| `published` | in the catalog, and agents load it | `SKILL.md`, `evals/evals.json`, a catalog entry, and — for a skill written here — a Harbor task |
 | `validated` | carries benchmark evidence from real Intel hardware | plus `perf/`, `references/official-sources.md`, `intel-hw-validated-on`, a task portfolio meeting the suite policy, and a differential run that cleared its gate |
 
 Status lives in [`skills.yaml`](skills.yaml), never in `SKILL.md`. A first pull request
