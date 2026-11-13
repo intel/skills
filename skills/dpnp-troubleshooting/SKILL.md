@@ -103,8 +103,10 @@ print rather than what they were expected to print.
    ```
 
    The same restriction from outside the process is
-   `ONEAPI_DEVICE_SELECTOR=opencl:cpu` (it replaced the older
+   `ONEAPI_DEVICE_SELECTOR='*:cpu'` (it replaced the older
    `SYCL_DEVICE_FILTER`, which no longer has an effect on current runtimes).
+   Not `opencl:cpu`: after `pip install dpnp`, naming the OpenCL backend can
+   leave no device at all.
 
 4. **Slower than NumPy.** Three causes, in the order they occur:
 

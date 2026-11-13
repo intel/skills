@@ -174,14 +174,15 @@ device — the default SYCL device is the GPU only when one is visible.
    resolve among them:
 
    ```bash
-   ONEAPI_DEVICE_SELECTOR=opencl:cpu python my_script.py         # CPU only
+   ONEAPI_DEVICE_SELECTOR='*:cpu' python my_script.py           # CPU only
    ONEAPI_DEVICE_SELECTOR=level_zero:1 python my_script.py       # second Level Zero device only
-   ONEAPI_DEVICE_SELECTOR=opencl:cpu python -c "import dpctl; print(dpctl.get_devices())"
+   ONEAPI_DEVICE_SELECTOR='*:cpu' python -c "import dpctl; print(dpctl.get_devices())"
    ```
 
-   The last line shows what the selector leaves visible; `dpctl.get_devices()`
-   works wherever dpnp imports, where `sycl-ls` is often missing from pip
-   installs. The selector replaced the older `SYCL_DEVICE_FILTER`, which no
+   Write the CPU selector as `'*:cpu'`, not `opencl:cpu`: after `pip install
+   dpnp`, naming the OpenCL backend can leave no device at all. The last line
+   shows what the selector leaves visible; `dpctl.get_devices()` works wherever
+   dpnp imports, where `sycl-ls` is often missing from pip installs. The selector replaced the older `SYCL_DEVICE_FILTER`, which no
    longer has an effect on current runtimes. Code that also runs under a
    selector should name a device by type (`device="gpu"`) rather than by index,
    since the devices left visible may not keep their numbers. Print
