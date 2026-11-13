@@ -1,0 +1,33 @@
+schema_version = "1.3"
+
+[metadata]
+# The task -> skill link is this field, not the directory path: `harbor run` needs
+# a single discovery root, so tasks cannot nest under skills/.
+skill = "openvino-int8-quantize"
+# Named by the author; no suite claims them yet, so a maintainer reconciles the names
+# when the suite is written.
+covers = ["ptq-correctness", "accuracy-bar-verification"]
+author_name = "Rahman Bazarov"
+author_email = "96785952+JustRahman@users.noreply.github.com"
+difficulty = "medium"
+difficulty_explanation = "The INT8 IR has to quantize activations as well as weights, hold accuracy on a split the agent never sees, and come with a report whose numbers the verifier can reproduce"
+category = "programming"
+tags = ["python", "openvino", "nncf", "quantization", "int8", "intel", "cpu"]
+
+[verifier]
+timeout_sec = 300.0
+
+[agent]
+timeout_sec = 900.0
+
+[environment]
+# The build installs openvino and nncf from PyPI and generates a small model and its
+# data. No compile step. Err high: CI shares a Docker daemon and starts with no cache.
+build_timeout_sec = 900.0
+# Network is for the image build. The agent and the verifier run without it.
+network_mode = "no-network"
+cpus = 2
+memory_mb = 4096
+storage_mb = 8192
+# Quantization and inference both run on the CPU plugin, so the task runs in CI.
+gpus = 0

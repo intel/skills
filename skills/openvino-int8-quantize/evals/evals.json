@@ -1,0 +1,74 @@
+{
+  "skill_name": "openvino-int8-quantize",
+  "evals": [
+    {
+      "id": "bar-before-quantizing",
+      "prompt": "I have a ResNet-style classifier exported to OpenVINO IR. Quantize it to INT8 for our Xeon servers so it runs faster. I have about 500 unlabelled images and 2000 labelled ones.",
+      "expected_output": "Agent asks for or proposes an accuracy bar before quantizing, picks full post-training quantization with nncf.quantize because the goal is speed on a convolutional network, builds an nncf.Dataset from the unlabelled images through the inference pre-processing, and scores FP32 and INT8 on labelled images that were not used for calibration. It reports pass or fail against the bar and measures speed with benchmark_app.",
+      "checks": {
+        "must_include": [
+          "nncf.quantize",
+          "nncf.Dataset",
+          "benchmark_app"
+        ]
+      }
+    },
+    {
+      "id": "llm-wants-weight-compression",
+      "prompt": "My 7B LLM in OpenVINO format is too big on disk. Can I int8 it with nncf.quantize?",
+      "expected_output": "Agent says that for an LLM where the goal is size, weight-only compression with nncf.compress_weights (or optimum-cli export openvino with --weight-format) is the right path, not full quantization of activations. It says weight-only compression mostly changes size and memory and does not promise a CPU speed-up. It still asks how output quality will be checked against the FP32 model.",
+      "checks": {
+        "must_include": [
+          "compress_weights"
+        ],
+        "must_not_include": [
+          "guaranteed speedup",
+          "always faster"
+        ]
+      }
+    },
+    {
+      "id": "accuracy-collapsed-after-ptq",
+      "prompt": "After nncf.quantize my classifier went from good accuracy to almost random. I passed the raw JPEG arrays as the calibration dataset. What is wrong?",
+      "expected_output": "Agent identifies that calibration items must go through the same pre-processing as inference, so the transform function of nncf.Dataset has to apply resize, normalization and layout exactly as the application does. It tells the user to fix the transform and quantize again, and to confirm first that the FP32 IR itself scores as expected.",
+      "checks": {
+        "must_include": [
+          "nncf.Dataset",
+          "pre-processing"
+        ]
+      }
+    },
+    {
+      "id": "detector-in-a-tracker",
+      "prompt": "I quantized my YOLO detector to INT8 with NNCF. mAP is almost the same but my tracker now loses a lot of tracks. Same confidence threshold as before.",
+      "expected_output": "Agent says the metric that counts is the tracking metric, not the detector mAP, and that quantization shifts scores so the confidence threshold has to be swept again for the INT8 model on a tuning split. It suggests keeping the detection head in float with ignored_scope if the sweep is not enough, and reporting each variant at its own best threshold and at the old one on held-out sequences.",
+      "checks": {
+        "must_include": [
+          "threshold",
+          "ignored_scope"
+        ]
+      }
+    },
+    {
+      "id": "fp32-ir-already-wrong",
+      "prompt": "My OpenVINO FP32 model already scores well below the PyTorch model. I plan to quantize to INT8 anyway and fix accuracy with quantize_with_accuracy_control. OK?",
+      "expected_output": "Agent says no: accuracy-aware quantization measures the drop against the FP32 IR, so it cannot repair an export that already disagrees with the source framework. It sends the user to openvino-export-check to find the divergence first, and returns to quantization once the FP32 IR matches.",
+      "checks": {
+        "must_include": [
+          "openvino-export-check"
+        ]
+      }
+    },
+    {
+      "id": "misses-the-bar",
+      "prompt": "Our bar was at most one point of accuracy lost. Full INT8 loses more than that even with accuracy control and more calibration data. My manager wants INT8 shipped. What do I report?",
+      "expected_output": "Agent says the full INT8 variant failed the bar and is reported as failed, not shipped with a note. It offers the fallbacks that can still pass: excluding sensitive layers, weight-only compression, or FP16, each scored on the same held-out data against the same bar. It does not suggest loosening the bar after seeing the results.",
+      "checks": {
+        "must_include": [
+          "FP16",
+          "fail"
+        ]
+      }
+    }
+  ]
+}
