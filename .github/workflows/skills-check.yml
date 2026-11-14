@@ -1,0 +1,64 @@
+name: Skills check
+
+# Free dokimi checks: no model, no secret, no cost. Only the first check can fail the run.
+# Results: the run summary, and the reports in the skills-check-reports artifact.
+
+on:
+  pull_request:
+    paths:
+      - 'skills/**'
+      - 'skills.yaml'
+      - 'evaluation/harbor/**'
+      - '.github/workflows/skills-check.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'skills/**'
+      - 'skills.yaml'
+      - 'evaluation/harbor/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  skills-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      # dokimi-ref is the commit of the `uses:` line: bump the two together.
+      - uses: intel/dokimi/actions/setup@0883b7e92337c5e860a0c340fba8c1d76421851a  # v0.2.0
+        id: dokimi
+        with:
+          dokimi-ref: 0883b7e92337c5e860a0c340fba8c1d76421851a
+      - name: Skills and Harbor tasks load (fails on a skill or task that cannot load)
+        shell: bash
+        env:
+          OUT: ${{ steps.dokimi.outputs.out-dir }}
+        run: |
+          status=0
+          dokimi catalog check --root . --kind all --tasks-subdir evaluation/harbor/tasks \
+            --skip-nested --strict --format text > "$OUT/check.txt" || status=$?
+          { echo '## Skills check'; echo '````text'; cat "$OUT/check.txt"; echo '````'; } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+      - name: Static plan, on a pull request for the skills it touches (report only)
+        if: ${{ !cancelled() && steps.dokimi.outcome == 'success' }}
+        shell: bash
+        env:
+          OUT: ${{ steps.dokimi.outputs.out-dir }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          changed=()
+          if [ -n "$BASE_SHA" ]; then changed=(--changed-from "$BASE_SHA"); fi
+          dokimi catalog eval . --tier static "${changed[@]}" --out-dir "$OUT/catalog-eval" || true
+          cat "$OUT/catalog-eval/report.md" >> "$GITHUB_STEP_SUMMARY" || echo 'Static plan: not run' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        if: always()
+        with:
+          name: skills-check-reports
+          path: ${{ steps.dokimi.outputs.out-dir }}
+          if-no-files-found: ignore
