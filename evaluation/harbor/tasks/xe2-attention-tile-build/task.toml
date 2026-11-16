@@ -1,0 +1,30 @@
+schema_version = "1.3"
+
+[metadata]
+skills = ["esimd-base", "esimd-lsc-2d-gather-scatter", "esimd-lsc-slm", "xe2-dpas-patterns"]
+covers = ["dpas-operand-loading", "slm-partial-combine", "aot-build-integration"]
+author_name = "Benjamin Ummenhofer"
+author_email = "benjamin.ummenhofer@intel.com"
+difficulty = "hard"
+difficulty_explanation = "Two DPAS products with differently laid out operands, a numerically stable softmax and a cross-work-item combine through SLM, written without a GPU to test on"
+category = "programming"
+tags = ["sycl", "esimd", "xmx", "dpas", "intel", "gpu", "attention"]
+
+[verifier]
+# The verifier compiles the kernel ahead of time (tens of seconds) and, when a GPU is
+# visible, runs it once.
+timeout_sec = 900.0
+
+[agent]
+timeout_sec = 1800.0
+
+[environment]
+# A cold build installs the oneAPI compiler (~5.4 GB image); ~6 min on an idle host.
+build_timeout_sec = 3600.0
+network_mode = "no-network"
+cpus = 4
+memory_mb = 8192
+storage_mb = 20480
+# The task is built and graded without a GPU. A host that passes an Intel GPU into
+# the container additionally gets the numerical check.
+gpus = 0
