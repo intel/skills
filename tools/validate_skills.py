@@ -170,6 +170,43 @@ OFFICIAL_SOURCES = "references/official-sources.md"
 # only a summary is a number with no measurement behind it.
 PERF_REQUIRED = ("hw-results.json", "summary.md", "benchmark_config.json")
 
+# What every skill records about a correct answer: real requests, what a correct
+# response contains, and literal check terms (schemas/evals.schema.json). Without it
+# nothing states what the skill is for in a form anyone can check, so it is required
+# at every status, of a skill written here and of an import alike.
+EVALS_FILE = "evals/evals.json"
+# Imports that arrived before the file was required. Each waits for upstream to add
+# it; it then arrives with a pin bump, and the name has to leave this set in the same
+# pull request. The set only shrinks: a name here whose skill has the file is an error,
+# and adding one is a change to this file that review sees.
+EVALS_PENDING = frozenset(
+    {
+        "cuda-to-xpu-migration",
+        "linux-perf",
+        "llamacpp-xpu-run",
+        "model-can-it-fit",
+        "model-config-recommend",
+        "performance-patterns",
+        "phoronix-test-suite",
+        "sglang-xpu-bench",
+        "sglang-xpu-run",
+        "torch-xpu-bench",
+        "torch-xpu-profile",
+        "torch-xpu-run",
+        "vllm-xpu-bench",
+        "vllm-xpu-profile",
+        "vllm-xpu-run",
+        "xpu-container-run",
+        "xpu-deploy-plan",
+        "xpu-discover",
+        "xpu-model-type-detect",
+        "xpu-port",
+        "xpu-profile-unitrace",
+        "xpu-runtime-preflight",
+        "xpu-system-setup",
+    }
+)
+
 # A fenced block or an HTML comment is not prose: a path or a URL inside one is a
 # command argument rather than a reference, and the checks that read the body strip
 # both out first.
@@ -299,10 +336,12 @@ MENTION_RE = re.compile(r"(?<![\w/-])(?:references|scripts|assets)/[A-Za-z0-9_./
 # eval case has to be able to name the phrase it tests for, and perf/ is generated
 # measurement data rather than text an agent loads.
 SCAN_EXCLUDE_DIRS = {"evals", "perf"}
-# The same two directories, under the name the reason goes by in
-# tools/sync_external.py: they are this repository's own evidence about an imported
-# skill, so they are not part of the copy and are not compared against upstream.
-NOT_VENDORED_DIRS = SCAN_EXCLUDE_DIRS
+# The part of an imported skill that is not upstream's, under the name the reason goes
+# by in tools/sync_external.py. perf/ is this repository's measurement of the skill on
+# hardware upstream may not have. evals/ is not on the list: upstream is where an
+# imported skill is developed and this repository is where it is published, so its
+# eval cases arrive with its other files and are compared against the pin like them.
+NOT_VENDORED_DIRS = {"perf"}
 # Files that may ship without being mentioned. SKILL.md is the document doing the
 # mentioning. .source.json records where an import came from, and an imported
 # SKILL.md keeps upstream's text as it was — text that cannot refer to an artifact
@@ -884,10 +923,8 @@ def check_catalog(
 
         has_perf = has_files(skill_dir / "perf")
 
-        # evals/evals.json is not required at any status. It records what a correct
-        # answer contains, which is useful and voluntary; a skill whose value is a
-        # workflow rather than a set of facts has nothing to put in it, and requiring
-        # the file from such a skill produces cases written to satisfy the check.
+        # evals/evals.json is required at every status; check_evals holds every skill
+        # to it.
         if status == "validated":
             if not has_perf:
                 report.error(f"skills/{name}/: status {status!r} requires perf/")
@@ -928,6 +965,38 @@ def check_catalog(
             report.error(
                 f"skills.yaml: {name}: status {status!r} requires intel-hw-validated-on"
             )
+
+
+def check_evals(
+    skill_types: dict[str, str], imported: set[str], report: Report
+) -> None:
+    for name in sorted(skill_types):
+        has_evals = (SKILLS_DIR / name / EVALS_FILE).is_file()
+        if name in EVALS_PENDING:
+            if name not in imported:
+                report.error(
+                    f"skills/{name}/: EVALS_PENDING in tools/validate_skills.py names a "
+                    f"skill written here — it carries its own {EVALS_FILE}"
+                )
+            elif has_evals:
+                report.error(
+                    f"skills/{name}/: {EVALS_FILE} has arrived, so remove {name!r} from "
+                    "EVALS_PENDING in tools/validate_skills.py"
+                )
+        elif not has_evals:
+            where = (
+                "upstream adds it, and it arrives with the next pin"
+                if name in imported
+                else "templates/evals.json is a starting point"
+            )
+            report.error(
+                f"skills/{name}/: no {EVALS_FILE}, which every skill needs — {where}"
+            )
+    for name in sorted(EVALS_PENDING - set(skill_types)):
+        report.error(
+            f"EVALS_PENDING in tools/validate_skills.py names {name!r}, which has no "
+            "skills/ directory: remove it"
+        )
 
 
 def effective_license(entry: dict[str, str]) -> str:
@@ -1774,6 +1843,7 @@ def main() -> int:
     catalog = parse_catalog(report)
     imported = {name for name, source in sources.items() if source is not None}
     check_catalog(catalog, skill_types, report)
+    check_evals(skill_types, imported, report)
     check_licenses(catalog, skill_types, fronts, report)
     check_imports(catalog, sources, report)
     check_trigger_vocabulary(catalog, descriptions, imported, report)

@@ -14,7 +14,7 @@ If you are contributing a skill, you do not need this file.
 | `skills/<name>/SKILL.md` | the skill: the only required file, the only one an agent must read |
 | `skills/<name>/references/` | detail the skill loads on demand |
 | `skills/<name>/scripts/` | helpers the skill ships |
-| `skills/<name>/evals/evals.json` | eval cases: what a correct answer contains. Optional |
+| `skills/<name>/evals/evals.json` | eval cases: what a correct answer contains. Required; an import's come from upstream |
 | `skills/<name>/perf/` | hardware measurements. Required for `validated`, optional before |
 | `skills/<name>/.source.json` | present when the skill was imported: upstream repo, path, commit |
 | `skills.yaml` | the catalog. Maintainer, status, and the optional Intel product fields |
@@ -32,7 +32,7 @@ Two statuses, in `skills.yaml` and nowhere else:
 
 | Status | Means | Requires |
 |---|---|---|
-| `published` | in the catalog, agents load it | `SKILL.md`, a catalog entry, and — for a skill written here — one Harbor task |
+| `published` | in the catalog, agents load it | `SKILL.md`, `evals/evals.json`, a catalog entry, and — for a skill written here — one Harbor task |
 | `validated` | carries benchmark evidence from real Intel hardware | everything below |
 
 A first pull request lands at `published`. Nothing a contributor does moves a skill to
@@ -192,7 +192,8 @@ the portfolio in view to make, and the task is run by the oracle job either way.
 ## Eval files
 
 `skills/<name>/evals/evals.json` records what a correct answer contains: a real user
-request, prose describing a correct response, and literal check terms.
+request, prose describing a correct response, and literal check terms. Every skill has
+one; an imported skill's is vendored from upstream with its other files.
 
 ```
 tools/run_evals.py --validate                    # schema gate, runs on every PR
