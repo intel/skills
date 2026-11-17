@@ -50,10 +50,12 @@ jobs:
         shell: bash
         env:
           OUT: ${{ steps.dokimi.outputs.out-dir }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          EVENT: ${{ github.event_name }}
+        # A pull request checks out its merge commit, whose first parent is the current base;
+        # pull_request.base.sha stays at the base the PR was opened on.
         run: |
           changed=()
-          if [ -n "$BASE_SHA" ]; then changed=(--changed-from "$BASE_SHA"); fi
+          if [ "$EVENT" = pull_request ]; then changed=(--changed-from HEAD^1); fi
           dokimi catalog eval . --tier static "${changed[@]}" --out-dir "$OUT/catalog-eval" || true
           cat "$OUT/catalog-eval/report.md" >> "$GITHUB_STEP_SUMMARY" || echo 'Static plan: not run' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
