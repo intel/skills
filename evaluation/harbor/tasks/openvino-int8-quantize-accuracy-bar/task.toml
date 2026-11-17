@@ -10,7 +10,7 @@ covers = ["ptq-correctness", "accuracy-bar-verification"]
 author_name = "Rahman Bazarov"
 author_email = "96785952+JustRahman@users.noreply.github.com"
 difficulty = "medium"
-difficulty_explanation = "The INT8 IR has to quantize activations as well as weights, hold accuracy on a split the agent never sees, and come with a report whose numbers the verifier can reproduce"
+difficulty_explanation = "The instruction gives only the goal and the bar. The agent has to choose the method, find how the application feeds the model, and hold accuracy against a baseline and a split the verifier rebuilds itself"
 category = "programming"
 tags = ["python", "openvino", "nncf", "quantization", "int8", "intel", "cpu"]
 

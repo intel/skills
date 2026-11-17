@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
-"""Build-time generator: a small FP32 classifier IR and its data splits.
-
-Run once by the Dockerfile and then removed. Everything is seeded, so the image is the
-same on every build. tests/test_quantize.py repeats make_split() to draw its own split.
-"""
 from pathlib import Path
 
 import numpy as np
 import openvino as ov
 from openvino import opset13 as ops
 
-from preprocess import preprocess
+from classify import preprocess
 
 APP = Path("/app")
 CLASSES = 10
@@ -20,7 +15,6 @@ NOISE = 0.15
 
 
 def make_split(seed, count):
-    """uint8 HWC images and labels. Each sample has its own signal strength."""
     templates = np.sign(np.random.default_rng(TEMPLATE_SEED).standard_normal((CLASSES, 16, 16, 3)))
     rng = np.random.default_rng(seed)
     labels = rng.integers(0, CLASSES, size=count)
@@ -50,7 +44,6 @@ def main():
     core = ov.Core()
     f32 = {"INFERENCE_PRECISION_HINT": "f32"}
 
-    # Fit the last layer by ridge regression on the fixed backbone's features.
     train_images, train_labels = make_split(1, 4000)
     x = ops.parameter([-1, 3, 16, 16], np.float32, name="image")
     extractor = core.compile_model(ov.Model([ops.result(backbone(x))], [x], "backbone"), "CPU", f32)

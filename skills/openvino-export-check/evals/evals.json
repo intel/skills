@@ -2,71 +2,72 @@
   "skill_name": "openvino-export-check",
   "evals": [
     {
-      "id": "compare-in-order",
-      "prompt": "My detector gets a clearly lower mAP in OpenVINO than in PyTorch. Same weights, FP32. Where do I start?",
-      "expected_output": "Agent does not start from the metric. It asks for the exact export command, inspects the IR inputs, outputs and operations, then compares in order: the pre-processed input tensor from both pipelines, the raw outputs for an identical tensor with INFERENCE_PRECISION_HINT set to f32, the post-processed detections, and only then the metric. It stops at the first stage that differs.",
+      "id": "two-loaders-one-metric",
+      "prompt": "My detector gets mAP 0.61 in PyTorch and 0.48 through OpenVINO Runtime. Same weights, FP32, nothing quantized. The PyTorch eval reads images with cv2.imread and pads them to 640. The OpenVINO script reads them with PIL, resizes straight to 640x640 and divides by 255. A colleague says to retrain. Where do I start?",
+      "expected_output": "Does not retrain and does not start from the metric. The first comparison is the tensor each pipeline feeds its model for one image: cv2 gives BGR and PIL gives RGB, and padding to 640 is not the same as stretching to 640x640. Only when the two tensors agree does it compare raw model outputs for one identical tensor, then detections, then mAP.",
       "checks": {
         "must_include": [
-          "INFERENCE_PRECISION_HINT",
-          "pre-processing"
+          "bgr"
         ]
       }
     },
     {
-      "id": "baked-in-score-filter",
-      "prompt": "I exported my YOLO model to OpenVINO with nms=True. My tracker now gets far fewer low-confidence boxes than with the PyTorch model, even though I set my own threshold very low.",
-      "expected_output": "Agent explains that an export with NMS in the graph also bakes in a score filter with a threshold fixed at export time, so boxes under it never leave the model and a lower threshold outside cannot bring them back. It tells the user to export again with the filter threshold set as low as the tracker needs (the conf argument), or to export without NMS and filter outside, and then to compare raw outputs and detections again.",
+      "id": "third-decimal",
+      "prompt": "I converted an ONNX classifier with ov.convert_model and wrote it to disk with ov.save_model(model, 'm.xml'). On CPU the logits differ from ONNX Runtime around the third or fourth decimal. Top-1 is the same on every image I tried. Is the conversion broken?",
+      "expected_output": "Says this size of difference points at precision, not at a broken conversion: ov.save_model stores weights as FP16 unless told otherwise, and the device may pick a smaller float type. Tells the user to save again without FP16 compression, pin f32 inference precision, and compare again against a tolerance chosen beforehand.",
       "checks": {
         "must_include": [
-          "conf",
+          "compress_to_fp16"
+        ]
+      }
+    },
+    {
+      "id": "cutoff-inside-the-model",
+      "prompt": "I exported YOLO with Ultralytics to OpenVINO using nms=True. My tracker keeps tracks through occlusions with the .pt model and loses them with the IR, although I pass a very low confidence at predict time on both. Which operation types in the .xml would tell me whether a score cut-off sits inside the model, and what do I do about it?",
+      "expected_output": "Explains that an export with NMS in the graph carries a score threshold fixed at export time, so boxes under it never leave the model and a lower threshold at predict time cannot bring them back. Names the operation to look for near the outputs. Tells the user to export again with the threshold as low as the tracker needs, or without NMS and filter outside, then compare raw outputs and detections again.",
+      "checks": {
+        "must_include": [
           "NonMaxSuppression"
         ]
       }
     },
     {
-      "id": "identical-tensor-rules-out-preprocessing",
-      "prompt": "I fed the exact same numpy array to the PyTorch model and to the OpenVINO IR and the outputs have different shapes. Is this a pre-processing issue?",
-      "expected_output": "Agent says no: with an identical input tensor, pre-processing is ruled out. A different output count or shape means the exporter produced another head (decoded or raw, end-to-end or NMS-based), so the export arguments are the place to look. It asks for the export command and suggests exporting with the head the source pipeline uses.",
+      "id": "clean-graph-wrong-everywhere",
+      "prompt": "I feed one identical float32 array to a PyTorch ResNet and to an IR someone made from it with a script I do not have. The outputs disagree badly on every sample, not in the small decimals. The IR starts with a plain Convolution, there is no Subtract, Multiply or Divide before it, and the output shape is right. Both are supposed to be the same checkpoint. What do I check next?",
+      "expected_output": "Goes to the constants: compares the first convolution's weight and bias in the IR with the checkpoint. If the weights differ by a factor that is constant per input channel and the bias is shifted, the exporter folded mean and scale normalisation into the first layer, so the input is normalised twice. Otherwise suspects a wrong checkpoint or training mode. Suggests bisecting with intermediate outputs if the constants match.",
       "checks": {
         "must_include": [
-          "export"
-        ],
-        "must_not_include": [
-          "rounding error"
+          "normali"
         ]
       }
     },
     {
-      "id": "small-differences-fp16",
-      "prompt": "OpenVINO outputs differ from ONNX Runtime in the third decimal. I saved with ov.save_model and run on CPU. Is the conversion broken?",
-      "expected_output": "Agent says small differences usually come from precision, not a broken conversion: ov.save_model compresses weights to FP16 by default, and the device may run in a smaller float type. It tells the user to save again with compress_to_fp16=False and compile with the f32 precision hint, compare again against a tolerance written down first, and treat FP16 as a separate variant to measure later.",
+      "id": "three-outputs-became-one",
+      "prompt": "For the same input array my PyTorch detector returns a tensor of shape [1, 84, 8400] and the IR I was handed returns [1, 300, 6]. A colleague says that is float noise and I should just compare mAP. Is he right?",
+      "expected_output": "Says no. A different output shape cannot be rounding: the IR was exported with another head, one that already selects up to 300 final boxes with score and class, either an end-to-end head or suppression baked into the graph. The place to look is the export arguments, and the fix is to export the head the source pipeline uses or to compare after the same post-processing.",
       "checks": {
         "must_include": [
-          "compress_to_fp16",
-          "f32"
+          "nms"
         ]
       }
     },
     {
-      "id": "matches-but-uses-more-memory",
-      "prompt": "The OpenVINO model matches PyTorch exactly, but it uses much more memory than I expected. Input size is always the same in production. The IR input shape shows question marks.",
-      "expected_output": "Agent says the IR has dynamic dimensions and the shape is in fact fixed, so reshaping the model to a static shape with model.reshape (or exporting with a static shape) lets the runtime plan memory for one size. It tells the user to measure memory before and after and to confirm outputs still match. It does not promise a specific saving.",
+      "id": "matches-but-heavy",
+      "prompt": "The IR matches PyTorch on every sample. Memory on CPU is far above what I expected and it grows the first time each new resolution arrives, but production only ever sends 1x3x640x640. Printing the model input shows [?,3,?,?]. What should I change?",
+      "expected_output": "Says the IR has dynamic dimensions while the real shape is fixed, so the runtime cannot plan memory for one size. Tells the user to fix the shape on the model (or export it static), then measure memory again and confirm outputs still match. Does not promise a specific saving.",
       "checks": {
         "must_include": [
           "reshape"
-        ],
-        "must_not_include": [
-          "guaranteed"
         ]
       }
     },
     {
-      "id": "loss-only-after-int8",
-      "prompt": "My FP32 OpenVINO IR matches PyTorch to rounding on raw outputs and on the metric. After nncf.quantize the metric drops. Is my export wrong?",
-      "expected_output": "Agent says the export is confirmed correct by the FP32 comparison, so the loss comes from quantization and not from the export. It hands off to openvino-int8-quantize for calibration data, thresholds and layers to keep in float.",
+      "id": "export-already-proven",
+      "prompt": "My FP32 IR agrees with PyTorch to 1e-6 on raw outputs for 200 real images, and top-1 is identical. After nncf.quantize top-1 is 6 points lower. Should I convert again with different ov.convert_model arguments?",
+      "expected_output": "Says no: the FP32 comparison already proves the conversion, so the loss comes from quantization. Points at the quantization inputs instead: what data was used to compute ranges and whether it went through the inference pre-processing, and which layers could stay in float.",
       "checks": {
         "must_include": [
-          "openvino-int8-quantize"
+          "calibration"
         ]
       }
     }

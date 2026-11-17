@@ -2,7 +2,6 @@
 set -uo pipefail
 REWARD_FILE="/logs/verifier/reward.txt"
 mkdir -p /logs/verifier
-# set +e around pytest: with -e a failing test aborts before the 0 is written.
 set +e
 python3 -m pytest /tests/test_quantize.py -v 2>&1
 EXIT_CODE=$?

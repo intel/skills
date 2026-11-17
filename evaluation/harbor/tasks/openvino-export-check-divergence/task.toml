@@ -10,7 +10,7 @@ covers = ["divergence-localization", "export-repair"]
 author_name = "Rahman Bazarov"
 author_email = "96785952+JustRahman@users.noreply.github.com"
 difficulty = "medium"
-difficulty_explanation = "The exported IR differs from the source model for more than one reason, and fixing only the first one found still fails the tolerance"
+difficulty_explanation = "The exporter is not shipped. One defect is visible in the graph and the other only in the values of the first layer's constants, and the report has to isolate each one with a number the verifier reproduces"
 category = "programming"
 tags = ["python", "openvino", "export", "conversion", "debugging", "intel", "cpu"]
 

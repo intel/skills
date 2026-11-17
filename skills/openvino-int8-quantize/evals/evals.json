@@ -2,71 +2,74 @@
   "skill_name": "openvino-int8-quantize",
   "evals": [
     {
-      "id": "bar-before-quantizing",
-      "prompt": "I have a ResNet-style classifier exported to OpenVINO IR. Quantize it to INT8 for our Xeon servers so it runs faster. I have about 500 unlabelled images and 2000 labelled ones.",
-      "expected_output": "Agent asks for or proposes an accuracy bar before quantizing, picks full post-training quantization with nncf.quantize because the goal is speed on a convolutional network, builds an nncf.Dataset from the unlabelled images through the inference pre-processing, and scores FP32 and INT8 on labelled images that were not used for calibration. It reports pass or fail against the bar and measures speed with benchmark_app.",
+      "id": "cnn-for-speed",
+      "prompt": "I have a ResNet-50 as an OpenVINO IR and want it faster on our Xeon servers. I have about 500 images without labels and 2000 with labels. Which NNCF call do I use, and what do I do with the two sets of images?",
+      "expected_output": "Agrees an accuracy limit with the user before running anything. Picks full post-training quantization of weights and activations because the goal is speed on a convolutional network. Uses the unlabelled images, passed through the inference pre-processing, to compute ranges, and scores FP32 and INT8 on labelled images that were not used for that. Reports pass or fail against the limit and measures speed on the target CPU.",
       "checks": {
         "must_include": [
           "nncf.quantize",
-          "nncf.Dataset",
-          "benchmark_app"
+          "nncf.Dataset"
         ]
       }
     },
     {
-      "id": "llm-wants-weight-compression",
-      "prompt": "My 7B LLM in OpenVINO format is too big on disk. Can I int8 it with nncf.quantize?",
-      "expected_output": "Agent says that for an LLM where the goal is size, weight-only compression with nncf.compress_weights (or optimum-cli export openvino with --weight-format) is the right path, not full quantization of activations. It says weight-only compression mostly changes size and memory and does not promise a CPU speed-up. It still asks how output quality will be checked against the FP32 model.",
+      "id": "llm-too-big",
+      "prompt": "My Phi-3-mini in OpenVINO format is 7.6 GB on disk in FP32 and the laptop has 16 GB of RAM. A colleague told me to run nncf.quantize with wikitext samples. Is that the right call?",
+      "expected_output": "Says that for an LLM where the goal is size and memory, the right path is weight-only compression (8-bit or 4-bit weights, activations left in float), not full quantization of activations. Says this mainly changes size and memory and that speed has to be measured. Asks how output quality will be compared with the FP32 model.",
       "checks": {
         "must_include": [
           "compress_weights"
-        ],
-        "must_not_include": [
-          "guaranteed speedup",
-          "always faster"
         ]
       }
     },
     {
-      "id": "accuracy-collapsed-after-ptq",
-      "prompt": "After nncf.quantize my classifier went from good accuracy to almost random. I passed the raw JPEG arrays as the calibration dataset. What is wrong?",
-      "expected_output": "Agent identifies that calibration items must go through the same pre-processing as inference, so the transform function of nncf.Dataset has to apply resize, normalization and layout exactly as the application does. It tells the user to fix the transform and quantize again, and to confirm first that the FP32 IR itself scores as expected.",
+      "id": "collapsed-to-chance",
+      "prompt": "After nncf.quantize my ImageNet classifier fell from 76% top-1 to under 1%. I built the calibration set as nncf.Dataset(images), where images is a list of uint8 HWC arrays straight from cv2.imread. My inference code resizes, crops to 224, scales to 0..1, subtracts the mean, divides by the std and moves channels first. What went wrong?",
+      "expected_output": "Identifies that the ranges were computed on tensors the model never sees at inference: the calibration items skipped resize, crop, scaling, mean and std, and layout. The dataset needs a function that turns each item into exactly the tensor inference feeds. Tells the user to fix that and quantize again, and to confirm the FP32 IR scores as expected first.",
       "checks": {
         "must_include": [
-          "nncf.Dataset",
-          "pre-processing"
+          "transform"
         ]
       }
     },
     {
-      "id": "detector-in-a-tracker",
-      "prompt": "I quantized my YOLO detector to INT8 with NNCF. mAP is almost the same but my tracker now loses a lot of tracks. Same confidence threshold as before.",
-      "expected_output": "Agent says the metric that counts is the tracking metric, not the detector mAP, and that quantization shifts scores so the confidence threshold has to be swept again for the INT8 model on a tuning split. It suggests keeping the detection head in float with ignored_scope if the sweep is not enough, and reporting each variant at its own best threshold and at the old one on held-out sequences.",
+      "id": "map-held-tracks-lost",
+      "prompt": "I quantized a YOLO detector with NNCF. mAP50-95 is 0.412 against 0.415 for FP32, but MOTA with ByteTrack fell from 71 to 63. I already tuned the confidence thresholds again for the INT8 model and got back only half of it. What else can I change in the quantization itself?",
+      "expected_output": "Says the number that counts is the tracking metric, so mAP holding does not settle it: quantization shifts the scores the tracker depends on. Since the threshold sweep is done, proposes keeping the detection head (the box and score layers) in float by excluding it from quantization, then scoring each variant on held-out sequences at its own best threshold and at the old one.",
       "checks": {
         "must_include": [
-          "threshold",
           "ignored_scope"
         ]
       }
     },
     {
-      "id": "fp32-ir-already-wrong",
-      "prompt": "My OpenVINO FP32 model already scores well below the PyTorch model. I plan to quantize to INT8 anyway and fix accuracy with quantize_with_accuracy_control. OK?",
-      "expected_output": "Agent says no: accuracy-aware quantization measures the drop against the FP32 IR, so it cannot repair an export that already disagrees with the source framework. It sends the user to openvino-export-check to find the divergence first, and returns to quantization once the FP32 IR matches.",
+      "id": "one-point-budget",
+      "prompt": "Set up NNCF so my classifier loses at most 1 point of top-1 against FP32. I have 5000 labelled images. Show the call and say how to use the images.",
+      "expected_output": "Uses accuracy-aware quantization with the limit passed as the maximum drop and a validation function that returns the metric. Keeps part of the labelled images out of both calibration and that validation, and reports the final FP32 and INT8 numbers on that untouched part. States that the 1 point limit is fixed before the run.",
       "checks": {
         "must_include": [
-          "openvino-export-check"
+          "quantize_with_accuracy_control",
+          "max_drop"
         ]
       }
     },
     {
-      "id": "misses-the-bar",
-      "prompt": "Our bar was at most one point of accuracy lost. Full INT8 loses more than that even with accuracy control and more calibration data. My manager wants INT8 shipped. What do I report?",
-      "expected_output": "Agent says the full INT8 variant failed the bar and is reported as failed, not shipped with a note. It offers the fallbacks that can still pass: excluding sensitive layers, weight-only compression, or FP16, each scored on the same held-out data against the same bar. It does not suggest loosening the bar after seeing the results.",
+      "id": "missed-the-limit",
+      "prompt": "We agreed on at most one point of accuracy lost. Full INT8 loses 2.3 points, also with accuracy control and 2000 calibration images. My manager wants an 8-bit model on the slide anyway. What do I report, and is there anything 8-bit left to try?",
+      "expected_output": "Says the full INT8 variant failed the agreed limit and is reported as failed, not shipped with a footnote, and that the limit is not loosened after seeing results. Offers what can still pass, each scored on the same untouched data against the same limit: excluding the sensitive layers, or 8-bit weights only with activations in float.",
       "checks": {
         "must_include": [
-          "FP16",
-          "fail"
+          "compress_weights"
+        ]
+      }
+    },
+    {
+      "id": "no-faster-on-old-xeon",
+      "prompt": "My INT8 IR from nncf.quantize is no faster than FP32 on a Xeon Silver 4110. The file has FakeQuantize nodes, so it is quantized. Why is there no gain, and how do I see what the layers really execute in?",
+      "expected_output": "Points out that this Skylake-generation CPU has no 8-bit dot-product instructions, so INT8 gains little there. Shows how to read per-layer execution types for the convolution and fully connected layers with a float input, so an 8-bit input layer does not look like success, and compares with the same readout for the FP32 IR. Also suggests timing the whole pipeline in case the model is not the slow part.",
+      "checks": {
+        "must_include": [
+          "vnni"
         ]
       }
     }

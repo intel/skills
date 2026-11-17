@@ -1,4 +1,3 @@
-"""NumPy reference for the grid scorer. This is the model the IR has to reproduce."""
 from pathlib import Path
 
 import numpy as np

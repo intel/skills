@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# The oracle: calibrate on the unlabelled pool through the application's own
-# pre-processing, quantize weights and activations, then score both IRs on the labelled
-# split and write the verdict against the bar.
 mkdir -p /app/out
 cat > /app/out/quantize.py <<'PY'
 import json
@@ -13,7 +10,7 @@ import numpy as np
 import openvino as ov
 
 sys.path.insert(0, "/app")
-from preprocess import preprocess
+from classify import preprocess
 
 BAR = 2.0
 core = ov.Core()
