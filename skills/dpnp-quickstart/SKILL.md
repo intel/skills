@@ -182,11 +182,12 @@ device — the default SYCL device is the GPU only when one is visible.
    Write the CPU selector as `'*:cpu'`, not `opencl:cpu`: after `pip install
    dpnp`, naming the OpenCL backend can leave no device at all. The last line
    shows what the selector leaves visible; `dpctl.get_devices()` works wherever
-   dpnp imports, where `sycl-ls` is often missing from pip installs. The selector replaced the older `SYCL_DEVICE_FILTER`, which no
-   longer has an effect on current runtimes. Code that also runs under a
-   selector should name a device by type (`device="gpu"`) rather than by index,
-   since the devices left visible may not keep their numbers. Print
-   `x.sycl_device` once to confirm the selector took.
+   dpnp imports, where `sycl-ls` is often missing from pip installs. The selector
+   replaced the older `SYCL_DEVICE_FILTER`, which no longer has an effect on
+   current runtimes. Code that also runs under a selector should name a device by
+   type (`device="gpu"`) rather than by index, since the devices left visible may
+   not keep their numbers. Print `x.sycl_device` once to confirm the selector
+   took.
 
 7. **Validate, then measure.** Compare against NumPy with
    `numpy.testing.assert_allclose()` for critical math before making any
