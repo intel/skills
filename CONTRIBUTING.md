@@ -206,7 +206,9 @@ worth having — that the text has already been used and measured where it was w
 content rules do not relax: every file an import ships is scanned like every other.
 
 Upstream's `evals/` is part of the copy too, so an import's eval cases are written and kept
-upstream and arrive here with the pin; `sync_external.py --check` fails an `evals/` added
+upstream and arrive here with the pin, byte for byte: `evals/` is never installed, so no
+path in it is rewritten, and like any skill's `evals/` it is left out of the content scan
+described above. `sync_external.py --check` fails an `evals/` added
 here beside an import. `perf/` is the one directory that is never copied: it is this
 repository's own measurement of the skill.
 

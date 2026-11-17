@@ -138,6 +138,13 @@ class ImportedEvals(unittest.TestCase):
         out = s.vendored("a", ENTRY, upstream({"evals/evals.json": b"{}\n"}), {}, {"a"})
         self.assertEqual(out["evals/evals.json"], (b"{}\n", 0o644))
 
+    def test_upstream_evals_naming_an_upstream_path_arrive_unchanged(self) -> None:
+        # An eval case may name a file by its upstream path; the copy keeps it as is.
+        case = b'{"cases":[{"prompt":"read skills/a/references/x.md"}]}\n'
+        out = s.vendored("a", ENTRY, upstream({"evals/evals.json": case}), {}, {"a"})
+        self.assertEqual(out["evals/evals.json"], (case, 0o644))
+        self.assertNotIn("evals/evals.json", out[v.IMPORT_MANIFEST][0].decode())
+
     def test_upstream_perf_is_still_refused(self) -> None:
         with self.assertRaises(s.SyncError):
             s.vendored("a", ENTRY, upstream({"perf/summary.md": b"x\n"}), {}, {"a"})

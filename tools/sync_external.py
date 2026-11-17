@@ -335,6 +335,11 @@ def vendored(
                 "where this repository keeps its own measurement data. Renaming either "
                 "would hide one behind the other"
             )
+        # evals/ is never installed, so install-relative paths do not apply to it: it
+        # stays upstream's bytes, which also keeps a .json case from needing a note.
+        if relative.split("/")[0] == "evals":
+            out[relative] = (blob, mode)
+            continue
         rewritten, was_changed = rewrite_paths(name, root, names, relative, blob)
         if was_changed:
             changed.append(relative)
