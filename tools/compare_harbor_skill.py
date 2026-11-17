@@ -521,7 +521,8 @@ def format_report(args: argparse.Namespace, tasks: list[str], results: dict, pro
         "told the skill is present. This isolates the skill's body and deliberately",
         "excludes whether the `description` would have led the agent to it unprompted.",
         "A green delta here is not evidence that the skill is discoverable.",
-        "For a bundle, the delta measures the supplied set, not any member's individual contribution.",
+        *(["For a bundle, the delta measures the supplied set, not any member's individual contribution."]
+          if len(args.skills) > 1 else []),
         "",
     ]
     return "\n".join(lines) + "\n"
@@ -593,7 +594,7 @@ def main() -> int:
     args.skills = skill_names(suite)
     if args.skill and args.skills != [args.skill]:
         die("use --suite to select a bundle")
-    args.scope_note = suite.get("note")
+    args.scope_note = suite.get("scope")
     for skill in args.skills:
         if not (REPO_ROOT / "skills" / skill / "SKILL.md").is_file():
             die(f"no skills/{skill}/SKILL.md")

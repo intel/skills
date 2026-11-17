@@ -120,7 +120,8 @@ The runner snapshots every member and injects the snapshot directory into each
 skill arm; the baseline receives neither skills nor a treatment instruction.
 `--previous-ref` uses the same member list at that ref and skips the whole previous
 arm if any member is absent. Existing `--skill dpnp-quickstart` commands still work.
-The report names the supplied set and includes the suite's optional `note`.
+The report names the supplied set and includes the suite's optional `scope`;
+the free-form `note` is never printed.
 As before, `--report-only` reads the current suite configuration, so retain that
 configuration with the run when interpreting historical reports.
 

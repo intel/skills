@@ -146,7 +146,8 @@ class ComparisonTest(unittest.TestCase):
         self.instructions = self.root / "instructions"
         self.instructions.mkdir()
         self.suite = {
-            "id": "bundle", "skills": ["base", "extra"], "note": "Example evaluation scope.",
+            "id": "bundle", "skills": ["base", "extra"], "scope": "Example evaluation scope.",
+            "note": "Authoring-time status, nothing measured yet.",
             "tasks": [{"name": "first", "status": "implemented"},
                       {"name": "second", "status": "implemented"},
                       {"name": "later", "status": "planned"}],
@@ -217,6 +218,32 @@ class ComparisonTest(unittest.TestCase):
         self.assertIn("supplied skills: `base`, `extra`", output)
         self.assertIn("Example evaluation scope", output)
         self.assertIn("not any member's individual contribution", output)
+        self.assertNotIn("Authoring-time status", output)
+
+    def test_single_skill_report_carries_no_suite_prose(self):
+        self.suite = {"skill": "base", "note": "Authoring-time status, nothing measured yet.",
+                      "tasks": [{"name": "first", "status": "implemented"}]}
+        (self.instructions / "use-base.md").write_text("Use base.", encoding="utf-8")
+        for arm, reward in (("no-skill", 0), ("candidate", 1)):
+            job = self.root / "harbor-jobs" / f"base-{arm}"
+            trial = job / "first__trial"
+            trial.mkdir(parents=True)
+            (job / "result.json").write_text("{}", encoding="utf-8")
+            (trial / "result.json").write_text(json.dumps({
+                "task_name": "first", "verifier_result": {"rewards": {"reward": reward}},
+            }), encoding="utf-8")
+        self.manifest.write_text(json.dumps({"suites": [self.suite]}), encoding="utf-8")
+        output = io.StringIO()
+        with patch.multiple(compare_harbor_skill, REPO_ROOT=self.root, SUITES_PATH=self.manifest,
+                            TASKS_PATH=self.root / "tasks", INSTRUCTIONS_DIR=self.instructions), \
+             patch.object(sys, "argv", ["compare", "--skill", "base", "--model", "test", "--report-only"]), \
+             patch.object(compare_harbor_skill, "git", return_value="abc123"), \
+             contextlib.redirect_stdout(output):
+            self.assertEqual(compare_harbor_skill.main(), 0)
+        self.assertIn("supplied skills: `base`", output.getvalue())
+        self.assertNotIn("Authoring-time status", output.getvalue())
+        self.assertNotIn("- scope:", output.getvalue())
+        self.assertNotIn("For a bundle", output.getvalue())
 
 
 if __name__ == "__main__":
