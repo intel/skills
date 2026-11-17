@@ -69,9 +69,10 @@ class SuiteValidationTest(unittest.TestCase):
         }
         (self.instructions / "use-bundle.md").write_text("Use both skills.", encoding="utf-8")
 
-    def validate(self, suites=None, catalog=None):
-        self.manifest.write_text(json.dumps({"suites": suites or [self.suite]}), encoding="utf-8")
-        report = validate_skills.Report()
+    def validate(self, suites=None, catalog=None, policy=None):
+        manifest = {"suites": suites or [self.suite], **({"policy": policy} if policy else {})}
+        self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+        report = self.report = validate_skills.Report()
         with patch.multiple(validate_skills, REPO_ROOT=self.root, SUITES_PATH=self.manifest,
                             TASKS_DIR=self.tasks, INSTRUCTIONS_DIR=self.instructions):
             validate_skills.check_suites(catalog or {}, {"base": "tool-skill", "extra": "tool-skill"}, set(), report)
@@ -118,6 +119,17 @@ class SuiteValidationTest(unittest.TestCase):
                 unmeasured = [w for w in report.warnings if "no suite for skills/" in w]
                 self.assertEqual(len(unmeasured), 2, report.warnings)
 
+    def test_unclaimed_task_with_unknown_skill_is_refused(self):
+        self.suite["tasks"] = []
+        (self.task / "task.toml").write_text(
+            'schema_version = "1.3"\n[metadata]\nskills = ["nope"]\ncovers = ["layout"]\n', encoding="utf-8")
+        self.assertTrue(any("unknown skills" in error for error in self.validate()))
+
+    def test_bundle_shortfall_does_not_inherit_member_status(self):
+        errors = self.validate(catalog={"base": {"status": "validated"}}, policy={"minimum_tasks_per_skill": 3})
+        self.assertFalse([error for error in errors if "policy wants" in error], errors)
+        self.assertTrue([warning for warning in self.report.warnings if "policy wants" in warning])
+
     def test_malformed_unclaimed_task_is_reported(self):
         self.suite["tasks"] = []
         (self.task / "task.toml").write_text(
@@ -142,6 +154,19 @@ class LeakageTest(unittest.TestCase):
             self.assertEqual(result["skills"], ["base", "extra"])
             self.assertEqual(result["score"], 2)
             self.assertEqual(result["leaked_symbols"], ["api.extra", "api.shared"])
+
+    def test_gate_fails_on_an_unauditable_task(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task = root / "tasks" / "task"
+            task.mkdir(parents=True)
+            (task / "task.toml").write_text('[metadata]\nskill = "nope"\n', encoding="utf-8")
+            (task / "instruction.md").write_text("Write a program.\n", encoding="utf-8")
+            with patch.multiple(lint_task_leakage, REPO_ROOT=root, TASKS_DIR=root / "tasks",
+                                SKILLS_DIR=root / "skills", SUITES_PATH=root / "suites.json"), \
+                 patch.object(sys, "argv", ["lint", "--fail-on-leak", "5"]), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(lint_task_leakage.main(), 1)
 
     def test_bad_metadata_is_not_silently_skipped(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -171,13 +196,13 @@ class ComparisonTest(unittest.TestCase):
             (directory / "SKILL.md").write_text(skill, encoding="utf-8")
         (self.instructions / "use-bundle.md").write_text("Use both skills.", encoding="utf-8")
 
-    def run_comparison(self, *arguments, previous=None):
+    def run_comparison(self, *arguments, previous=None, git_output="abc123"):
         self.manifest.write_text(json.dumps({"suites": [self.suite]}), encoding="utf-8")
         output = io.StringIO()
         with patch.multiple(compare_harbor_skill, REPO_ROOT=self.root, SUITES_PATH=self.manifest,
                             TASKS_PATH=self.root / "tasks", INSTRUCTIONS_DIR=self.instructions), \
              patch.object(sys, "argv", ["compare", "--suite", "bundle", "--model", "test", *arguments]), \
-             patch.object(compare_harbor_skill, "git", return_value="abc123"), \
+             patch.object(compare_harbor_skill, "git", return_value=git_output), \
              patch.object(compare_harbor_skill, "snapshot_previous", side_effect=previous) as snapshot, \
              contextlib.redirect_stdout(output):
             result = compare_harbor_skill.main()
@@ -210,6 +235,10 @@ class ComparisonTest(unittest.TestCase):
         _, output, snapshot = self.run_comparison("--dry-run", "--previous-ref", "main", previous=[True, True])
         self.assertEqual([call.args[:2] for call in snapshot.call_args_list], [("base", "abc123"), ("extra", "abc123")])
         self.assertIn("### previous", output)
+
+    def test_unresolvable_previous_ref_is_refused(self):
+        with self.assertRaisesRegex(SystemExit, "cannot resolve --previous-ref"):
+            self.run_comparison("--dry-run", "--previous-ref", "nosuchref", git_output="")
 
     def test_duplicate_tasks_rejected(self):
         self.suite["tasks"] *= 2
