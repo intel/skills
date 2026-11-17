@@ -1474,8 +1474,6 @@ def check_suites(
             continue
         if len(members) == 1:
             individual_skills.update(members)
-        else:
-            bundled_skills.update(members)
 
         capabilities = {
             capability.get("id"): capability for capability in suite.get("capabilities") or []
@@ -1559,6 +1557,12 @@ def check_suites(
                 )
                 continue
             check_task_dir(task_dir, set(members), set(covers), set(skill_types), report)
+
+        if len(members) > 1:
+            if implemented:
+                bundled_skills.update(members)
+            else:
+                report.error(f"{where}: {skill}: a bundle suite lists no implemented task")
 
         treatment = INSTRUCTIONS_DIR / f"use-{skill}.md"
         if implemented and not treatment.is_file():

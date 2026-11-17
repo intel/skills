@@ -100,7 +100,7 @@ the legacy `"skill"` field. The ID is unique across all suites; a legacy suite's
 is its skill name. Evaluation suites are independent of the display groupings in
 `skills.sh.json`.
 
-Each suite lists one or more implemented tasks and has an
+Each bundle suite lists one or more implemented tasks and has an
 `instructions/use-<suite-id>.md` treatment instruction. Each task's declared skills
 must be a subset of the suite's supplied skills. A task may appear in several
 suites, but only once within each suite. Its `covers` must still match its task

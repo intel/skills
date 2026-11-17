@@ -105,6 +105,19 @@ class SuiteValidationTest(unittest.TestCase):
     def test_bundle_cannot_validate_individual_member(self):
         self.assertTrue(any("bundle coverage only" in error for error in self.validate(catalog={"base": {"status": "validated"}})))
 
+    def test_empty_bundle_is_refused_and_members_stay_unmeasured(self):
+        for tasks in ([], [dict(self.suite["tasks"][0], status="planned")]):
+            self.suite["tasks"] = tasks
+            with self.subTest(tasks=tasks):
+                self.manifest.write_text(json.dumps({"suites": [self.suite]}), encoding="utf-8")
+                report = validate_skills.Report()
+                with patch.multiple(validate_skills, REPO_ROOT=self.root, SUITES_PATH=self.manifest,
+                                    TASKS_DIR=self.tasks, INSTRUCTIONS_DIR=self.instructions):
+                    validate_skills.check_suites({}, {"base": "tool-skill", "extra": "tool-skill"}, set(), report)
+                self.assertTrue(any("lists no implemented task" in e for e in report.errors), report.errors)
+                unmeasured = [w for w in report.warnings if "no suite for skills/" in w]
+                self.assertEqual(len(unmeasured), 2, report.warnings)
+
     def test_malformed_unclaimed_task_is_reported(self):
         self.suite["tasks"] = []
         (self.task / "task.toml").write_text(
