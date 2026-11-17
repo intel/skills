@@ -35,7 +35,7 @@ jobs:
         id: dokimi
         with:
           dokimi-ref: 0883b7e92337c5e860a0c340fba8c1d76421851a
-      - name: Skills and Harbor tasks load (fails on a skill or task that cannot load)
+      - name: Skills and the task.toml of each task suites.json lists load (fails when one cannot load)
         shell: bash
         env:
           OUT: ${{ steps.dokimi.outputs.out-dir }}
