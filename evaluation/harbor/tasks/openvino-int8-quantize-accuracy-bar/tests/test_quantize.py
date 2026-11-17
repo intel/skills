@@ -22,6 +22,7 @@ VAL_COUNT = 1000
 HELD_OUT_SEED = 4
 HELD_OUT_COUNT = 2000
 F32 = {"INFERENCE_PRECISION_HINT": "f32"}
+COMPUTE_LAYERS = ("Convolution", "FullyConnected")
 
 
 def make_split(seed, count):
@@ -101,8 +102,15 @@ def test_same_interface_as_fp32(int8_model, fp32_model):
 
 
 def test_activations_are_quantized(int8_model):
-    count = sum(op.get_type_name() == "FakeQuantize" for op in int8_model.get_ops())
-    assert count >= 2, f"found {count} FakeQuantize ops; activations are not quantized"
+    runtime = ov.Core().compile_model(int8_model, "CPU", F32).get_runtime_model()
+    precisions = {}
+    for op in runtime.get_ordered_ops():
+        info = op.get_rt_info()
+        if info["layerType"].astype(str) in COMPUTE_LAYERS:
+            precisions[op.get_friendly_name()] = info["runtimePrecision"].astype(str).lower()
+    assert precisions, "the compiled model has no Convolution or FullyConnected layer"
+    in_float = {name: precision for name, precision in precisions.items() if precision not in ("u8", "i8")}
+    assert not in_float, f"compute layers that do not run in 8 bits on the CPU: {in_float}"
 
 
 def test_held_out_accuracy_within_bar(int8_model, fp32_model):
