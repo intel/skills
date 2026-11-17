@@ -77,6 +77,35 @@ puts a score filter in the graph, at `conf=0.25` unless `conf` is passed. Boxes 
 never leave the model, so a tracker that needs low-score boxes loses them and no threshold
 outside can bring them back. Compare each export variant at stages 2 and 3 before choosing.
 
+Export arguments in Ultralytics 8.4.215. Write down the call and check each argument
+against the source pipeline:
+
+```python
+from ultralytics import YOLO
+YOLO("model.pt").export(format="openvino", imgsz=640, half=False, dynamic=False, nms=True, conf=0.01)
+```
+
+The values are examples. Take sizes and thresholds from the user's pipeline.
+
+- `imgsz` and letterbox. A static export has one input size: `imgsz`, square unless
+  `[h, w]` is passed. `predict` on the `.pt` pads each image only up to a multiple of the
+  stride (a 1280x720 frame becomes a 384x640 tensor). `predict` on a static IR letterboxes
+  to the full `imgsz` (640x640). The two models then see different tensors for one image,
+  which is a stage 1 difference and not an export bug. Compare with one identical
+  letterboxed tensor, or pass `rect=False` on the `.pt` side. Own pre-processing that
+  stretches the image instead of letterboxing fails stage 1 the same way.
+- `half`. `half=True` writes FP16 weights. 8.4.215 still accepts `half` and `int8` but
+  forwards them to `quantize` (16 and 8). Keep FP32 for the check, then add FP16 as a
+  measured variant.
+- `dynamic`. `dynamic=False` fixes the input shape. `dynamic=True` leaves `?` dimensions,
+  and the IR is then fed the same minimally padded tensor as the `.pt`. Use static when
+  production sends one size. With dynamic, compare at two real sizes, not only at `imgsz`.
+- `nms` and `conf`. See above. `nms=True` without `conf` fixes the score filter at 0.25.
+- `val` mAP. Stage 4 only. Run `val` on both with the same `data`, `imgsz`, `conf` and
+  `iou`. On a static IR `val` uses batch 1 and the full-size letterbox. On the `.pt` it
+  uses rectangular batches, so pass `rect=False` there. Without it a small mAP gap remains
+  with identical outputs, and it comes from the evaluation, not from the export.
+
 If no row explains a stage 2 difference, bisect: add intermediate outputs with
 `model.add_outputs(...)`, compare them with the same activations in the source, and report
 the first layer that differs.

@@ -2,9 +2,70 @@
   "skill_name": "openvino-export-check",
   "evals": [
     {
-      "id": "two-loaders-one-metric",
-      "prompt": "My detector gets mAP 0.61 in PyTorch and 0.48 through OpenVINO Runtime. Same weights, FP32, nothing quantized. The PyTorch eval reads images with cv2.imread and pads them to 640. The OpenVINO script reads them with PIL, resizes straight to 640x640 and divides by 255. A colleague says to retrain. Where do I start?",
-      "expected_output": "Does not retrain and does not start from the metric. The first comparison is the tensor each pipeline feeds its model for one image: cv2 gives BGR and PIL gives RGB, and padding to 640 is not the same as stretching to 640x640. Only when the two tensors agree does it compare raw model outputs for one identical tensor, then detections, then mAP.",
+      "id": "fewer-objects-after-yolo-export",
+      "prompt": "I exported a YOLO detector to OpenVINO with Ultralytics 8.4.215: model.export(format='openvino', nms=True). On the same video the IR finds fewer objects than the .pt. I already set conf=0.05 at predict time on both sides and it changed nothing for the IR. What is going on and what do I change?",
+      "expected_output": "Says the export arguments decide this, not the predict call. nms=True puts NMS and a score filter into the graph, and with no conf passed at export the filter sits at 0.25, so boxes under it never leave the model and conf=0.05 at predict time cannot bring them back. Tells the user to export again with conf as low as any consumer needs, or without NMS and filter outside, and then to compare raw outputs for one identical tensor and the detections again before trusting the count.",
+      "checks": {
+        "must_include": [
+          "0.25"
+        ]
+      }
+    },
+    {
+      "id": "same-frame-different-tensor",
+      "prompt": "Ultralytics 8.4.215. I call predict on one 1280x720 frame with the .pt and with its OpenVINO export (imgsz=640, static, FP32). Boxes are shifted by a few pixels and two boxes near the top edge exist only on one side. Same weights. Is the export broken, and how do I prove it either way?",
+      "expected_output": "Says this is not proven to be an export problem and the first thing to compare is the tensor each model receives. predict on the .pt pads the frame only to a multiple of the stride, so it sees 384x640, while the static IR gets the full 640x640 letterbox. The two models see different inputs for one frame. Tells the user to feed one identical letterboxed tensor to both (or run the .pt with rect=False) and compare raw outputs; only a difference that survives that points at the export.",
+      "checks": {
+        "must_include": [
+          "letterbox"
+        ]
+      }
+    },
+    {
+      "id": "map-gap-with-equal-outputs",
+      "prompt": "For 50 images the raw outputs of my YOLO .pt and its static OpenVINO export agree to 1e-5 on the same tensor, and the detections match box for box. model.val() still reports mAP50-95 0.412 for the .pt and 0.405 for the IR. Ultralytics 8.4.215, imgsz=640. Do I need to export again with other arguments?",
+      "expected_output": "Says no. Input tensor, raw outputs and detections already agree, so the models are the same and the two evaluation runs differ. val on the .pt uses rectangular batches, val on a static IR uses batch 1 and the full-size letterbox. Tells the user to run val on the .pt with rect=False and the same data, imgsz, conf and iou, and compare again. Does not suggest changing the export.",
+      "checks": {
+        "must_include": [
+          "rect=False"
+        ]
+      }
+    },
+    {
+      "id": "half-true-third-decimal",
+      "prompt": "I exported with model.export(format='openvino', half=True). Against the .pt, scores differ around the third decimal and 2 boxes out of 500 fall on the other side of my 0.5 cut-off. A teammate wants to bisect the detection head. Is that the right next step?",
+      "expected_output": "Says no. half=True writes FP16 weights, and a difference of this size points at precision before anything else. Tells the user to take precision out of the question first: export with half=False (FP32), compile with the f32 inference precision hint, and compare raw outputs for one identical tensor against a tolerance written beforehand. If FP32 matches, FP16 is a variant to measure on the task metric, not a bug. Bisecting comes only if the FP32 IR still differs.",
+      "checks": {
+        "must_include": [
+          "fp16",
+          "f32"
+        ]
+      }
+    },
+    {
+      "id": "one-size-in-production",
+      "prompt": "Production sends exactly one size, 1x3x640x640. A colleague exported the detector with dynamic=True to be safe. Results match the .pt on my test images, but memory on CPU is well above what the .pt needs. Keep the export as it is?",
+      "expected_output": "Says no. The IR has dynamic dimensions while the real shape is fixed, so the runtime cannot plan memory for one size. Tells the user to export with dynamic=False (or reshape the IR to the fixed shape), then repeat the comparison from the input tensor on, because a static IR is fed the full-size letterbox and the dynamic one was not. Does not promise a specific saving.",
+      "checks": {
+        "must_include": [
+          "dynamic=False"
+        ]
+      }
+    },
+    {
+      "id": "plan-is-to-sweep-options",
+      "prompt": "My segmentation model gets mIoU 0.74 in PyTorch and 0.69 through OpenVINO Runtime, FP32, same checkpoint. I have both inference scripts and the validation images. My plan is to try conversion options one by one and rerun the full validation after each until 0.74 comes back. Is there a better order of work?",
+      "expected_output": "Says not to start from the metric: it shows that something differs, not where. Gives the order. First run one real image through both pre-processing paths and compare the input tensor each model receives. If those agree, feed one identical tensor to both and compare raw outputs. Then compare the post-processed masks at the same settings. The metric comes last. Stop at the first stage that differs, fix that, and start again from the input tensor.",
+      "checks": {
+        "must_include": [
+          "input tensor"
+        ]
+      }
+    },
+    {
+      "id": "first-stage-already-differs",
+      "prompt": "For one image, the tensor my torchvision pipeline gives the PyTorch model and the tensor my OpenCV pipeline gives the IR differ by up to 0.8. The raw outputs differ too and top-1 agreement over the set is 91%. I was about to add intermediate outputs to the IR and bisect for the first layer that diverges. Sensible?",
+      "expected_output": "Says no, stop at the first stage that differs. The input tensors differ, so the model is not the question yet and bisecting layers would chase a difference that enters before the first layer. Tells the user to diff the two pre-processing functions (OpenCV reads BGR, also resize method, mean and scale, layout), use one function for both, and repeat from the input tensor. Bisecting with intermediate outputs is for the case where identical tensors still give different raw outputs.",
       "checks": {
         "must_include": [
           "bgr"
@@ -12,62 +73,12 @@
       }
     },
     {
-      "id": "third-decimal",
-      "prompt": "I converted an ONNX classifier with ov.convert_model and wrote it to disk with ov.save_model(model, 'm.xml'). On CPU the logits differ from ONNX Runtime around the third or fourth decimal. Top-1 is the same on every image I tried. Is the conversion broken?",
-      "expected_output": "Says this size of difference points at precision, not at a broken conversion: ov.save_model stores weights as FP16 unless told otherwise, and the device may pick a smaller float type. Tells the user to save again without FP16 compression, pin f32 inference precision, and compare again against a tolerance chosen beforehand.",
-      "checks": {
-        "must_include": [
-          "compress_to_fp16"
-        ]
-      }
-    },
-    {
-      "id": "cutoff-inside-the-model",
-      "prompt": "I exported YOLO with Ultralytics to OpenVINO using nms=True. My tracker keeps tracks through occlusions with the .pt model and loses them with the IR, although I pass a very low confidence at predict time on both. Which operation types in the .xml would tell me whether a score cut-off sits inside the model, and what do I do about it?",
-      "expected_output": "Explains that an export with NMS in the graph carries a score threshold fixed at export time, so boxes under it never leave the model and a lower threshold at predict time cannot bring them back. Names the operation to look for near the outputs. Tells the user to export again with the threshold as low as the tracker needs, or without NMS and filter outside, then compare raw outputs and detections again.",
+      "id": "one-fix-and-a-remainder",
+      "prompt": "My IR had Subtract and Divide before the first convolution and my code normalised as well. I removed my normalisation and the largest raw output difference against PyTorch fell from 3.1 to 0.4. What is left sits only in low-score rows, which are exactly zero in the IR. I would call that float noise and go on to benchmarking. Agree?",
+      "expected_output": "Says no. 0.4 is far above float rounding for an FP32 IR on CPU, and fixing one cause often uncovers a second, so the comparison starts again from the input tensor. A difference only in low-score rows that are exactly zero points at a score filter or NMS inside the graph with a threshold fixed at export. Tells the user to look for NonMaxSuppression, Select or Greater near the outputs, then lower that threshold or export without it and filter outside, and compare again.",
       "checks": {
         "must_include": [
           "NonMaxSuppression"
-        ]
-      }
-    },
-    {
-      "id": "clean-graph-wrong-everywhere",
-      "prompt": "I feed one identical float32 array to a PyTorch ResNet and to an IR someone made from it with a script I do not have. The outputs disagree badly on every sample, not in the small decimals. The IR starts with a plain Convolution, there is no Subtract, Multiply or Divide before it, and the output shape is right. Both are supposed to be the same checkpoint. What do I check next?",
-      "expected_output": "Goes to the constants: compares the first convolution's weight and bias in the IR with the checkpoint. If the weights differ by a factor that is constant per input channel and the bias is shifted, the exporter folded mean and scale normalisation into the first layer, so the input is normalised twice. Otherwise suspects a wrong checkpoint or training mode. Suggests bisecting with intermediate outputs if the constants match.",
-      "checks": {
-        "must_include": [
-          "normali"
-        ]
-      }
-    },
-    {
-      "id": "three-outputs-became-one",
-      "prompt": "For the same input array my PyTorch detector returns a tensor of shape [1, 84, 8400] and the IR I was handed returns [1, 300, 6]. A colleague says that is float noise and I should just compare mAP. Is he right?",
-      "expected_output": "Says no. A different output shape cannot be rounding: the IR was exported with another head, one that already selects up to 300 final boxes with score and class, either an end-to-end head or suppression baked into the graph. The place to look is the export arguments, and the fix is to export the head the source pipeline uses or to compare after the same post-processing.",
-      "checks": {
-        "must_include": [
-          "nms"
-        ]
-      }
-    },
-    {
-      "id": "matches-but-heavy",
-      "prompt": "The IR matches PyTorch on every sample. Memory on CPU is far above what I expected and it grows the first time each new resolution arrives, but production only ever sends 1x3x640x640. Printing the model input shows [?,3,?,?]. What should I change?",
-      "expected_output": "Says the IR has dynamic dimensions while the real shape is fixed, so the runtime cannot plan memory for one size. Tells the user to fix the shape on the model (or export it static), then measure memory again and confirm outputs still match. Does not promise a specific saving.",
-      "checks": {
-        "must_include": [
-          "reshape"
-        ]
-      }
-    },
-    {
-      "id": "export-already-proven",
-      "prompt": "My FP32 IR agrees with PyTorch to 1e-6 on raw outputs for 200 real images, and top-1 is identical. After nncf.quantize top-1 is 6 points lower. Should I convert again with different ov.convert_model arguments?",
-      "expected_output": "Says no: the FP32 comparison already proves the conversion, so the loss comes from quantization. Points at the quantization inputs instead: what data was used to compute ranges and whether it went through the inference pre-processing, and which layers could stay in float.",
-      "checks": {
-        "must_include": [
-          "calibration"
         ]
       }
     }
