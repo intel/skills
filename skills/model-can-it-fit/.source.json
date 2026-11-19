@@ -1,7 +1,7 @@
 {
   "repo": "https://github.com/intel/gpu-ai-skills",
   "path": "plugins/intel-gpu-ai-skills/skills/model-can-it-fit",
-  "commit": "0b4fafd09c5eb4cc5daf532d915ef5984a919775",
+  "commit": "6398572aeff7a7300f9eafcf5758d76817bab910",
   "license": "Apache-2.0",
   "modified-files": [
     "SKILL.md",
