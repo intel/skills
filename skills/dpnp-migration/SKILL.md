@@ -84,7 +84,12 @@ table can. Everything below is how to act on the answers.
 
    A name that exists but rejects a keyword the program passes fails at runtime
    just as hard as an absent one, so read the signature for anything called with
-   optional arguments.
+   optional arguments. A signature finds a missing keyword, not a refused value:
+   `sorted=` is not in `dpnp.unique`'s signature (`TypeError`), while `initial=` is
+   in `dpnp.max`'s and raises `NotImplementedError` for anything but the default.
+   Neither error type says how hard the workaround is: `sorted=False` can be
+   dropped, `initial=0` becomes `dpnp.maximum(x.max(), 0)` plus a check for an
+   empty `x`.
 
 3. **Expect three outcomes, and verify each against the installed release
    rather than this list.** The families are stable enough to plan with; the

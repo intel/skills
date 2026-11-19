@@ -201,6 +201,10 @@ that measurement in the user's own environment does not support.
 To measure:
 
 - Warm up once before timing, to avoid measuring first-run compilation.
+- Wait for the device before stopping the timer: kernels are submitted
+  asynchronously, so call `result.sycl_queue.wait()` first. Code that ends by
+  copying the result to the host, implicitly or explicitly through
+  `dpnp.asnumpy()`, needs no extra wait: that copy waits for the kernels itself.
 - Compare against NumPy with the same inputs and dtype.
 - Profile end-to-end pipelines, including conversions and host-library calls.
 
@@ -215,6 +219,11 @@ To measure:
   common symptom.
 - **Device assumptions**: the default SYCL device is whatever is visible. Code that
   works on a GPU workstation can land on CPU in CI without erroring.
+- **Which devices it runs on**: the ones the oneAPI DPC++ compiler supports. Its
+  2026 release notes list Intel UHD Graphics for 11th generation processors or
+  newer, Iris Xe, Arc, Server GPU, and Data Center GPU Flex and Max Series, and
+  Intel Core, Core Ultra, Xeon and Xeon Scalable processors. Check the notes of
+  the installed release.
 
 ## References
 
