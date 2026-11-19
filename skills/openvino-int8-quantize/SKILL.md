@@ -99,9 +99,10 @@ benchmark_app -m model_int8.xml -d CPU -hint latency -t 20 -ip f32 -pc \
 ```
 
 `-ip f32` keeps the input in float, so an 8-bit input does not hide the answer. Read the
-`execType` of these compute layers. `I8` or `U8` there means they run in 8 bits. If all
-of them say `FP32`, the plugin fell back to float and there is no gain. Run the same
-command on the FP32 IR to see the difference.
+`execType` of these compute layers. `I8` or `U8` there means they run in 8 bits. If none
+of them says `I8` or `U8`, the layer runs in float (FP32, or bf16 on CPUs with AMX, shown
+as `brgconv_avx512_amx_bf16`) and there is no gain. Run the same command on the FP32 IR to
+see the difference.
 
 Compare every variant to the bar. Pass or fail, nothing in between.
 
