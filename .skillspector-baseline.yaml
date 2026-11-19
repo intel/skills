@@ -241,6 +241,14 @@ rules:
     reason: "POLICY: nested-artifact inspection bound on a reference document, not evasion"
 
   # ---------------------------------------------------------------- TRACKED
+  # AE1 on model-can-it-fit: the anti-obfuscation layer reads the bare configuration key
+  # `ignore` at coverage-and-formulas.md:429 as an instruction and inspects the file only in
+  # part. Upstream to reword that one spelling (intel/gpu-ai-skills#47); arrives with the next pin bump.
+  - id: "AE1"
+    skills: ["model-can-it-fit"]
+    message: "*coverage-and-formulas.md (partial)*"
+    reason: "TRACKED: imported body. Upstream intel/gpu-ai-skills#47 to reword the bare `ignore` token; arrives with the next pin bump."
+
   # AST1/AST6/AST8 — xpu-port's verifier execs the model-builder snippet the user
   # passes on its own command line. That is the tool's documented purpose and it
   # carries a Bandit justification at the call site; it is listed here rather than as
