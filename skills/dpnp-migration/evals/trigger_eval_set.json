@@ -1,0 +1,14 @@
+[
+  {"query": "Will dpnp give me the same values and dtypes as NumPy? I'm worried about float64 on my GPU.", "should_trigger": true},
+  {"query": "We have a 20k-line NumPy codebase. How do I find out which of the functions we call exist in the dpnp version we have installed?", "should_trigger": true},
+  {"query": "Our code uses numpy.ma masked arrays and datetime64 columns. Can those parts move to dpnp?", "should_trigger": true},
+  {"query": "I'm moving a CuPy project to Intel GPUs. Will it run on dpnp, and what will break?", "should_trigger": true},
+  {"query": "Our port plan has to estimate the effort per call. dpnp rejects some keywords we pass with NotImplementedError, like initial= in max, and others with TypeError, like sorted= in unique. Does the error type tell us anything about how hard each one is to work around?", "should_trigger": true},
+  {"query": "We fit numpy.polynomial.Polynomial models in our pipeline. What happens to that code when the rest moves to dpnp?", "should_trigger": true},
+  {"query": "Most of my arrays have a few hundred elements and only a couple have millions. Is dpnp worth it for code like that?", "should_trigger": false},
+  {"query": "We only have Xeon servers, no GPUs. Is dpnp the way to speed up our np.fft calls, or is there something that works with NumPy itself?", "should_trigger": false},
+  {"query": "Can another SYCL library take my dpnp array directly through __sycl_usm_array_interface__, and how do I convert back?", "should_trigger": false},
+  {"query": "My dpnp job reads CSV files and the GPU barely helps. How do I tell whether it's I/O bound?", "should_trigger": false},
+  {"query": "dpnp.linalg.solve and numpy.linalg.solve differ in the 6th digit. Is that a bug, and how should I compare them?", "should_trigger": false},
+  {"query": "Should I pre-allocate output arrays for my dpnp loop, or is allocating new ones every iteration fine?", "should_trigger": false}
+]

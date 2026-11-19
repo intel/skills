@@ -1,0 +1,14 @@
+[
+  {"query": "How do I save a dpnp array to disk and read it back later with the same dtype and shape?", "should_trigger": true},
+  {"query": "I need to store 200 GB of float32 arrays and read random slices of them. npy, npz, HDF5 or Zarr?", "should_trigger": true},
+  {"query": "How do I read an HDF5 dataset with h5py into a dpnp array?", "should_trigger": true},
+  {"query": "My .npy file is bigger than RAM. How do I process it with dpnp piece by piece?", "should_trigger": true},
+  {"query": "My dpnp job reads CSV files and the GPU barely helps. How do I tell whether it's I/O bound?", "should_trigger": true},
+  {"query": "Is there a dpnp.loadtxt or dpnp.genfromtxt for text files?", "should_trigger": true},
+  {"query": "Our conda environment came from the Intel channel. How do I tell whether mkl_umath is already hooked into NumPy's ufuncs, and could it shift the last digits our regression tests compare?", "should_trigger": false},
+  {"query": "scikit-learn's fit() raises a TypeError when I give it a dpnp array. Where should I convert?", "should_trigger": false},
+  {"query": "I need FFTs of 10,000 real signals of length 4096. One call or a loop, and fft or rfft?", "should_trigger": false},
+  {"query": "I computed an array on the GPU and want to continue with it on the CPU device. How do I move it there without a round trip through NumPy?", "should_trigger": false},
+  {"query": "We have a 20k-line NumPy codebase. How do I find out which of the functions we call exist in the dpnp version we have installed?", "should_trigger": false},
+  {"query": "My dpnp script has to run on CI machines that have no Intel GPU. How do I use the GPU when there is one and the CPU otherwise?", "should_trigger": false}
+]
