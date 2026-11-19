@@ -2,12 +2,13 @@
 name: dpnp-migration
 description: >-
   Porting an existing NumPy or CuPy program to dpnp on Intel CPUs and GPUs:
-  deciding whether a codebase can run on dpnp at all, probing the installed
-  release for whether a named NumPy function or family is implemented, the
-  families with no device counterpart and their fallback wrapper, and where CuPy's
-  device model differs from dpnp's. Use when the user plans a port or asks what
-  dpnp covers. Not for a call that already fails after the port
-  (dpnp-troubleshooting) or for first-time setup (dpnp-quickstart).
+  deciding whether a codebase can run on dpnp, probing the installed release for
+  whether a named NumPy function or family is implemented, the families with no
+  device counterpart and their fallback wrapper, whether a device's default dtype
+  matches NumPy's (float32 on devices without fp64), and where CuPy's device model
+  differs. Use when the user plans a port or asks what dpnp covers. Not for a call
+  that already fails after the port (dpnp-troubleshooting), roundoff in linalg or
+  FFT results (dpnp-linalg-fft), or first-time setup (dpnp-quickstart).
 license: Apache-2.0
 compatibility: "Requires dpnp. The fallback path needs numpy. Device examples need a SYCL device; the probe itself runs anywhere dpnp imports."
 metadata:
@@ -38,6 +39,8 @@ Use this skill when:
 - The user wants to know, before the import swap, which calls will raise
   `NotImplementedError` or `AttributeError` after it.
 - The user asks whether `dpnp` supports a specific function or family.
+- The user asks why a result's dtype differs from NumPy's once the code runs on
+  a device.
 - CuPy code needs the `dpnp` spelling of device selection or of a host copy.
 
 Do **not** use this skill to diagnose a call that already fails after the port,
@@ -122,7 +125,32 @@ table can. Everything below is how to act on the answers.
    the target queue — a NumPy array never does, so treat both directions as
    copies unless you have measured otherwise.
 
-6. **From CuPy, expect the device model to differ more than the array API.**
+6. **Check numeric parity per device before comparing results.** NumPy's
+   default floating type is always float64; `dpnp`'s depends on the device.
+   A device without native fp64, which includes many integrated and client GPUs,
+   gets float32 for every floating result without an explicit `dtype=`: floating
+   constructors, and integer inputs promoted by `mean`, division or `sqrt`.
+   Integer results stay integer (`arange(10)` is still int64). So the same script
+   prints different digits there. Probe it rather than assuming:
+
+   ```python
+   import dpctl
+   import dpnp
+
+   for device in dpctl.get_devices():
+       print(device.filter_string, device.has_aspect_fp64,
+             dpnp.default_float_type(device=device))
+   ```
+
+   On such a device, asking for `float64` or `complex128` explicitly raises
+   `ValueError: Device ... does not provide native support for double-precision
+   floating point type` (recovering from that error is `dpnp-troubleshooting`).
+   Compare against NumPy with `numpy.testing.assert_allclose` at a tolerance for
+   the dtype the device actually used, not float64's. Roundoff in `linalg` and
+   `fft` results is `dpnp-linalg-fft`, and random streams that differ from
+   NumPy's for the same seed are `dpnp-random`.
+
+7. **From CuPy, expect the device model to differ more than the array API.**
    CuPy's `cupy.cuda.Device(0).use()` has no `dpnp` counterpart: there is no
    ambient current device to set. Placement is an argument at construction time:
 
@@ -138,7 +166,7 @@ table can. Everything below is how to act on the answers.
    equivalent; the pool and kernel APIs in particular have no `dpnp` analogue to
    translate into.
 
-7. **Record what fell back.** A port that ends with four wrapped functions and a
+8. **Record what fell back.** A port that ends with four wrapped functions and a
    note saying which they are is finished. One that ends with a wrapper around
    every call has hidden its own status, and nothing will tell you later which
    calls were ever on the device.

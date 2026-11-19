@@ -4,8 +4,9 @@ description: >-
   Linear algebra and FFT with dpnp on Intel CPUs and GPUs, backed by oneMKL. Use
   when a matrix multiply, solve, decomposition, eigenvalue problem, or Fourier
   transform is the hot part of NumPy code, when the user asks whether dpnp covers
-  a linalg or FFT call, when an FFT result differs slightly from NumPy's, or when
-  a large transform runs out of device memory. Covers the supported surface,
+  a linalg or FFT call, when a solve, decomposition or FFT result differs from
+  NumPy's in the last digits (and how to compare the two), or when a large
+  transform runs out of device memory. Covers the supported surface,
   transform sizing and plan reuse, fallbacks for what is missing, and how to check
   conditioning before solving.
 license: Apache-2.0
