@@ -86,7 +86,7 @@ print rather than what they were expected to print.
    conda install -c https://software.repos.intel.com/python/conda \
      -c conda-forge --override-channels dpnp dpctl
 
-   pip install intel-cmplr-lib-rt      # SYCL runtime only
+   pip install intel-sycl-rt           # SYCL runtime only
    ```
 
 3. **No device, or the wrong device.** `dpctl.get_devices()` returning an empty
@@ -152,7 +152,7 @@ speedup. When a change is meant to make something faster, measure it:
 - **The default device is whatever is visible.** Code that runs on a GPU
   workstation lands on a CPU in CI without raising, so "it worked locally" says
   nothing about where it ran.
-- **`intel-cmplr-lib-rt` fixes the runtime, not the driver.** A GPU that the
+- **`intel-sycl-rt` fixes the runtime, not the driver.** A GPU that the
   kernel driver does not expose stays invisible whatever is installed in the
   environment.
 - Not covered: driver installation, container device passthrough, and multi-GPU
