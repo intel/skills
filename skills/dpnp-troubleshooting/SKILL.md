@@ -98,7 +98,7 @@ print rather than what they were expected to print.
    import dpctl
    import dpnp
 
-   cpu = dpctl.SyclDevice("opencl:cpu:0")
+   cpu = dpctl.SyclDevice("cpu")
    arr = dpnp.arange(1000, device=cpu)
    ```
 
