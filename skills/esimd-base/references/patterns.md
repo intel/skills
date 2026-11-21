@@ -70,14 +70,14 @@ When working data fits in registers (≤ ~2 KB), prefer registers over SLM.
 
 | | Register file | SLM |
 |--|--------------|-----|
-| Latency | ~1 cycle | ~30 cycles |
+| Latency | lowest | much higher |
 | Requires `nd_range` | No | Yes |
 | Requires `barrier()` | No | Yes |
 | Per-thread budget | 4 KB (Xe1), 8 KB (Xe2+) | 128 KB / sub-slice (shared) |
 | GROUP_SIZE overhead | None | Yes |
 
 ```cpp
-// BAD: SLM for per-thread data (30× slower than needed)
+// BAD: SLM for per-thread data (much slower than needed)
 slm_init<1024>();
 slm_block_store<sycl::half, 32>(offset, chunk);
 simd<sycl::half, 32> v = slm_block_load<sycl::half, 32>(offset);
@@ -146,8 +146,7 @@ for (int i = 0; i < num_outputs; i++) {
 }
 ```
 
-**Benefit**: avoids complex vectorized boundary logic, keeps the hot path clean, easy to debug.
-**Measured**: 1.31 ms (scalar only) → 0.808 ms (hybrid) = 1.62× speedup.
+**Benefit**: avoids complex vectorized boundary logic, keeps the hot path clean, easy to debug, and is clearly faster than a scalar-only loop.
 
 For kernels where offsets can be clamped safely (e.g., max pooling where reading duplicate elements is harmless), prefer **branchless offset clamping** over hybrid:
 

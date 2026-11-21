@@ -8,9 +8,11 @@ description: >
   config_2d_mem_access), block_load, block_store, gather, or scatter in ESIMD
   kernels. Covers surface parameters, VNNI and transposed loads for DPAS
   operands, tile size limits, cache hints, out-of-bounds behavior, and pitfalls
-  such as unaligned pitch and the fp16 transpose limitation.
+  such as unaligned pitch and the fp16 transpose limitation. Not for shared
+  local memory: see esimd-lsc-slm.
 metadata:
   version: 2.0.0
+compatibility: "Requires the oneAPI DPC++ compiler (icpx -fsycl). Code checked with DPC++ 2025.3.3 and 2026.1.1 on an Intel Arc B580 (Xe2)."
 ---
 
 # ESIMD 2D Block Operations, Gather, and Scatter
@@ -150,7 +152,7 @@ A 16-row fp16 tile is stored as two `store_2d` calls at `y` and `y + 8`.
 
 ## 1D Block Load / Store
 
-For contiguous access (full rows, cooperative loads into SLM) `block_load`/`block_store` are simpler and often faster than 2D. Measured ~4% faster than 2D loads for cooperative K+V loads into SLM.
+For contiguous access (full rows, cooperative loads into SLM) `block_load`/`block_store` are simpler and often faster than 2D, for example for cooperative K+V loads into SLM.
 
 ```cpp
 simd<sycl::half, 128> data = block_load<sycl::half, 128>(ptr + offset);
@@ -197,7 +199,7 @@ Properties `cache_hint_L1<...>` and `cache_hint_L2<...>` (L2 is the last-level c
 | store | none/none; write_back/write_back; L1 in {uncached, write_through, streaming} with L2 in {uncached, write_back}. **L2 `cached` is illegal for stores** |
 
 - Tiles reused across iterations (GEMM A/B, attention K/V): `cached/cached` loads.
-- `block_store`: default (no hints) was fastest; `(streaming, write_back)` measured 33% slower, `(streaming, uncached)` 7x slower.
+- `block_store`: default (no hints) was fastest; `(streaming, write_back)` was slower and `(streaming, uncached)` much slower.
 
 ---
 

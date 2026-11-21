@@ -979,10 +979,12 @@
         "esimd-base",
         "esimd-lsc-2d-gather-scatter",
         "esimd-lsc-slm",
-        "xe2-dpas-patterns"
+        "xe2-dpas-patterns",
+        "xe2-nbarrier-pipelining"
       ],
       "target_task_count": 5,
-      "note": "A bundle suite for the four ESIMD kernel-programming skills, which a GPU kernel task needs together: core ESIMD and reductions, 2D block loads, shared local memory with barriers, and DPAS operand layouts. Its result measures the bundle, not any single member. One task is implemented. Unscored pre-checks with a strong model passed it with and without the skills (the skills cut effort and generated instructions, not the reward), so it is marked smoke until a scored run says otherwise. The planned tasks target what that model did not find on its own: the Usage 2 orientation for narrow outputs, silent ESIMD traps, and instruction efficiency.",
+      "scope": "The ESIMD kernel-programming skills a GPU kernel task needs together: core ESIMD and reductions, 2D block loads, shared local memory with barriers, DPAS operand layouts, and named barriers. The result measures the bundle, not any single member.",
+      "note": "One task is implemented. Unscored pre-checks with a strong model passed it with and without the skills (the skills cut effort and generated instructions, not the reward), so it is marked smoke until a scored run says otherwise. The planned tasks target what that model did not find on its own: the Usage 2 orientation for narrow outputs, silent ESIMD traps, and instruction efficiency.",
       "provenance": "Written for this repository. The oracle solution and the verifier's negative controls (operands reshuffled in registers, missing cross-work-item combine, a reduction that returns 0, a spilling kernel) were validated on an Intel Arc B580 with oneAPI 2026.1.1 and the pinned GPU compiler.",
       "capabilities": [
         {
@@ -1021,10 +1023,9 @@
           "environment": "hosted-cpu",
           "covers": [
             "dpas-operand-loading",
-            "slm-partial-combine",
             "aot-build-integration"
           ],
-          "note": "Single-block attention as one ESIMD work-group. Built ahead of time for Battlemage without a GPU and checked on the generated ISA; numerics are checked only when a host passes an Intel GPU into the container."
+          "note": "Single-block attention as one ESIMD work-group. Built ahead of time for Battlemage without a GPU and checked on the generated ISA; numerics are checked only when a host passes an Intel GPU into the container, so it does not cover slm-partial-combine."
         },
         {
           "name": "xe2-dpas-narrow-output",

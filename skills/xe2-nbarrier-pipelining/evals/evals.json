@@ -1,0 +1,21 @@
+{
+  "skill_name": "xe2-nbarrier-pipelining",
+  "evals": [
+    {
+      "id": "split-signal-wait",
+      "prompt": "In an ESIMD kernel for Intel Xe2, how do I split a work-group barrier into a separate signal and wait, so that independent work can run between them? Show the calls.",
+      "expected_output": "Named barriers in sycl::ext::intel::esimd: named_barrier_init<N>() at kernel start declares N barriers; every thread calls named_barrier_signal(id, 0, num_threads, num_threads) after its SLM writes, does independent work (global loads, prefetches, register-only math) that touches no shared SLM, then calls named_barrier_wait(id) before reading other threads' SLM data. There is no nbarrier class in the ESIMD headers.",
+      "checks": {
+        "must_include": ["named_barrier_init", "named_barrier_signal", "named_barrier_wait"]
+      }
+    },
+    {
+      "id": "raw-intrinsics-to-public-api",
+      "prompt": "An existing ESIMD kernel calls __esimd_nbarrier_init(1), __esimd_nbarrier_arrive(0, 0, 32, 32) and __esimd_nbarrier(0, 0, 32). What are the equivalent public ESIMD functions, and what do the arguments mean?",
+      "expected_output": "__esimd_nbarrier_init(1) is named_barrier_init<1>() (one named barrier). __esimd_nbarrier_arrive(0, 0, 32, 32) is named_barrier_signal(0, 0, 32, 32): barrier id 0, mode 0, 32 producers, 32 consumers; the public function also issues a fence first. __esimd_nbarrier(0, 0, 32) is named_barrier_wait(0): the first argument 0 selects wait, the second is the barrier id.",
+      "checks": {
+        "must_include": ["named_barrier_signal", "named_barrier_wait"]
+      }
+    }
+  ]
+}

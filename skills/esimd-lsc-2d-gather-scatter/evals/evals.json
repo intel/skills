@@ -1,0 +1,21 @@
+{
+  "skill_name": "esimd-lsc-2d-gather-scatter",
+  "evals": [
+    {
+      "id": "pitch-not-multiple-of-16",
+      "prompt": "My ESIMD 2D block load (load_2d) on an Arc B580 returns wrong values for an fp16 matrix with 1001 columns, but the same code works for a matrix with 1024 columns. There is no error or warning. What is going on, and what can I do?",
+      "expected_output": "The 2D block surface pitch must be a multiple of 16 bytes. 1001 fp16 columns give a 2002-byte pitch, which violates this; the load compiles and runs but silently returns wrong data. Either pad the row stride to a multiple of 16 bytes (e.g. 1008 columns) or use 1D block loads (block_load) for this layout.",
+      "checks": {
+        "must_include": ["pitch", "16"]
+      }
+    },
+    {
+      "id": "transposed-fp16-tile",
+      "prompt": "I need a DPAS B operand from a row-major fp16 matrix Bt[N][K] (N rows, K columns) on an Arc B580. I tried a single ESIMD 2D block load with Transposed=true, but it does not compile for sycl::half. How do I load the 16 x 16 tile?",
+      "expected_output": "Transposed 2D loads support only 4- and 8-byte element types. Treat pairs of fp16 values as uint32_t: load_2d<uint32_t, 8, 16, 1, /*Transposed=*/true, false> on the matrix reinterpreted as const uint32_t*, with x in 32-bit elements (k0 / 2), then reinterpret the result with bit_cast_view<sycl::half>() on a named simd. Each dword holds two consecutive-K values of the same row, which is the VNNI layout a DPAS B operand expects.",
+      "checks": {
+        "must_include": ["uint32_t", "bit_cast_view"]
+      }
+    }
+  ]
+}

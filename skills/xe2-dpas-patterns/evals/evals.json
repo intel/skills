@@ -1,0 +1,21 @@
+{
+  "skill_name": "xe2-dpas-patterns",
+  "evals": [
+    {
+      "id": "single-dpas-tile",
+      "prompt": "Show me a minimal SYCL ESIMD program for Xe2 that computes C[8 x 16] = A[8 x 16] * B[16 x 16] with a single xmx::dpas call. A and B are row-major fp16, C is row-major fp32. Verify every output against a CPU reference.",
+      "expected_output": "One xmx::dpas<8, 8, float, float, sycl::half, sycl::half>(acc, b_tile, a_tile) call (or the accumulator-free dpas<8, 8, float, sycl::half, sycl::half>(b_tile, a_tile)), with B before A. A is loaded with a 2D block load without transform; B (row-major [K][N]) is loaded with a 2D block load that applies the hardware VNNI transform (Transformed=true) instead of being packed into VNNI order in registers. The result is compared element by element against a CPU reference.",
+      "checks": {
+        "must_include": ["xmx::dpas", "load_2d"]
+      }
+    },
+    {
+      "id": "fp16-vector-scatter-rejected",
+      "prompt": "On an Arc B580 I write the transposed result of a DPAS call (16 rows of 8 fp16 values, one row per lane) with lsc_scatter<sycl::half, 8, lsc_data_size::u16, ...>, and the build fails with 'only D32 and D64 support vector load'. How should I write the result instead?",
+      "expected_output": "Gather/scatter with more than one element per lane only supports 32- and 64-bit elements, so the fp16 vector scatter is rejected at vISA finalization. Pack each pair of adjacent fp16 columns into one uint32_t (strided selects into a bit-cast view) and write each row with a single lsc_scatter<uint32_t, 4, lsc_data_size::u32, ...>; row starts must be 4-byte aligned. With an fp32 accumulator and fp32 output, lsc_scatter<float, 8, ...> works directly. Eight NElts=1 fp16 scatters also work but cost eight messages.",
+      "checks": {
+        "must_include": ["uint32_t"]
+      }
+    }
+  ]
+}

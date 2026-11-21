@@ -1,6 +1,7 @@
 ---
 name: xe2-dpas-patterns
-description: "Use this skill when writing, loading operands for, or storing results from XMX DPAS instructions on Intel Xe2 (Lunar Lake/LNL, Battlemage/BMG) GPU using SYCL ESIMD. Xe2 is the GPU architecture; LNL and BMG are product names. Covers all four DPAS operand load patterns (lsc_load_2d, lsc_gather, VNNI packing, transposed u32 load), scatter/store write-back, Usage 1 vs Usage 2 orientation, and the SOA property of lsc_gather. Applicable to any kernel using DPAS: GEMM, attention, convolution, etc."
+description: "Use this skill when writing, loading operands for, or storing results from XMX DPAS instructions on Intel Xe2 (Lunar Lake/LNL, Battlemage/BMG) GPU using SYCL ESIMD. Xe2 is the GPU architecture; LNL and BMG are product names. Covers all four DPAS operand load patterns (lsc_load_2d, lsc_gather, VNNI packing, transposed u32 load), scatter/store write-back, Usage 1 vs Usage 2 orientation, and the SOA property of lsc_gather. Applicable to any kernel using DPAS: GEMM, attention, convolution, etc. Not for joint_matrix or library GEMM calls (oneMKL, oneDNN), or for general 2D block load limits (see esimd-lsc-2d-gather-scatter)."
+compatibility: "Requires the oneAPI DPC++ compiler (icpx -fsycl). Code checked with DPC++ 2025.3.3 and 2026.1.1 on an Intel Arc B580 (Xe2)."
 ---
 
 # Xe2 DPAS Patterns Skill
@@ -23,6 +24,8 @@ constexpr auto cached     = xesimd::cache_hint::cached;
 constexpr auto write_back = xesimd::cache_hint::write_back;
 ```
 
+Patterns 1 and 2 and the Usage 1 write-back use the experimental `lsc_load_2d`/`lsc_store_2d`, as existing kernels and the asset do. For new code, prefer the non-experimental `load_2d`/`store_2d` in `sycl::ext::intel::esimd` (same block shapes and surface parameters, passed as arguments instead of a `config_2d_mem_access` payload; Pattern 4 uses it).
+
 All matrices are row-major. For `C[M,N] = A[M,K] * B^T`:
 - `B[N,K]` — B stored N-major (row `n` holds K values).
 - `B_T[K,N]` — the same matrix stored K-major. This is the standard GEMM "B" layout of `C = A * B`.
@@ -35,7 +38,7 @@ All matrices are row-major. For `C[M,N] = A[M,K] * B^T`:
 // xmx::dpas<SystolicDepth, RepeatCount, T, CT, BT, AT>(acc, b_tile, a_tile)  // C = acc + A*B
 // xmx::dpas<SystolicDepth, RepeatCount, T, BT, AT>(b_tile, a_tile)           // C = A*B (acc = 0)
 // T = result type, CT = accumulator type, BT/AT = operand types
-// XE2: SystolicDepth = 8 (fixed); RepeatCount = 1..8 (rows of a_tile and acc)
+// XE2: SystolicDepth = 8 (fixed); RepeatCount = 1..8 (rows of a_tile and acc); N = 16 (fixed)
 // FP16/BF16: 8 systolic steps x 2 elements/step = 16 K-elements per call
 simd<float, 8*16> acc(0.f);
 acc = xmx::dpas<8, 8, float, float, sycl::half, sycl::half>(acc, b_tile, a_tile);
@@ -213,7 +216,7 @@ Requirements: `n_base` and `N_total` even (4-byte aligned row starts). With an f
 | store C (Usage 2, fp16) | pack + `lsc_scatter<u32,4,u32,N=16>` | 8 strided moves (pack) |
 | store C (Usage 2, fp32) | `lsc_scatter<float,8,u32,N=16>` | none |
 
-Every operation is a single memory message. Avoid the alternatives that look shuffle-free but are worse: fp16 gather/scatter with NElts > 1 does not compile, eight NElts=1 fp16 messages cost 8 messages plus per-message address math (~2.4x the instructions), and a full register transpose of `acc` compiles to ~70 moves.
+Every operation is a single memory message. Avoid the alternatives that look shuffle-free but are worse: fp16 gather/scatter with NElts > 1 does not compile, eight NElts=1 fp16 messages cost 8 messages plus per-message address math, and a full register transpose of `acc` compiles to many moves.
 
 ---
 

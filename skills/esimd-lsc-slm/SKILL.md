@@ -4,13 +4,16 @@ description: >
   Shared Local Memory (SLM) operations in Intel ESIMD (SYCL explicit SIMD)
   kernels for Intel GPUs. Use this skill when
   working with slm_init, slm_block_load, slm_block_store, lsc_slm_gather,
-  lsc_slm_scatter, SLM layout design, barrier synchronization, named barriers,
+  lsc_slm_scatter, SLM layout design, barrier synchronization,
   cooperative SLM loading, or any kernel that uses workgroup shared memory on
   Intel GPUs. Covers SLM size limits, bank conflicts, the lsc_slm_scatter
   transpose trick, and common pitfalls like forgetting slm_init or conditional
-  barriers causing GPU hangs.
+  barriers causing GPU hangs. Not for global memory loads and stores (see
+  esimd-lsc-2d-gather-scatter) or pipelining with named barriers (see
+  xe2-nbarrier-pipelining).
 metadata:
     version: 1.0.0
+compatibility: "Requires the oneAPI DPC++ compiler (icpx -fsycl). Code checked with DPC++ 2025.3.3 and 2026.1.1 on an Intel Arc B580 (Xe2)."
 ---
 
 # ESIMD LSC SLM (Shared Local Memory) Operations
@@ -191,34 +194,15 @@ for (int t = 0; t < kv_len; t += VS) {
 
 ## Named Barriers
 
-Named barriers (`nbarrier`) enable fine-grained synchronization where different thread subsets synchronize independently, and support split arrive/wait for latency hiding.
+Named barriers split a work-group barrier into a signal and a wait, so independent work can run in between. They are functions in `sycl::ext::intel::esimd` (there is no `nbarrier` class):
 
 ```cpp
-// Declare named barrier
-nbarrier nb;
-nb.init_nbarrier(barrier_id, nbarrier_role::producer_consumer, num_threads);
-
-// Split arrive/wait pattern
-nb.arrive();          // Signal: "I'm done writing"
-// ... do independent work (V loads, prefetch, compensation) ...
-nb.wait();            // Block: "Wait for all others to signal"
-```
-
-**Use case: Split barrier B in SDP kernel**
-
-The arrive/wait window spans V loads + K prefetch + deferred compensation = 100+ cycles of useful work between arrive and wait:
-
-```cpp
-// After S SLM writes complete:
-nb_B.arrive();                    // Signal S writes done
-
-// Independent work while waiting for all S writes:
-auto v_tile = lsc_load_2d<...>(); // V loads from global
-lsc_prefetch_2d<...>();           // Next K prefetch
-a_tile *= delta;                  // Deferred compensation
-
-nb_B.wait();                      // Now safe to read S from SLM
-auto s_tile = slm_block_load<...>();
+named_barrier_init<1>();                 // kernel start: number of named barriers
+slm_block_store<half, 128>(my_offset, s_tile);
+named_barrier_signal(0, 0, NUM_THREADS, NUM_THREADS);  // id, mode, producers, consumers
+// ... independent work: global loads, prefetch, register-only ALU ...
+named_barrier_wait(0);                   // now safe to read other threads' SLM writes
+auto other = slm_block_load<half, 128>(other_offset);
 ```
 
 See `xe2-nbarrier-pipelining` skill for full named barrier patterns.
@@ -325,7 +309,7 @@ for (int c = 0; c < COLS; c++) {
 
 ## The lsc_slm_scatter Transpose Trick
 
-From the HD=256 SDP kernel: replace ~270 register transpose `mov` instructions with `lsc_slm_scatter`, gaining +1.7 TFLOPS (84 to 88 TFLOPS).
+From an HD=256 attention kernel: replace hundreds of register-transpose `mov` instructions with `lsc_slm_scatter`, which made the kernel faster.
 
 ### Problem
 
@@ -358,15 +342,15 @@ QK GEMM produces scores in `[KV=16][Q=16]` layout per thread. VS GEMM needs `[Q]
 - 8 scatter calls per thread (2 q_pairs x 4 kv_groups)
 - NElts=2 writes 2 uint32 per address = 4 FP16 KV values per call
 - Data **must** be element-major (see NElts layout section above)
-- Address-major interleave produces ~0.12 relative RMS error (systematic bug)
+- Address-major interleave produces large systematic errors, not a crash
 
 ### What Did NOT Work
 
-| Approach | TFLOPS | Why it failed |
+| Approach | Result | Why it failed |
 |----------|--------|---------------|
-| `lsc_slm_gather` (block_store + gather read) | 73 (-12.9) | SLM gathers too expensive |
-| SLM scatter NElts=1 (64 D16 messages) | 69 | Per-element scatter BW too low |
-| VNNI interleave (stride-2 uint32 pairs) | 82.7 (neutral) | Compiler decomposed stride-8 gather into more movs |
+| `lsc_slm_gather` (block_store + gather read) | slower | SLM gathers too expensive |
+| SLM scatter NElts=1 (64 D16 messages) | slower | Per-element scatter BW too low |
+| VNNI interleave (stride-2 uint32 pairs) | no gain | Compiler decomposed stride-8 gather into more movs |
 
 ---
 

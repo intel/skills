@@ -1,7 +1,8 @@
 # Treatment instruction — esimd-xe2-kernels
 
-Four skills are installed in your skills directory: `esimd-base`,
-`esimd-lsc-2d-gather-scatter`, `esimd-lsc-slm`, and `xe2-dpas-patterns`. Read them
+Five skills are installed in your skills directory: `esimd-base`,
+`esimd-lsc-2d-gather-scatter`, `esimd-lsc-slm`, `xe2-dpas-patterns`, and
+`xe2-nbarrier-pipelining`. Read them
 before you start, and follow their guidance where it applies to this task.
 
 If the skills do not cover something the task needs, solve that part however you
@@ -17,7 +18,7 @@ This instruction removes that step deliberately: the Level 2 gate is a controlle
 comparison, and description-reachability is a second variable that would confound
 the reward delta. So this arm measures the skills' BODIES, not their discoverability.
 
-This is a bundle suite: the result measures the four skills together, not any one of
+This is a bundle suite: the result measures the five skills together, not any one of
 them. It is not individual evidence for promoting a member skill to `validated`.
 
 Rules for editing this file:

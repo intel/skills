@@ -65,6 +65,16 @@ def test_vnni_operand_from_memory(build):
         "no VNNI-transforming 2D block load in the generated code"
 
 
+def test_k_operand_from_memory(build):
+    """The K operand of Q * K^T needs pairs along the head dimension, which are
+    contiguous in K's rows: a transposed 32-bit 2D block load or a 32-bit vector
+    gather delivers them in order. Loading K rows and transposing in registers does not."""
+    rc, _, asm = build
+    assert rc == 0
+    assert count(asm, r"\bload_block2d\.ugm\.d32t\b|\bload\.ugm\.d32x(2|3|4|8)\b") > 0, \
+        "K is not loaded as 32-bit pairs (transposed 2D block load or vector gather)"
+
+
 def test_combines_through_work_group_local_memory(build):
     rc, _, asm = build
     assert rc == 0

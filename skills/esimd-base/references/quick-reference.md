@@ -22,11 +22,12 @@ namespace xmx = sycl::ext::intel::esimd::xmx;
 ### Memory
 
 ```cpp
-// Block load/store — address must be a multiple of 4 bytes by default
-simd<T, N> v = block_load<T, N>(ptr + offset);                              // float/int: always OK
+// Block load/store — defaults assume 4-byte (load) and 16-byte (store) alignment
+simd<T, N> v = block_load<T, N>(ptr + offset);                              // float/int: any index
 simd<T, N> v = block_load<T, N>(ptr + offset, properties{alignment<2>});    // half/bf16: odd offset
 simd<T, N> v = block_load<T, N>(ptr + offset, properties{alignment<1>});    // uint8_t: any offset
-block_store<T, N>(ptr + offset, v);
+block_store<T, N>(ptr + offset, v);                                          // 16-byte aligned
+block_store<T, N>(ptr + offset, v, properties{alignment<4>});               // float/int: any index
 block_store<T, N>(ptr + offset, v, properties{alignment<2>});               // half/bf16: odd offset
 
 // Gather/scatter (non-contiguous, byte offsets)

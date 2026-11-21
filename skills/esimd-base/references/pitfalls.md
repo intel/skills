@@ -4,7 +4,7 @@ Part of the `esimd-base` skill.
 
 ## Common Performance Traps
 
-### 1D Range with Manual Index Decode (10–35× slowdown)
+### 1D Range with Manual Index Decode
 
 See Kernel Design in `SKILL.md`. Most impactful mistake.
 
@@ -21,11 +21,11 @@ simd<sycl::half, 128> val = block_load<sycl::half, 128>(ptr + offset);
 ### Non-Aligned Offset
 
 ```cpp
-// BAD: offset 7 is not aligned
-simd<float, 32> v = block_load<float, 32>(ptr, 7 * sizeof(float));
+// BAD: block_store assumes a 16-byte-aligned address; ptr + 3 floats is only 4-byte aligned
+block_store<float, 8>(ptr + 3, v);
 
-// GOOD: offset must be a multiple of load width (or use alignment<> property)
-simd<float, 32> v = block_load<float, 32>(ptr, 8 * sizeof(float));
+// GOOD: state the real alignment
+block_store<float, 8>(ptr + 3, v, properties{alignment<4>});
 ```
 
 ### Excessive Synchronization
@@ -95,13 +95,14 @@ int n = (a < b) ? a : b;
 
 ### `reduce<T>(vec, std::plus<T>())` — Silent Zero Return
 
-With `using namespace sycl::ext::intel::esimd` in scope, `reduce<float>(vec, std::plus<float>())` resolves to C++17 `std::reduce` (iterator overload) instead of the ESIMD intrinsic. It compiles without error and silently returns 0.
+`esimd::reduce` only recognizes the transparent functors `std::plus<>` and `std::multiplies<>`. With `std::plus<float>` neither branch of its implementation is taken, so it returns no value: undefined behavior that compiles without a warning and in practice returns 0.
 
 ```cpp
-// BAD — silently returns 0 (std::reduce, not esimd::reduce)
+// BAD — no value returned (in practice 0)
 float s = reduce<float>(vec, std::plus<float>());
 
-// GOOD — fully qualified, unambiguous
+// GOOD
+float s = reduce<float>(vec, std::plus<>());
 float s = sycl::ext::intel::esimd::detail::sum<float, float, N>(vec);
 sycl::half s = sycl::ext::intel::esimd::detail::sum<sycl::half, sycl::half, N>(vec);
 ```

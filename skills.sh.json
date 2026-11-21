@@ -60,7 +60,8 @@
         "esimd-base",
         "esimd-lsc-2d-gather-scatter",
         "esimd-lsc-slm",
-        "xe2-dpas-patterns"
+        "xe2-dpas-patterns",
+        "xe2-nbarrier-pipelining"
       ]
     }
   ]

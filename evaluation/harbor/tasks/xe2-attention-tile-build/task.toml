@@ -2,7 +2,7 @@ schema_version = "1.3"
 
 [metadata]
 skills = ["esimd-base", "esimd-lsc-2d-gather-scatter", "esimd-lsc-slm", "xe2-dpas-patterns"]
-covers = ["dpas-operand-loading", "slm-partial-combine", "aot-build-integration"]
+covers = ["dpas-operand-loading", "aot-build-integration"]
 author_name = "Benjamin Ummenhofer"
 author_email = "benjamin.ummenhofer@intel.com"
 difficulty = "hard"

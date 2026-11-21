@@ -424,16 +424,25 @@
 # gather/scatter memory access, shared local memory, and XMX DPAS operand patterns.
 - name: esimd-base
   maintainer: "benjaminum"
+  intel-products: "Intel GPU"
   intel-hw-class: "gpu"
 
 - name: esimd-lsc-2d-gather-scatter
   maintainer: "benjaminum"
+  intel-products: "Intel GPU"
   intel-hw-class: "gpu"
 
 - name: esimd-lsc-slm
   maintainer: "benjaminum"
+  intel-products: "Intel GPU"
   intel-hw-class: "gpu"
 
 - name: xe2-dpas-patterns
   maintainer: "benjaminum"
+  intel-products: "Intel GPU"
+  intel-hw-class: "gpu"
+
+- name: xe2-nbarrier-pipelining
+  maintainer: "benjaminum"
+  intel-products: "Intel GPU"
   intel-hw-class: "gpu"
