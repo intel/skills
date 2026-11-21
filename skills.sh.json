@@ -52,6 +52,16 @@
         "performance-patterns",
         "phoronix-test-suite"
       ]
+    },
+    {
+      "title": "ESIMD kernel programming on Intel GPUs",
+      "description": "Write and debug explicit-SIMD (ESIMD) SYCL kernels for Intel Xe2 GPUs: core ESIMD API and vectorization, 2D block loads/stores and gather/scatter, shared local memory with barriers, and XMX DPAS operand loading and write-back.",
+      "skills": [
+        "esimd-base",
+        "esimd-lsc-2d-gather-scatter",
+        "esimd-lsc-slm",
+        "xe2-dpas-patterns"
+      ]
     }
   ]
 }
