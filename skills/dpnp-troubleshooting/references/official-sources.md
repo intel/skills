@@ -12,7 +12,7 @@ changed at least once and must not be answered from memory.
 | [dpnp quick start guide](https://intelpython.github.io/dpnp/quick_start_guide.html) | **the current install paths, channel names, and driver prerequisites.** This page, not a remembered `conda install` line, is the source for step 2 |
 | [dpnp on PyPI](https://pypi.org/project/dpnp/) | released versions and wheel availability per platform |
 | [dpctl on PyPI](https://pypi.org/project/dpctl/) | the same for `dpctl`, which is the package a device query actually needs |
-| [intel-cmplr-lib-rt on PyPI](https://pypi.org/project/intel-cmplr-lib-rt/) | the SYCL runtime alone, for the `OSError` on `libsycl` case |
+| [intel-sycl-rt on PyPI](https://pypi.org/project/intel-sycl-rt/) | the SYCL runtime alone, for the `OSError` on `libsycl` case |
 
 ## API coverage
 
