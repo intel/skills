@@ -10,6 +10,7 @@ API coverage that changes between releases.
 |---|---|
 | [dpnp documentation](https://intelpython.github.io/dpnp/) | entry point; version this skill's guidance is written against |
 | [Quick start guide](https://intelpython.github.io/dpnp/quick_start_guide.html) | install paths, supported platforms, driver prerequisites |
+| [oneAPI DPC++/C++ Compiler release notes](https://www.intel.com/content/www/us/en/developer/articles/release-notes/oneapi-dpcpp/2026.html) | supported CPUs and GPUs per release (Hardware Requirements) |
 | [API reference](https://intelpython.github.io/dpnp/reference/index.html) | whether a function exists, and which keyword arguments it accepts |
 | [NumPy comparison table](https://intelpython.github.io/dpnp/reference/comparison.html) | **the authoritative coverage answer.** Check here before telling a user an API is missing — coverage is per parameter, not per function |
 | [IntelPython/dpnp](https://github.com/IntelPython/dpnp) | source, release notes, open issues behind a `NotImplementedError` |
