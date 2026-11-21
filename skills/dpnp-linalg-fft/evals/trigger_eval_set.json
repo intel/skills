@@ -1,0 +1,14 @@
+[
+  {"query": "dpnp.linalg.solve and numpy.linalg.solve differ in the 6th digit. Is that a bug, and how should I compare them?", "should_trigger": true},
+  {"query": "I need FFTs of 10,000 real signals of length 4096. One call or a loop, and fft or rfft?", "should_trigger": true},
+  {"query": "scipy.linalg.expm has no dpnp equivalent. How do I use SciPy for that one step without lots of copies?", "should_trigger": true},
+  {"query": "Does my installed dpnp have lu, a Cholesky solve and eigh? How do I check?", "should_trigger": true},
+  {"query": "My first dpnp.fft.fft call on a new shape is slow. How do I benchmark FFTs properly?", "should_trigger": true},
+  {"query": "How do I write a test that checks my dpnp SVD against NumPy's, given that signs and ordering can differ?", "should_trigger": true},
+  {"query": "After switching to dpnp, how do I get a result back as a regular NumPy array to print it or hand it to code that expects numpy?", "should_trigger": false},
+  {"query": "Port the training code in ./model so it runs on our Intel Arc GPU: change the .cuda() and torch.cuda calls, and leave the NumPy preprocessing on the CPU.", "should_trigger": false},
+  {"query": "I have a pandas DataFrame. What's the right way to get its columns into dpnp and the results back into the DataFrame?", "should_trigger": false},
+  {"query": "How do I read an HDF5 dataset with h5py into a dpnp array?", "should_trigger": false},
+  {"query": "My dataset is 40 GB and my Arc GPU has 16 GB. How do I process it with dpnp without running out of device memory?", "should_trigger": false},
+  {"query": "Our code uses numpy.ma masked arrays and datetime64 columns. Can those parts move to dpnp?", "should_trigger": false}
+]
