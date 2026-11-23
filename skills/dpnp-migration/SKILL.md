@@ -113,11 +113,14 @@ table can. Everything below is how to act on the answers.
            return dpnp.unique(array, return_counts=True)
        except (NotImplementedError, AttributeError, TypeError):
            values, counts = numpy.unique(dpnp.asnumpy(array), return_counts=True)
-           return dpnp.array(values), dpnp.array(counts)
+           q = array.sycl_queue if isinstance(array, dpnp.ndarray) else None
+           return dpnp.asarray(values, sycl_queue=q), dpnp.asarray(counts, sycl_queue=q)
    ```
 
    `TypeError` belongs in that tuple: a narrower signature is how a partially
-   implemented function refuses, and it is the outcome step 2 warns about.
+   implemented function refuses, and it is the outcome step 2 warns about. The
+   results go back to the input's queue, so they combine with it as the `dpnp`
+   results would.
 
 5. **Know what the conversions cost.** `dpnp.array(host_array)` copies host to
    device and `dpnp.asnumpy(device_array)` copies device to host. `dpnp.asarray`

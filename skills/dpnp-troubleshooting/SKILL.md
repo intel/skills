@@ -71,11 +71,15 @@ print rather than what they were expected to print.
        try:
            return device_func(x)
        except (NotImplementedError, AttributeError, TypeError):
-           host = dpnp.asnumpy(x) if isinstance(x, dpnp.ndarray) else x
-           return dpnp.array(host_func(host))
+           if not isinstance(x, dpnp.ndarray):
+               return dpnp.array(host_func(x))
+           return dpnp.asarray(host_func(dpnp.asnumpy(x)), sycl_queue=x.sycl_queue)
 
    unique = safe_call(dpnp.unique, numpy.unique, dpnp.array([1, 2, 2, 3]))
    ```
+
+   The result goes back to `x`'s queue: on the default device it would not
+   combine with an `x` pinned elsewhere.
 
 2. **Import failures.** A missing package and a missing SYCL runtime both
    raise `ImportError`; the message tells them apart. `No module named 'dpnp'`

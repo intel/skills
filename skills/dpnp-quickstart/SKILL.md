@@ -139,10 +139,14 @@ device — the default SYCL device is the GPU only when one is visible.
    def safe_unique(x):
        try:
            return dpnp.unique(x)
-       except (NotImplementedError, TypeError):
-           host_x = dpnp.asnumpy(x) if isinstance(x, dpnp.ndarray) else x
-           return np.unique(host_x)
+       except (NotImplementedError, AttributeError, TypeError):
+           if not isinstance(x, dpnp.ndarray):
+               return np.unique(x)
+           return dpnp.asarray(np.unique(dpnp.asnumpy(x)), sycl_queue=x.sycl_queue)
    ```
+
+   `AttributeError` covers a function `dpnp` lacks altogether. The NumPy result
+   goes back to `x`'s queue, so it combines with `x` as the `dpnp` result would.
 
 5. **Convert at API boundaries, not inside loops.** Use `dpnp.asnumpy()` when a
    downstream library needs a NumPy array. Pandas, scikit-learn, and many
