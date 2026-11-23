@@ -203,8 +203,10 @@ To measure:
 - Warm up once before timing, to avoid measuring first-run compilation.
 - Wait for the device before stopping the timer: kernels are submitted
   asynchronously, so call `result.sycl_queue.wait()` first. Code that ends by
-  copying the result to the host, implicitly or explicitly through
-  `dpnp.asnumpy()`, needs no extra wait: that copy waits for the kernels itself.
+  copying the result to the host with `dpnp.asnumpy()`, or by printing it or
+  turning it into a Python number or list (`float()`, `.item()`, `.tolist()`),
+  needs no extra wait: that copy waits for the kernels itself. NumPy cannot copy
+  it implicitly: `numpy.asarray(result)` raises `TypeError`.
 - Compare against NumPy with the same inputs and dtype.
 - Profile end-to-end pipelines, including conversions and host-library calls.
 
