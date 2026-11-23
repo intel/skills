@@ -77,16 +77,17 @@ print rather than what they were expected to print.
    unique = safe_call(dpnp.unique, numpy.unique, dpnp.array([1, 2, 2, 3]))
    ```
 
-2. **Import failures.** `ImportError` on the module name means it is not
-   installed; `OSError` on `libsycl.so` means the package is there and the SYCL
-   runtime is not. Install from the Intel conda channel, or the runtime alone
-   from pip:
+2. **Import failures.** A missing package and a missing SYCL runtime both
+   raise `ImportError`; the message tells them apart. `No module named 'dpnp'`
+   means it is not installed; `libsycl.so.N: cannot open shared object file`
+   means the package is there and the SYCL runtime is not. Install from the
+   Intel conda channel, or the runtime alone from pip:
 
    ```bash
    conda install -c https://software.repos.intel.com/python/conda \
      -c conda-forge --override-channels dpnp dpctl
 
-   pip install intel-cmplr-lib-rt      # SYCL runtime only
+   pip install intel-sycl-rt           # SYCL runtime only
    ```
 
 3. **No device, or the wrong device.** `dpctl.get_devices()` returning an empty
@@ -152,7 +153,7 @@ speedup. When a change is meant to make something faster, measure it:
 - **The default device is whatever is visible.** Code that runs on a GPU
   workstation lands on a CPU in CI without raising, so "it worked locally" says
   nothing about where it ran.
-- **`intel-cmplr-lib-rt` fixes the runtime, not the driver.** A GPU that the
+- **`intel-sycl-rt` fixes the runtime, not the driver.** A GPU that the
   kernel driver does not expose stays invisible whatever is installed in the
   environment.
 - Not covered: driver installation, container device passthrough, and multi-GPU
