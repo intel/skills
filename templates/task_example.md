@@ -35,6 +35,8 @@ schema_version = "1.3"
 # The task -> skill link is this field, not the directory path: `harbor run` needs
 # a single discovery root, so tasks cannot nest under skills/.
 skill = "your-skill-name"
+# A task that needs several skills together lists them instead (never both fields):
+# skills = ["skill-one", "skill-two"]
 # What the task exercises, named by you. Once a suite in ../../suites.json claims
 # the task these must be that suite's capability ids and validate_skills.py fails if
 # the two disagree; until then any non-empty list passes, and a maintainer reconciles
@@ -152,7 +154,9 @@ Registering means adding the task to
 [`evaluation/harbor/suites.json`](../evaluation/harbor/suites.json) with
 `status: "implemented"`, the same `covers` list, and a capability declaring the class
 and the smoke/discriminating role — which is what makes the reward count toward
-something. A suite with an implemented task also needs
-`evaluation/harbor/instructions/use-<skill>.md`, the neutral instruction the skill arms
-receive; deciding both is a judgement about the whole portfolio, so it happens when a
+something. A task that declares several skills is registered in a bundle suite (`"id"` plus
+`"skills"`, see [the Harbor README](../evaluation/harbor/README.md#bundle-suites)). A
+suite with an implemented task also needs
+`evaluation/harbor/instructions/use-<suite-id>.md` (the suite id is the skill name for
+a single-skill suite), the neutral instruction the skill arms receive; deciding both is a judgement about the whole portfolio, so it happens when a
 maintainer takes the skill toward `validated`.
