@@ -15,11 +15,11 @@
     },
     {
       "id": "missing-sycl-runtime",
-      "prompt": "import dpnp fails on a fresh machine with OSError: libsycl.so.7: cannot open shared object file. The package is installed and pip shows it. What is missing and how do I fix it?",
-      "expected_output": "Agent distinguishes ImportError on the module name from OSError on the shared object: the package is present and the SYCL runtime is not. It installs the runtime, either through the Intel conda channel alongside dpnp and dpctl or with pip install intel-cmplr-lib-rt, and notes that the runtime is not the kernel driver, so a GPU the driver does not expose stays invisible either way.",
+      "prompt": "import dpnp fails on a fresh machine with ImportError: libsycl.so.9: cannot open shared object file. The package is installed and pip shows it. What is missing and how do I fix it?",
+      "expected_output": "Agent tells the two ImportError messages apart, No module named 'dpnp' from libsycl.so.9: cannot open shared object file: the package is present and the SYCL runtime is not. It installs the runtime, either through the Intel conda channel alongside dpnp and dpctl or with pip install intel-sycl-rt, and notes that the runtime is not the kernel driver, so a GPU the driver does not expose stays invisible either way.",
       "checks": {
         "must_include": [
-          "intel-cmplr-lib-rt",
+          "intel-sycl-rt",
           "runtime"
         ],
         "must_not_include": [
