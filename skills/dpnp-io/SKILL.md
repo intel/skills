@@ -137,7 +137,10 @@ The whole skill is that shape: NumPy load → `dpnp.array()` → compute →
 No measured numbers ship with this skill. What to measure, and in which order:
 
 - Time the I/O and the compute separately first. If reading dominates, no device
-  will help and the conversion cost is irrelevant either way.
+  will help and the conversion cost is irrelevant either way. A pipeline that ends
+  by saving the result needs nothing extra: getting it to the host for the write
+  waits for the kernels. To time the compute alone, call `result.sycl_queue.wait()`
+  before stopping the timer, because kernels are submitted asynchronously.
 - Count conversions, not bytes. One conversion at each end of a batch of work is
   the pattern; one per iteration of a loop is the anti-pattern, and it is the
   usual reason a rewritten pipeline is no faster.

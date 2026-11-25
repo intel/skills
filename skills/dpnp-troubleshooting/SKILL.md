@@ -124,11 +124,15 @@ print rather than what they were expected to print.
      import dpnp
 
      x = dpnp.random.randn(100000)
-     dpnp.sin(x)                                  # warm up, discard
+     dpnp.sin(x).sycl_queue.wait()                # warm up, discard
      start = time.perf_counter()
-     dpnp.sin(x)
+     y = dpnp.sin(x)
+     y.sycl_queue.wait()                          # kernels run asynchronously
      print(f"{time.perf_counter() - start:.4f}s")
      ```
+
+     Without the `wait()` the timer stops when the kernel is submitted, not when
+     it finishes, and the work shows up in whatever waits next.
 
    - A conversion sits inside the loop. `dpnp.asnumpy()` copies device to host
      every call; hoist it above the loop, or keep the whole loop on the device.
