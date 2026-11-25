@@ -83,6 +83,17 @@ class TriggerSetTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn(f"FAIL {WHERE}: [2]: should_trigger must be true or false, got 'yes'", err)
 
+    def test_non_boolean_should_trigger_fails_in_any_row(self):
+        # JSON 1 and 0 load as int, which is not a bool; the bad row comes first, not last.
+        for value in (1, 0, None, 1.0):
+            with self.subTest(value=value):
+                bad = {"query": "q", "should_trigger": value}
+                code, _, err = validate(json.dumps([bad, *GOOD_ROWS]))
+                self.assertEqual(code, 1)
+                self.assertIn(
+                    f"FAIL {WHERE}: [0]: should_trigger must be true or false, got {value!r}", err
+                )
+
     def test_missing_should_trigger_fails(self):
         code, _, err = validate(rows_with({"query": "q"}))
         self.assertEqual(code, 1)
