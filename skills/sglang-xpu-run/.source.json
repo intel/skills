@@ -1,6 +1,6 @@
 {
   "repo": "https://github.com/intel/gpu-ai-skills",
   "path": "plugins/intel-gpu-ai-skills/skills/sglang-xpu-run",
-  "commit": "31534d956d9cb5f548fb8f36c767f1494a559fbb",
+  "commit": "92c025a0df9ac5df51be3582bc0485bc7e6adc57",
   "license": "Apache-2.0"
 }
