@@ -1,0 +1,14 @@
+[
+  {"query": "I seed both numpy.random and dpnp.random with 42 but get different numbers. Is dpnp broken?", "should_trigger": true},
+  {"query": "How do I generate 100 million normally distributed numbers directly on the GPU with dpnp?", "should_trigger": true},
+  {"query": "My simulation checkpoints numpy.random.get_state() and resumes with set_state(). dpnp.random has neither. How do I resume a dpnp run from where it stopped?", "should_trigger": true},
+  {"query": "My Monte Carlo loop draws a few random numbers per iteration with dpnp and it's extremely slow.", "should_trigger": true},
+  {"query": "How do I make a dpnp random simulation reproducible, and give a colleague who uses NumPy exactly the same samples?", "should_trigger": true},
+  {"query": "Does dpnp support NumPy's Generator and default_rng API?", "should_trigger": true},
+  {"query": "Most of my arrays have a few hundred elements and only a couple have millions. Is dpnp worth it for code like that?", "should_trigger": false},
+  {"query": "dpnp crashes with no message when I use the opencl:gpu device. How do I find out what's wrong?", "should_trigger": false},
+  {"query": "We have a 20k-line NumPy codebase. How do I find out which of the functions we call exist in the dpnp version we have installed?", "should_trigger": false},
+  {"query": "Our code uses numpy.ma masked arrays and datetime64 columns. Can those parts move to dpnp?", "should_trigger": false},
+  {"query": "I computed an array on the GPU and want to continue with it on the CPU device. How do I move it there without a round trip through NumPy?", "should_trigger": false},
+  {"query": "I have two GPUs. How do I create an array on each and make sure each operation runs where its data is?", "should_trigger": false}
+]
