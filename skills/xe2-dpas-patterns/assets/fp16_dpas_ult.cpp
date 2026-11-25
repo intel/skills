@@ -424,7 +424,6 @@ int main() {
 
         printf("\n%s\n", all_pass ? "ALL PASS" : "SOME FAILED");
         return all_pass ? 0 : 1;
-
     } catch (const sycl::exception& e) {
         fprintf(stderr, "SYCL: %s\n", e.what());
         return 1;

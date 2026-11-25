@@ -14,7 +14,7 @@ It computes `O = softmax(Q · Kᵀ / sqrt(64)) · V`, softmax taken over each ro
 
 Requirements:
 
-- An explicit-SIMD (ESIMD) SYCL kernel for Intel Xe2 (Battlemage), launched as one
+- A single explicit-SIMD (ESIMD) SYCL kernel for Intel Xe2 (Battlemage), launched as one
   work-group of 4 work-items. Each work-item processes 64 of the 256 keys; the four
   partial results are combined through work-group local memory.
 - The matrix products run on the XMX matrix engine.

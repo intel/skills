@@ -6,7 +6,8 @@
       "prompt": "Show me a minimal SYCL ESIMD program for Xe2 that computes C[8 x 16] = A[8 x 16] * B[16 x 16] with a single xmx::dpas call. A and B are row-major fp16, C is row-major fp32. Verify every output against a CPU reference.",
       "expected_output": "One xmx::dpas<8, 8, float, float, sycl::half, sycl::half>(acc, b_tile, a_tile) call (or the accumulator-free dpas<8, 8, float, sycl::half, sycl::half>(b_tile, a_tile)), with B before A. A is loaded with a 2D block load without transform; B (row-major [K][N]) is loaded with a 2D block load that applies the hardware VNNI transform (Transformed=true) instead of being packed into VNNI order in registers. The result is compared element by element against a CPU reference.",
       "checks": {
-        "must_include": ["xmx::dpas", "load_2d"]
+        "must_include": ["xmx::dpas", "load_2d"],
+        "must_not_include": ["(acc, a"]
       }
     },
     {

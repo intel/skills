@@ -5,12 +5,13 @@ description: >
   kernels for Intel GPUs. Use this skill when
   working with slm_init, slm_block_load, slm_block_store, lsc_slm_gather,
   lsc_slm_scatter, SLM layout design, barrier synchronization,
-  cooperative SLM loading, or any kernel that uses workgroup shared memory on
-  Intel GPUs. Covers SLM size limits, bank conflicts, the lsc_slm_scatter
+  cooperative SLM loading, or any ESIMD kernel that uses work-group shared
+  memory. Covers SLM size limits, bank conflicts, the lsc_slm_scatter
   transpose trick, and common pitfalls like forgetting slm_init or conditional
-  barriers causing GPU hangs. Not for global memory loads and stores (see
-  esimd-lsc-2d-gather-scatter) or pipelining with named barriers (see
-  xe2-nbarrier-pipelining).
+  barriers causing GPU hangs. Not for CUDA __shared__, OpenCL __local, SYCL
+  local_accessor or local-memory device queries, global memory loads and
+  stores (see esimd-lsc-2d-gather-scatter), or pipelining with named barriers
+  (see xe2-nbarrier-pipelining).
 metadata:
     version: 1.0.0
 compatibility: "Requires the oneAPI DPC++ compiler (icpx -fsycl). Code checked with DPC++ 2025.3.3 and 2026.1.1 on an Intel Arc B580 (Xe2)."
@@ -197,11 +198,11 @@ for (int t = 0; t < kv_len; t += VS) {
 Named barriers split a work-group barrier into a signal and a wait, so independent work can run in between. They are functions in `sycl::ext::intel::esimd` (there is no `nbarrier` class):
 
 ```cpp
-named_barrier_init<1>();                 // kernel start: number of named barriers
+named_barrier_init<2>();                 // kernel start: named barriers + 1 (id 0 is barrier()'s)
 slm_block_store<half, 128>(my_offset, s_tile);
-named_barrier_signal(0, 0, NUM_THREADS, NUM_THREADS);  // id, mode, producers, consumers
+named_barrier_signal(1, 0, NUM_THREADS, NUM_THREADS);  // id, mode, producers, consumers
 // ... independent work: global loads, prefetch, register-only ALU ...
-named_barrier_wait(0);                   // now safe to read other threads' SLM writes
+named_barrier_wait(1);                   // now safe to read other threads' SLM writes
 auto other = slm_block_load<half, 128>(other_offset);
 ```
 

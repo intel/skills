@@ -8,8 +8,8 @@ description: >
   config_2d_mem_access), block_load, block_store, gather, or scatter in ESIMD
   kernels. Covers surface parameters, VNNI and transposed loads for DPAS
   operands, tile size limits, cache hints, out-of-bounds behavior, and pitfalls
-  such as unaligned pitch and the fp16 transpose limitation. Not for shared
-  local memory: see esimd-lsc-slm.
+  such as unaligned pitch and the fp16 transpose limitation. Not for CUDA
+  cp.async or TMA code, or shared local memory: see esimd-lsc-slm.
 metadata:
   version: 2.0.0
 compatibility: "Requires the oneAPI DPC++ compiler (icpx -fsycl). Code checked with DPC++ 2025.3.3 and 2026.1.1 on an Intel Arc B580 (Xe2)."

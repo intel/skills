@@ -25,6 +25,7 @@ network_mode = "no-network"
 cpus = 4
 memory_mb = 8192
 storage_mb = 20480
-# The task is built and graded without a GPU. A host that passes an Intel GPU into
-# the container additionally gets the numerical check.
+# Without a GPU the reward checks only the generated code (it builds, has the required
+# kinds of instructions in one kernel, does not spill), not the numbers. A host that
+# passes an Intel GPU into the container additionally gets the numerical check.
 gpus = 0
