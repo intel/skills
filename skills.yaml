@@ -419,3 +419,30 @@
   maintainer: "sandlbn"
   intel-products: "OpenVINO, Intel GPU"
   intel-hw-class: "gpu"
+
+# Written here. ESIMD kernel programming for Intel Xe2 GPUs: base API, 2D block and
+# gather/scatter memory access, shared local memory, and XMX DPAS operand patterns.
+- name: esimd-base
+  maintainer: "benjaminum"
+  intel-products: "Intel GPU"
+  intel-hw-class: "gpu"
+
+- name: esimd-lsc-2d-gather-scatter
+  maintainer: "benjaminum"
+  intel-products: "Intel GPU"
+  intel-hw-class: "gpu"
+
+- name: esimd-lsc-slm
+  maintainer: "benjaminum"
+  intel-products: "Intel GPU"
+  intel-hw-class: "gpu"
+
+- name: xe2-dpas-patterns
+  maintainer: "benjaminum"
+  intel-products: "Intel GPU"
+  intel-hw-class: "gpu"
+
+- name: xe2-nbarrier-pipelining
+  maintainer: "benjaminum"
+  intel-products: "Intel GPU"
+  intel-hw-class: "gpu"

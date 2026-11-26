@@ -1,0 +1,21 @@
+{
+  "skill_name": "esimd-base",
+  "evals": [
+    {
+      "id": "row-sum-odd-row-length",
+      "prompt": "Show me an ESIMD kernel for an Intel Arc B580 (Xe2) that computes the sum of each row of an fp16 matrix [4096 x 1001] (row-major, contiguous) and writes one float per row.",
+      "expected_output": "A complete ESIMD kernel (SYCL_ESIMD_KERNEL or [[intel::sycl_explicit_simd]]) that loads each row with vector block loads rather than per-element scalar loads, accumulates in fp32, and reduces horizontally with an ESIMD reduction. Because 1001 is odd, odd rows start at byte offsets that are only 2-byte aligned, so the fp16 block loads pass properties{alignment<2>} (the default assumes 4-byte alignment and silently reads wrong data). The 9-element tail is handled without reading past the row.",
+      "checks": {
+        "must_include": ["block_load", "alignment<"]
+      }
+    },
+    {
+      "id": "reduce-plus-returns-zero",
+      "prompt": "My ESIMD kernel computes a horizontal sum with reduce<float>(v, std::plus<float>()). It compiles cleanly, but the sum comes out as 0. Why, and how do I fix it while still calling reduce?",
+      "expected_output": "esimd::reduce only recognizes the transparent functors std::plus<> and std::multiplies<>. With std::plus<float> neither branch of its implementation is taken, so the function returns no value: undefined behavior that typically shows up as 0. The fix is reduce<float>(v, std::plus<>()) (or detail::sum).",
+      "checks": {
+        "must_include": ["std::plus<>"]
+      }
+    }
+  ]
+}

@@ -972,6 +972,112 @@
       "evaluated_here": false,
       "capabilities": [],
       "tasks": []
+    },
+    {
+      "id": "esimd-xe2-kernels",
+      "skills": [
+        "esimd-base",
+        "esimd-lsc-2d-gather-scatter",
+        "esimd-lsc-slm",
+        "xe2-dpas-patterns",
+        "xe2-nbarrier-pipelining"
+      ],
+      "target_task_count": 5,
+      "scope": "The ESIMD kernel-programming skills a GPU kernel task needs together: core ESIMD and reductions, 2D block loads, shared local memory with barriers, DPAS operand layouts, and named barriers. The result measures the bundle, not any single member.",
+      "note": "One task is implemented. Unscored pre-checks with a strong model passed it with and without the skills (the skills cut effort and generated instructions, not the reward), so it is marked smoke until a scored run says otherwise. The planned tasks target what that model did not find on its own: the Usage 2 orientation for narrow outputs, silent ESIMD traps, and instruction efficiency.",
+      "provenance": "Written for this repository. The oracle solution and negative controls were run on an Intel Arc B580 with oneAPI 2026.1.1 and the pinned GPU compiler: V or K operands reshuffled in registers and a spilling kernel fail without a GPU; a missing cross-work-item combine and a reduction that returns 0 fail only the numerical check, which needs a GPU. The ISA checks test that each required kind of instruction is present in the one kernel, not which data feeds it.",
+      "capabilities": [
+        {
+          "id": "dpas-operand-loading",
+          "class": "selection",
+          "description": "Choose the memory operation that delivers each DPAS operand in the layout the matrix engine expects: plain 2D loads for A, the VNNI-transforming 2D load for a K-major B, a transposed 32-bit load for an N-major B, without rearranging operands in registers."
+        },
+        {
+          "id": "slm-partial-combine",
+          "class": "correctness",
+          "description": "Combine per-work-item partial results through shared local memory behind a barrier every work-item reaches, with numerically stable rescaling such as a running max and sum."
+        },
+        {
+          "id": "aot-build-integration",
+          "class": "integration",
+          "description": "Build an ESIMD kernel ahead of time for the target Xe2 device within its register budget: no spills, no illegal memory messages rejected at vISA finalization."
+        },
+        {
+          "id": "esimd-trap-diagnosis",
+          "class": "debugging",
+          "description": "Find and fix ESIMD failures that compile or fail late without a useful message: a reduction that silently returns 0, misaligned fp16 block loads, fp16 gather or scatter with several elements per lane."
+        },
+        {
+          "id": "instruction-efficiency",
+          "class": "performance",
+          "description": "Keep the generated instruction stream lean: avoid register shuffles around DPAS, rebuilt memory descriptors and scalar per-element work in the hot path."
+        }
+      ],
+      "tasks": [
+        {
+          "name": "xe2-attention-tile-build",
+          "status": "implemented",
+          "role": "smoke",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": [
+            "dpas-operand-loading",
+            "aot-build-integration"
+          ],
+          "note": "Single-block attention as one ESIMD work-group. Built ahead of time for Battlemage and checked on the generated ISA. Without a GPU the reward checks only the generated code, not the numbers; numerics are checked only when a host passes an Intel GPU into the container, so it does not cover slm-partial-combine."
+        },
+        {
+          "name": "xe2-dpas-narrow-output",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": [
+            "dpas-operand-loading",
+            "aot-build-integration"
+          ],
+          "note": "An output only 8 columns wide, so the efficient kernel swaps the DPAS operands and needs a transposed write-back; the obvious fp16 vector scatter fails at vISA finalization."
+        },
+        {
+          "name": "esimd-kernel-trap-debug",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": [
+            "esimd-trap-diagnosis"
+          ],
+          "note": "A kernel that builds but is wrong, or fails late, because of silent ESIMD traps; the verifier needs a GPU host to observe the wrong results, or checks the fix on the generated code."
+        },
+        {
+          "name": "esimd-kernel-instruction-budget",
+          "status": "planned",
+          "role": "discriminating",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": [
+            "instruction-efficiency"
+          ],
+          "note": "A tiled kernel whose instruction count must stay under a budget calibrated on a skill-guided reference."
+        },
+        {
+          "name": "esimd-slm-tile-transpose",
+          "status": "planned",
+          "role": "smoke",
+          "calibration": "uncalibrated",
+          "track": "executable",
+          "environment": "hosted-cpu",
+          "covers": [
+            "slm-partial-combine",
+            "aot-build-integration"
+          ],
+          "note": "A cooperative tile transpose through shared local memory with element-major multi-element scatter."
+        }
+      ]
     }
   ]
 }

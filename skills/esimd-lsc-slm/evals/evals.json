@@ -1,0 +1,21 @@
+{
+  "skill_name": "esimd-lsc-slm",
+  "evals": [
+    {
+      "id": "work-group-row-sum",
+      "prompt": "Show me an ESIMD kernel for an Intel Arc B580 (Xe2) that computes the sum of each row of an fp32 matrix [512 x 16384]. Use one work-group of 16 threads per row: each thread sums its share of the row, then the 16 partial sums are combined through shared local memory.",
+      "expected_output": "An ESIMD kernel launched with an nd_range of 16 work-items per work-group. It calls slm_init with a size covering the 16 partial sums at the start of the kernel, each thread writes its partial sum at a byte offset (for example lid * sizeof(float)), and a barrier() that every thread reaches separates the writes from the reads. The partials are read back with an SLM block load and reduced with an ESIMD reduction.",
+      "checks": {
+        "must_include": ["slm_init", "barrier()"]
+      }
+    },
+    {
+      "id": "slm-size-limit",
+      "prompt": "What is the largest slm_init size I can use in an ESIMD kernel on an Intel Arc B580, and what happens if I ask for more?",
+      "expected_output": "The limit is device-specific: query sycl::info::device::local_mem_size (an Arc B580 reports 128 KB per work-group) rather than assuming a number. With ahead-of-time compilation, a larger slm_init fails at build time with 'SLM size exceeds target limits'. Large allocations also reduce how many work-groups can be resident on an Xe core, so use the smallest size the algorithm needs.",
+      "checks": {
+        "must_include": ["local_mem_size"]
+      }
+    }
+  ]
+}
