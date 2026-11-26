@@ -45,7 +45,8 @@ Users do not type "XPU". They type GPU, graphics card, Arc, or the name on the b
 |---|---|
 | Running or serving a model on an Intel GPU — discrete or integrated | Continue to stage 1 |
 | An NVIDIA or AMD GPU | Stop. This catalog is Intel-only; say so and name no Intel skill |
-| A CPU-only workload | Stop, and point at the CPU skills — **linux-perf**, **performance-patterns**, **onetbb-quickstart**, **mkl-extension-advisor** |
+| Serving a model on Intel Xeon, or any CPU with no GPU | Stop. **intel-inference-microservices** |
+| CPU performance, profiling, or numerics | Stop, and point at **linux-perf**, **performance-patterns**, **onetbb-quickstart**, **mkl-extension-advisor** |
 | Training or fine-tuning rather than inference | Stop. This catalog covers inference; do not improvise a training recipe |
 
 ## Stage 1 — which verb
