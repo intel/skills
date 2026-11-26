@@ -1,0 +1,86 @@
+{
+  "skill_name": "openvino-export-check",
+  "evals": [
+    {
+      "id": "fewer-objects-after-yolo-export",
+      "prompt": "I exported a YOLO detector to OpenVINO with Ultralytics 8.4.215: model.export(format='openvino', nms=True). On the same video the IR finds fewer objects than the .pt. I already set conf=0.05 at predict time on both sides and it changed nothing for the IR. What is going on and what do I change?",
+      "expected_output": "Says the export arguments decide this, not the predict call. nms=True puts NMS and a score filter into the graph, and with no conf passed at export the filter sits at 0.25, so boxes under it never leave the model and conf=0.05 at predict time cannot bring them back. Tells the user to export again with conf as low as any consumer needs, or without NMS and filter outside, and then to compare raw outputs for one identical tensor and the detections again before trusting the count.",
+      "checks": {
+        "must_include": [
+          "0.25"
+        ]
+      }
+    },
+    {
+      "id": "same-frame-different-tensor",
+      "prompt": "Ultralytics 8.4.215. I call predict on one 1280x720 frame with the .pt and with its OpenVINO export (imgsz=640, static, FP32). Boxes are shifted by a few pixels and two boxes near the top edge exist only on one side. Same weights. Is the export broken, and how do I prove it either way?",
+      "expected_output": "Says this is not proven to be an export problem and the first thing to compare is the tensor each model receives. predict on the .pt pads the frame only to a multiple of the stride, so it sees 384x640, while the static IR gets the full 640x640 letterbox. The two models see different inputs for one frame. Tells the user to feed one identical letterboxed tensor to both (or run the .pt with rect=False) and compare raw outputs; only a difference that survives that points at the export.",
+      "checks": {
+        "must_include": [
+          "letterbox"
+        ]
+      }
+    },
+    {
+      "id": "map-gap-with-equal-outputs",
+      "prompt": "For 50 images the raw outputs of my YOLO .pt and its static OpenVINO export agree to 1e-5 on the same tensor, and the detections match box for box. model.val() still reports mAP50-95 0.412 for the .pt and 0.405 for the IR. Ultralytics 8.4.215, imgsz=640. Do I need to export again with other arguments?",
+      "expected_output": "Says no. Input tensor, raw outputs and detections already agree, so the models are the same and the two evaluation runs differ. val on the .pt uses rectangular batches, val on a static IR uses batch 1 and the full-size letterbox. Tells the user to run val on the .pt with rect=False and the same data, imgsz, conf and iou, and compare again. Does not suggest changing the export.",
+      "checks": {
+        "must_include": [
+          "rect=False"
+        ]
+      }
+    },
+    {
+      "id": "half-true-third-decimal",
+      "prompt": "I exported with model.export(format='openvino', half=True). Against the .pt, scores differ around the third decimal and 2 boxes out of 500 fall on the other side of my 0.5 cut-off. A teammate wants to bisect the detection head. Is that the right next step?",
+      "expected_output": "Says no. half=True writes FP16 weights, and a difference of this size points at precision before anything else. Tells the user to take precision out of the question first: export with half=False (FP32), compile with the f32 inference precision hint, and compare raw outputs for one identical tensor against a tolerance written beforehand. If FP32 matches, FP16 is a variant to measure on the task metric, not a bug. Bisecting comes only if the FP32 IR still differs.",
+      "checks": {
+        "must_include": [
+          "fp16",
+          "f32"
+        ]
+      }
+    },
+    {
+      "id": "one-size-in-production",
+      "prompt": "Production sends exactly one size, 1x3x640x640. A colleague exported the detector with dynamic=True to be safe. Results match the .pt on my test images, but memory on CPU is well above what the .pt needs. Keep the export as it is?",
+      "expected_output": "Says no. The IR has dynamic dimensions while the real shape is fixed, so the runtime cannot plan memory for one size. Tells the user to export with dynamic=False (or reshape the IR to the fixed shape), then repeat the comparison from the input tensor on, because a static IR is fed the full-size letterbox and the dynamic one was not. Does not promise a specific saving.",
+      "checks": {
+        "must_include": [
+          "dynamic=False"
+        ]
+      }
+    },
+    {
+      "id": "plan-is-to-sweep-options",
+      "prompt": "My segmentation model gets mIoU 0.74 in PyTorch and 0.69 through OpenVINO Runtime, FP32, same checkpoint. I have both inference scripts and the validation images. My plan is to try conversion options one by one and rerun the full validation after each until 0.74 comes back. Is there a better order of work?",
+      "expected_output": "Says not to start from the metric: it shows that something differs, not where. Gives the order. First run one real image through both pre-processing paths and compare the input tensor each model receives. If those agree, feed one identical tensor to both and compare raw outputs. Then compare the post-processed masks at the same settings. The metric comes last. Stop at the first stage that differs, fix that, and start again from the input tensor.",
+      "checks": {
+        "must_include": [
+          "input tensor"
+        ]
+      }
+    },
+    {
+      "id": "first-stage-already-differs",
+      "prompt": "For one image, the tensor my torchvision pipeline gives the PyTorch model and the tensor my OpenCV pipeline gives the IR differ by up to 0.8. The raw outputs differ too and top-1 agreement over the set is 91%. I was about to add intermediate outputs to the IR and bisect for the first layer that diverges. Sensible?",
+      "expected_output": "Says no, stop at the first stage that differs. The input tensors differ, so the model is not the question yet and bisecting layers would chase a difference that enters before the first layer. Tells the user to diff the two pre-processing functions (OpenCV reads BGR, also resize method, mean and scale, layout), use one function for both, and repeat from the input tensor. Bisecting with intermediate outputs is for the case where identical tensors still give different raw outputs.",
+      "checks": {
+        "must_include": [
+          "bgr"
+        ]
+      }
+    },
+    {
+      "id": "one-fix-and-a-remainder",
+      "prompt": "My IR had Subtract and Divide before the first convolution and my code normalised as well. I removed my normalisation and the largest raw output difference against PyTorch fell from 3.1 to 0.4. What is left sits only in low-score rows, which are exactly zero in the IR. I would call that float noise and go on to benchmarking. Agree?",
+      "expected_output": "Says no. 0.4 is far above float rounding for an FP32 IR on CPU, and fixing one cause often uncovers a second, so the comparison starts again from the input tensor. A difference only in low-score rows that are exactly zero points at a score filter or NMS inside the graph with a threshold fixed at export. Tells the user to look for NonMaxSuppression, Select or Greater near the outputs, then lower that threshold or export without it and filter outside, and compare again.",
+      "checks": {
+        "must_include": [
+          "NonMaxSuppression"
+        ]
+      }
+    }
+  ]
+}

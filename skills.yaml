@@ -419,3 +419,17 @@
   maintainer: "sandlbn"
   intel-products: "OpenVINO, Intel GPU"
   intel-hw-class: "gpu"
+
+# Written here. Runs before openvino-int8-quantize: proves the FP32 IR matches the source
+# framework, so an export difference is not mistaken for a quantization loss later.
+- name: openvino-export-check
+  maintainer: "JustRahman"
+  intel-products: "OpenVINO"
+  intel-hw-class: "cpu"
+
+# Written here. Post-training INT8 for the OpenVINO CPU plugin with NNCF, judged against an
+# accuracy bar set before the run. Hands a mismatching FP32 IR back to openvino-export-check.
+- name: openvino-int8-quantize
+  maintainer: "JustRahman"
+  intel-products: "OpenVINO, NNCF"
+  intel-hw-class: "cpu"

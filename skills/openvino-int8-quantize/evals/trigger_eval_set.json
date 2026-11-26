@@ -1,0 +1,18 @@
+[
+  {"query": "Quantize my OpenVINO model to INT8 so it runs faster on our Xeon CPU. How do I make sure accuracy is still fine?", "should_trigger": true},
+  {"query": "nncf.quantize dropped my mAP a lot. How do I get it back?", "should_trigger": true},
+  {"query": "How many calibration images does NNCF post-training quantization need, and can I reuse my validation set for it?", "should_trigger": true},
+  {"query": "Should I use nncf.compress_weights or nncf.quantize for a BERT encoder that has to be faster on CPU?", "should_trigger": true},
+  {"query": "I want 4-bit weight compression for an LLM in OpenVINO. How do I check the quality after?", "should_trigger": true},
+  {"query": "Which layers should I keep in float when I do int8 PTQ for a YOLO model in OpenVINO?", "should_trigger": true},
+  {"query": "My int8 OpenVINO model is not faster than FP32 on CPU. How do I check that it really runs in 8 bits?", "should_trigger": true},
+  {"query": "Set up quantize_with_accuracy_control so the model loses at most one point of top-1.", "should_trigger": true},
+  {"query": "The OpenVINO IR I just converted gives different outputs than the PyTorch model. Nothing is quantized yet.", "should_trigger": false},
+  {"query": "Will a 13B model fit in 16 GB of RAM if I use int4 weights?", "should_trigger": false},
+  {"query": "Serve an int4 OpenVINO LLM with OpenVINO Model Server on my Arc GPU.", "should_trigger": false},
+  {"query": "Convert my Llama model to a Q4_K_M GGUF for llama.cpp.", "should_trigger": false},
+  {"query": "Load a model in 8-bit with bitsandbytes on an NVIDIA GPU.", "should_trigger": false},
+  {"query": "Set up quantization-aware training in PyTorch for my classifier.", "should_trigger": false},
+  {"query": "Profile my C++ service with perf and find the hot loop.", "should_trigger": false},
+  {"query": "Speed up my NumPy code on an Intel GPU with dpnp.", "should_trigger": false}
+]

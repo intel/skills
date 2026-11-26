@@ -1,0 +1,18 @@
+[
+  {"query": "OpenVINO gives different outputs than my PyTorch model for the same image. How do I find out why?", "should_trigger": true},
+  {"query": "mAP dropped after I exported YOLO to OpenVINO. FP32, nothing quantized.", "should_trigger": true},
+  {"query": "I get fewer detections from the OpenVINO IR than from the original model. Same threshold.", "should_trigger": true},
+  {"query": "Is my ov.convert_model call correct? How do I check the IR against the ONNX model?", "should_trigger": true},
+  {"query": "optimum-cli export openvino finished, but the generated text differs from transformers. Is the export wrong?", "should_trigger": true},
+  {"query": "The exported OpenVINO model has one output and the PyTorch model has three. What did the exporter do?", "should_trigger": true},
+  {"query": "Does my OpenVINO IR have NMS or a confidence filter baked in? I think low-score boxes are missing.", "should_trigger": true},
+  {"query": "Before I quantize, how do I prove the FP32 OpenVINO model matches the framework model?", "should_trigger": true},
+  {"query": "ov.convert_model fails with an unsupported operation error.", "should_trigger": false},
+  {"query": "My FP32 IR matches PyTorch, but accuracy drops after nncf.quantize. How do I recover it?", "should_trigger": false},
+  {"query": "Serve my OpenVINO model with OpenVINO Model Server on an Intel Arc GPU.", "should_trigger": false},
+  {"query": "Will this 8B model fit on a laptop with 16 GB?", "should_trigger": false},
+  {"query": "My OpenVINO model is correct but slow on CPU. How do I tune throughput?", "should_trigger": false},
+  {"query": "Export my PyTorch model to TensorRT for a Jetson.", "should_trigger": false},
+  {"query": "Port my CuPy code to dpnp.", "should_trigger": false},
+  {"query": "Which runtime should I use to deploy a Hugging Face model on an Intel GPU?", "should_trigger": false}
+]
