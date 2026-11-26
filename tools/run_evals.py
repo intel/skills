@@ -4,8 +4,11 @@
 Two modes:
 
   --validate      Schema gate. Checks every skills/*/evals/evals.json against
-                  schemas/evals.schema.json. No model, no network, no key —
-                  this is what runs on every pull request.
+                  schemas/evals.schema.json, and every
+                  skills/*/evals/trigger_eval_set.json against the
+                  [{"query", "should_trigger"}] format CONTRIBUTING.md gives.
+                  No model, no network, no key — this is what runs on every
+                  pull request.
 
   --answers FILE  Scoring. Applies each eval's checks to a recorded agent
                   answer and reports a pass rate. Requires answers produced
@@ -31,6 +34,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO_ROOT / "skills"
 SCHEMA_PATH = REPO_ROOT / "schemas" / "evals.schema.json"
+TRIGGER_FILE = "evals/trigger_eval_set.json"
 
 NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
@@ -48,6 +52,39 @@ def eval_files(skill: str | None = None) -> list[Path]:
     """Every skills/*/evals/evals.json, or just the one for `skill`."""
     pattern = f"{skill}/evals/evals.json" if skill else "*/evals/evals.json"
     return sorted(SKILLS_DIR.glob(pattern))
+
+
+def trigger_files(skill: str | None = None) -> list[Path]:
+    """Every skills/*/evals/trigger_eval_set.json, or just the one for `skill`."""
+    return sorted(SKILLS_DIR.glob(f"{skill or '*'}/{TRIGGER_FILE}"))
+
+
+def validate_trigger_file(path: Path) -> list[str]:
+    """Validate one trigger_eval_set.json: the list skill-creator's run_eval.py reads."""
+    rel = path.relative_to(REPO_ROOT).as_posix()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return [f"{rel}: invalid JSON: {exc}"]
+    if not isinstance(data, list) or not data:
+        return [f"{rel}: top level must be a non-empty array"]
+
+    errors: list[str] = []
+    for index, row in enumerate(data):
+        where = f"{rel}: [{index}]"
+        if not isinstance(row, dict):
+            errors.append(f"{where}: must be an object")
+            continue
+        query = row.get("query")
+        if not isinstance(query, str) or not query.strip():
+            errors.append(f"{where}: query must be a non-empty string")
+        if "should_trigger" not in row:
+            errors.append(f"{where}: should_trigger is missing")
+        elif not isinstance(row["should_trigger"], bool):
+            errors.append(
+                f"{where}: should_trigger must be true or false, got {row['should_trigger']!r}"
+            )
+    return errors
 
 
 def validate_file(path: Path) -> list[str]:
@@ -147,21 +184,31 @@ def cmd_validate(skill: str | None = None) -> int:
         print(f"FAIL no skills/{skill or '*'}/evals/evals.json found", file=sys.stderr)
         return 1
 
+    triggers = trigger_files(skill)
     all_errors: list[str] = []
     for path in files:
         all_errors.extend(validate_file(path))
+    for path in triggers:
+        all_errors.extend(validate_trigger_file(path))
 
     for error in all_errors:
         print(f"FAIL {error}", file=sys.stderr)
 
     if all_errors:
-        print(f"\n{len(all_errors)} error(s) in {len(files)} eval file(s)", file=sys.stderr)
+        print(
+            f"\n{len(all_errors)} error(s) in {len(files)} eval file(s)"
+            f" and {len(triggers)} trigger set(s)",
+            file=sys.stderr,
+        )
         return 1
 
     total_cases = sum(
         len(json.loads(p.read_text(encoding="utf-8"))["evals"]) for p in files
     )
     print(f"OK {len(files)} eval file(s), {total_cases} case(s)")
+    if triggers:
+        rows = sum(len(json.loads(p.read_text(encoding="utf-8"))) for p in triggers)
+        print(f"OK {len(triggers)} trigger set(s), {rows} request(s)")
     return 0
 
 
@@ -230,7 +277,9 @@ def main() -> int:
         help="minimum pass rate when scoring (default: 1.0)",
     )
     parser.add_argument(
-        "--skill", help="limit --validate or --answers to skills/<name>/evals/evals.json"
+        "--skill",
+        help="limit --validate or --answers to skills/<name>/evals/ "
+        "(--validate also checks its trigger_eval_set.json)",
     )
     args = parser.parse_args()
 

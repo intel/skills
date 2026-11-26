@@ -147,9 +147,10 @@ print(arr.sycl_device.global_mem_size / 1e9, "GB")      # capacity, not free spa
    the same way.
 
 5. **Keep conversions out of the loop body.** `dpnp.asnumpy()` copies device to
-   host and `dpnp.array()` copies host to device. Calling a NumPy function on a
-   `dpnp` array, or mixing the two in one expression, does the same thing
-   implicitly. Hoist the conversion above the loop.
+   host and `dpnp.array()` copies host to device. NumPy does not copy a `dpnp`
+   array on its own: mixing the two in one expression, or a NumPy call that
+   converts its argument to a NumPy array, raises `TypeError`. Hoist the
+   conversion above the loop.
 
 6. **Chunk a workload that does not fit.** Size each chunk so the input and the
    intermediates together stay under the device capacity — roughly half to two

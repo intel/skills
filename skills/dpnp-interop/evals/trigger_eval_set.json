@@ -1,0 +1,14 @@
+[
+  {"query": "How do I pass a dpnp array to a PyTorch model running on XPU without copying through the host?", "should_trigger": true},
+  {"query": "scikit-learn's fit() raises a TypeError when I give it a dpnp array. Where should I convert?", "should_trigger": true},
+  {"query": "I have a pandas DataFrame. What's the right way to get its columns into dpnp and the results back into the DataFrame?", "should_trigger": true},
+  {"query": "My pipeline goes pandas, then feature engineering in dpnp, then a scikit-learn model, then back to pandas. Where do the conversions go so it isn't slow?", "should_trigger": true},
+  {"query": "Can another SYCL library take my dpnp array directly through __sycl_usm_array_interface__, and how do I convert back?", "should_trigger": true},
+  {"query": "My whole model is PyTorch. Should the preprocessing be in dpnp, or should everything stay in torch on the XPU?", "should_trigger": true},
+  {"query": "Our port plan has to estimate the effort per call. dpnp rejects some keywords we pass with NotImplementedError, like initial= in max, and others with TypeError, like sorted= in unique. Does the error type tell us anything about how hard each one is to work around?", "should_trigger": false},
+  {"query": "We fit numpy.polynomial.Polynomial models in our pipeline. What happens to that code when the rest moves to dpnp?", "should_trigger": false},
+  {"query": "Our research repo trains a PyTorch model with CUDA and does its feature prep in NumPy. What would it take to get the whole thing running on Intel Arc GPUs?", "should_trigger": false},
+  {"query": "How do I save a dpnp array to disk and read it back later with the same dtype and shape?", "should_trigger": false},
+  {"query": "dpnp.linalg.solve and numpy.linalg.solve differ in the 6th digit. Is that a bug, and how should I compare them?", "should_trigger": false},
+  {"query": "GPU memory keeps growing in my loop even though I del the dpnp arrays. How do I find the leak?", "should_trigger": false}
+]

@@ -112,15 +112,3 @@ findings:
     reason: >-
       POLICY: executing the user's own --builder snippet in the user's own process is
       the tool's documented purpose; see the comment above the call.
-
-incomplete:
-  # Semgrep reports a syntax error in shell that `bash -n` accepts: emit_launch.sh in
-  # vllm-xpu-run, check_battlemage_prerequisites.sh and setup_xpu_system.sh in
-  # xpu-system-setup. SkillEvaluator then marks Code Risk Analysis incomplete for the skill.
-  - scanner: "semgrep"
-    message: "Semgrep scan error: Syntax error*"
-    skills: ["vllm-xpu-run", "xpu-system-setup"]
-    reason: >-
-      POLICY: a Semgrep parser limitation on valid bash, not content hidden from
-      analysis. Bandit and the other code-integrity scanners still complete, and
-      SkillSpector reads the same scripts in skillspector.yml.

@@ -1,0 +1,14 @@
+[
+  {"query": "import dpnp fails with 'libmkl_core.so.2: cannot open shared object file' after pip install. How do I fix it?", "should_trigger": true},
+  {"query": "On Google Colab I get SyclDeviceCreationError: Default device is unavailable as soon as I create a dpnp array.", "should_trigger": true},
+  {"query": "dpnp.sum is 300 times slower than numpy.sum on my machine. What should I check?", "should_trigger": true},
+  {"query": "dpnp crashes with no message when I use the opencl:gpu device. How do I find out what's wrong?", "should_trigger": true},
+  {"query": "Adding a NumPy array to a dpnp array fails with TypeError: An array must be any of supported type, but got <class 'numpy.ndarray'>. Do I really have to convert every array myself?", "should_trigger": true},
+  {"query": "dpnp.lib.stride_tricks.sliding_window_view gives AttributeError, although as_strided from the same module works. How do I write code that works whether or not a function exists?", "should_trigger": true},
+  {"query": "Can another SYCL library take my dpnp array directly through __sycl_usm_array_interface__, and how do I convert back?", "should_trigger": false},
+  {"query": "Our conda environment came from the Intel channel. How do I tell whether mkl_umath is already hooked into NumPy's ufuncs, and could it shift the last digits our regression tests compare?", "should_trigger": false},
+  {"query": "My whole model is PyTorch. Should the preprocessing be in dpnp, or should everything stay in torch on the XPU?", "should_trigger": false},
+  {"query": "How do I read an HDF5 dataset with h5py into a dpnp array?", "should_trigger": false},
+  {"query": "scipy.linalg.expm has no dpnp equivalent. How do I use SciPy for that one step without lots of copies?", "should_trigger": false},
+  {"query": "I computed an array on the GPU and want to continue with it on the CPU device. How do I move it there without a round trip through NumPy?", "should_trigger": false}
+]

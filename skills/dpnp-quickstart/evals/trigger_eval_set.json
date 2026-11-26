@@ -1,0 +1,14 @@
+[
+  {"query": "I've never used dpnp. What's the smallest change to make my existing NumPy script run on my Intel Arc GPU?", "should_trigger": true},
+  {"query": "My dpnp script has to run on CI machines that have no Intel GPU. How do I use the GPU when there is one and the CPU otherwise?", "should_trigger": true},
+  {"query": "After switching to dpnp, how do I get a result back as a regular NumPy array to print it or hand it to code that expects numpy?", "should_trigger": true},
+  {"query": "I'm writing a benchmark to show my team dpnp vs NumPy. What should the timing include or exclude so the comparison is fair?", "should_trigger": true},
+  {"query": "Most of my arrays have a few hundred elements and only a couple have millions. Is dpnp worth it for code like that?", "should_trigger": true},
+  {"query": "How can I force my dpnp program onto the CPU device without changing its code?", "should_trigger": true},
+  {"query": "Our code uses numpy.ma masked arrays and datetime64 columns. Can those parts move to dpnp?", "should_trigger": false},
+  {"query": "I computed an array on the GPU and want to continue with it on the CPU device. How do I move it there without a round trip through NumPy?", "should_trigger": false},
+  {"query": "I have two GPUs. How do I create an array on each and make sure each operation runs where its data is?", "should_trigger": false},
+  {"query": "How do I write a test that checks my dpnp SVD against NumPy's, given that signs and ordering can differ?", "should_trigger": false},
+  {"query": "Port the training code in ./model so it runs on our Intel Arc GPU: change the .cuda() and torch.cuda calls, and leave the NumPy preprocessing on the CPU.", "should_trigger": false},
+  {"query": "My whole model is PyTorch. Should the preprocessing be in dpnp, or should everything stay in torch on the XPU?", "should_trigger": false}
+]

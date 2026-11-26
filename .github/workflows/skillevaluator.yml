@@ -82,7 +82,7 @@ env:
   # a `git+` install resolves them fresh rather than from upstream's lockfile. Semgrep
   # goes into the same tool environment, where SkillEvaluator looks for it first
   # (prefer_interpreter_sibling in utils/tool_runner.py).
-  SEMGREP_VERSION: "1.178.0"
+  SEMGREP_VERSION: "1.186.0"
   BANDIT_VERSION: "1.9.4"
   PIP_AUDIT_VERSION: "2.10.1"
   GITLEAKS_VERSION: "8.30.1"
