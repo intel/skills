@@ -8,10 +8,10 @@ description: >
   cooperative SLM loading, or any ESIMD kernel that uses work-group shared
   memory. Covers SLM size limits, bank conflicts, the lsc_slm_scatter
   transpose trick, and common pitfalls like forgetting slm_init or conditional
-  barriers causing GPU hangs. Not for CUDA __shared__, OpenCL __local, SYCL
-  local_accessor or local-memory device queries, global memory loads and
-  stores (see esimd-lsc-2d-gather-scatter), or pipelining with named barriers
-  (see xe2-nbarrier-pipelining).
+  barriers causing GPU hangs. Not for CUDA __shared__, OpenCL __local, or SYCL
+  local memory (local_accessor, device queries) outside ESIMD kernels, global
+  memory loads and stores (see esimd-lsc-2d-gather-scatter), or pipelining
+  with named barriers (see xe2-nbarrier-pipelining).
 metadata:
     version: 1.0.0
 compatibility: "Requires the oneAPI DPC++ compiler (icpx -fsycl). Code checked with DPC++ 2025.3.3 and 2026.1.1 on an Intel Arc B580 (Xe2)."
