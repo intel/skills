@@ -296,6 +296,11 @@ request the annotation is for.
 | `link-rot.yml` | `validate_skills.py --check-links --docs`: the PR link check plus the repository's own markdown outside `skills/`; a failure opens or comments on one "Link rot" issue | Mondays, or by hand | opens an issue |
 | `upstream-sync.yml` | `check_upstream.py --open-pr`: one pull request per skill whose pinned directory moved | Sundays and Wednesdays, or by hand | opens PRs |
 
+On a pull request in `intel/skills`, validate, security, CodeQL, SkillSpector and SkillEvaluator run on the
+self-hosted `dokimi-ec2` pool; every other run, and every run of a fork's own workflows, uses `ubuntu-latest`.
+Setting the repository variable `LINUX_RUNNER_OFF` to `true` sends those pull-request jobs to `ubuntu-latest` too,
+for when the pool is down or overloaded.
+
 `upstream-sync.yml` is the one workflow that writes code, and runs only in `intel/skills`;
 `link-rot.yml` writes only issues, from a separate job, and is limited to `intel/skills` too. It
 needs no secret, but needs *Allow GitHub Actions to create and approve pull requests*, or it
