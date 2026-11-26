@@ -344,7 +344,7 @@
 - name: xpu-discover
   maintainer: "xaleryb"
   external-repo: "https://github.com/intel/gpu-ai-skills"
-  external-commit: "6398572aeff7a7300f9eafcf5758d76817bab910"
+  external-commit: "92c025a0df9ac5df51be3582bc0485bc7e6adc57"
   external-path: "plugins/intel-gpu-ai-skills/skills/xpu-discover"
   external-license: "Apache-2.0"
   intel-products: "Intel GPU"
